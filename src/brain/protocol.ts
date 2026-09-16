@@ -8,6 +8,7 @@ export type WorkerIn =
   | { type: 'reset'; seed?: number }
   | { type: 'stimulate'; ids: Int32Array; rateHz: number; durationMs: number }
   | { type: 'setGain'; role: RoleTag; gain: number }
+  | { type: 'setMn9ThresholdShift'; shiftMv: number }
   | { type: 'setSeed'; seed: number };
 
 export type WorkerOut =

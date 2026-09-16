@@ -75,6 +75,10 @@ onmessage = (event: MessageEvent<WorkerIn>) => {
         if (!net) throw new Error('Brain worker is not initialized.');
         net.setGain(msg.role, msg.gain);
         break;
+      case 'setMn9ThresholdShift':
+        if (!net) throw new Error('Brain worker is not initialized.');
+        net.setMn9ThresholdShift(msg.shiftMv);
+        break;
       default:
         throw new Error(`Unknown worker message ${(msg as { type: string }).type}`);
     }

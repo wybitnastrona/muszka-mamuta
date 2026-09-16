@@ -18,9 +18,12 @@ We therefore:
 2. Split that channel by a **measured** MN9 effect (`deltaMn9Hz` in
    `drive.json`), not by receptor names and not by a single-path sign.
 
-Twaróg is protein-rich and low in sugar. Using the full proboscis gustatory
-set (instead of missing sugar labels) is an authored modelling choice on top
-of measured connectivity.
+Twaróg Mamuta is the **vanilla-sweetened** variant (`sweet: 0.75` in
+`src/food/foodProfile.ts`) — an authored assumption, not a MaleCNS measurement.
+MaleCNS still has no sugar/bitter split, so hunger modulates the **whole**
+proboscis gustatory channel. Sweetness only scales hemolymph trehalose yield
+(see `docs/METABOLISM.md`). Using the full gustatory set instead of missing
+receptor labels is an authored modelling choice on top of measured connectivity.
 
 ## Rejected: `path_sign` (keep the negative result)
 

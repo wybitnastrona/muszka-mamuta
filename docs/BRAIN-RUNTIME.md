@@ -15,7 +15,12 @@ membrane state.
 | --- | --- |
 | Signed synapse counts in `graph.bin` | dt, τ_m, V_rest, V_th, V_reset, t_ref, W_syn, τ_syn |
 | `deltaMn9Hz` tercile roles in `drive.json` | Poisson pulse protocol, 50 ms rate window, calibrated `BACKGROUND_RATE_HZ` (0.25) |
-| Subclass (labellar / peg / pharyngeal) | Hunger as `setGain(role, gain)` |
+| Subclass (labellar / peg / pharyngeal) | Hunger as `setGain` on the **whole** gustatory channel (every 250 ms from hemolymph) |
+
+See [METABOLISM.md](METABOLISM.md) for the authored hemolymph ODEs. MaleCNS has
+**no** sweet/bitter receptor annotations. Hunger scales all gustatory seeds
+(`gust_drive` / `gust_neutral` / `gust_suppress`, i.e. labellar + pharyngeal).
+Inhibition is the GABA/glutamate already in the graph.
 
 LIF constants live in `src/brain/params.ts` with Shiu et al. 2024 citations.
 MaleCNS has **no** sweet/bitter receptor annotations. Tonic Poisson
@@ -55,7 +60,8 @@ Worker URL: `src/brain/lif-worker.ts` (Vite module worker).
 | `reset` | `seed?: number` | Clear V, g, drive, spike window; optional new seed. |
 | `setSeed` | `seed: number` | Same as reset with that seed. |
 | `stimulate` | `ids: Int32Array`, `rateHz: number`, `durationMs: number` | Poisson on those **body IDs**. |
-| `setGain` | `role: RoleTag`, `gain: number` | Scales **outgoing** weights of that role (hunger). |
+| `setGain` | `role: RoleTag`, `gain: number` | Scales **outgoing** weights of that role. Hemolymph posts the same `gustGain` to every gustatory role every 250 ms. |
+| `setMn9ThresholdShift` | `shiftMv: number` | Authored MN9 `V_th` offset (mV). Negative = hungry (easier spike). |
 
 `RoleTag`: `gust_drive` \| `gust_neutral` \| `gust_suppress` \| `mn9` \| `mn_other` \| `dn` \| `interneuron` (legacy `gust_labellar` / `gust_pharyngeal` still parse).
 

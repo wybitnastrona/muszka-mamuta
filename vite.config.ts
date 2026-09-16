@@ -7,6 +7,6 @@ export default defineConfig({
   base: './',
   test: {
     environment: 'node',
-    include: ['tests/brain/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
   },
 });

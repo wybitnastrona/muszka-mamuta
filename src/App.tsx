@@ -11,8 +11,12 @@ import type { PopulationSummary } from './brain/lif';
 import { asset, loadAtlas, type Atlas } from './lib/atlas';
 import { frameAt, parseReplay, type ActivityFrame, type ModelReplay } from './lib/replay';
 import { t, type Lang } from './i18n';
+import { TWAROG_MAMUTA_WANILIOWY } from './food/foodProfile';
+import { Hemolymph, type DefecationEvent } from './metabolism/hemolymph';
+import { MODULATION_PUSH_MS, pushModulation } from './metabolism/modulation';
 
 const hz = (value: number) => value.toFixed(2);
+const n01 = (value: number) => value.toFixed(2);
 
 export function App() {
   const [lang, setLang] = useState<Lang>('pl');
@@ -26,9 +30,17 @@ export function App() {
   const [liveFrame, setLiveFrame] = useState<ActivityFrame | null>(null);
   const [summary, setSummary] = useState<PopulationSummary | null>(null);
   const [neuronN, setNeuronN] = useState(0);
+  const [showSpots, setShowSpots] = useState(false);
+  const [spots, setSpots] = useState<DefecationEvent[]>([]);
+  const [hemoHud, setHemoHud] = useState(() => new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY }).hud());
   const file = useRef<HTMLInputElement>(null);
   const runtime = useRef<BrainRuntime | null>(null);
+  const hemolymph = useRef(new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY, spotsEnabled: false }));
   const duration = replay?.frames.at(-1)?.time ?? 30;
+
+  useEffect(() => {
+    hemolymph.current.spotsEnabled = showSpots;
+  }, [showSpots]);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -41,18 +53,28 @@ export function App() {
   useEffect(() => () => { runtime.current?.dispose(); runtime.current = null; }, []);
 
   useEffect(() => {
-    if (live) return;
     if (!playing) return;
-    let previous = performance.now(), frame = 0;
+    let previous = performance.now(), frame = 0, pushMs = 0;
     const step = (now: number) => {
       const delta = document.hidden ? 0 : Math.min(0.1, (now - previous) / 1000);
       previous = now;
-      setTime((value) => Math.min(duration, value + delta));
+      if (delta > 0) {
+        const events = hemolymph.current.step(delta);
+        if (showSpots && events.length) setSpots((value) => value.concat(events));
+        pushMs += delta * 1000;
+        if (pushMs >= MODULATION_PUSH_MS) {
+          pushMs = 0;
+          setHemoHud(hemolymph.current.hud());
+          const rt = runtime.current;
+          if (live && rt) pushModulation(rt, hemolymph.current.getModulation());
+        }
+      }
+      if (!live) setTime((value) => Math.min(duration, value + delta));
       frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [playing, duration, live]);
+  }, [playing, duration, live, showSpots]);
 
   useEffect(() => {
     if (!live && time >= duration) setPlaying(false);
@@ -65,6 +87,13 @@ export function App() {
     else rt.stop();
   }, [playing, live]);
 
+  const resetHemolymph = () => {
+    hemolymph.current.reset();
+    hemolymph.current.spotsEnabled = showSpots;
+    setSpots([]);
+    setHemoHud(hemolymph.current.hud());
+  };
+
   const accept = (value: unknown) => {
     if (!atlas) throw Error('Wait for the atlas to load.');
     stopLive();
@@ -73,6 +102,7 @@ export function App() {
     setTime(0);
     setPlaying(false);
     setError('');
+    resetHemolymph();
   };
 
   const example = async () => {
@@ -98,12 +128,14 @@ export function App() {
     setError('');
     setReplay(null);
     setTime(0);
+    resetHemolymph();
     const rt = new BrainRuntime(seed);
     runtime.current = rt;
     rt.onError = (message) => setError(message);
     rt.onReady = (n, nextSeed) => {
       setNeuronN(n);
       setSeed(nextSeed);
+      pushModulation(rt, hemolymph.current.getModulation());
     };
     rt.onFrame = (frame, nextSummary) => {
       setLiveFrame(frame);
@@ -115,6 +147,7 @@ export function App() {
       setLive(true);
       setPlaying(true);
       rt.start();
+      pushModulation(rt, hemolymph.current.getModulation());
     } catch (e) {
       runtime.current = null;
       setError(String(e));
@@ -129,6 +162,8 @@ export function App() {
       setLiveFrame(null);
       setSummary(null);
       setTime(0);
+      const rt = runtime.current;
+      if (rt) pushModulation(rt, hemolymph.current.getModulation());
     }
   };
 
@@ -156,7 +191,12 @@ export function App() {
           <button onClick={() => {
             setTime(0);
             setPlaying(false);
-            if (live) runtime.current?.reset(seed);
+            resetHemolymph();
+            if (live) {
+              runtime.current?.reset(seed);
+              const rt = runtime.current;
+              if (rt) pushModulation(rt, hemolymph.current.getModulation());
+            }
             setLiveFrame(null);
             setSummary(null);
           }}>{t(lang, 'reset')}</button>
@@ -173,6 +213,14 @@ export function App() {
               aria-label={t(lang, 'seed')}
               onChange={(event) => applySeed(Number(event.target.value) || 0)}
             />
+          </label>
+          <label className="seed-field">
+            <input
+              type="checkbox"
+              checked={showSpots}
+              onChange={(event) => setShowSpots(event.target.checked)}
+            />
+            {t(lang, 'spots')}
           </label>
           {live
             ? <button onClick={() => { stopLive(); setPlaying(false); setTime(0); }}>{t(lang, 'liveStop')}</button>
@@ -207,7 +255,7 @@ export function App() {
       <div className="workbench">
         <section className="panel environment-panel">
           <h2>{t(lang, 'env')}</h2>
-          <Environment time={time} />
+          <Environment time={time} spots={spots} showSpots={showSpots} />
           <div className="panel-bottom">{t(lang, 'envFoot')}</div>
         </section>
         <section className="panel brain-panel">
@@ -225,6 +273,13 @@ export function App() {
         <strong>{statusLabel}</strong>
         <p>{replay ? replay.source.name : live ? BRAIN_SOURCE.name : t(lang, 'noModel')}</p>
         {live && <p>{t(lang, 'liveHint')} · {t(lang, 'seed')} {seed}</p>}
+        <p>{t(lang, 'hemoHud', {
+          tre: n01(hemoHud.trehalose),
+          hunger: n01(hemoHud.hungerDrive),
+          satiety: n01(hemoHud.satiety),
+          crop: n01(hemoHud.cropVolume),
+          gut: n01(hemoHud.gutLoad),
+        })}</p>
         {replay && <>
           <p>{t(lang, 'replayNorm')}: {replay.source.normalization}</p>
           <p>{replay.source.kind === 'synthetic' ? t(lang, 'syntheticNote') : t(lang, 'declaredNote')}</p>
@@ -244,6 +299,7 @@ export function App() {
         <p>{t(lang, 'methods1')}</p>
         <p>{t(lang, 'methods2')}</p>
         <p>{t(lang, 'methodsLif')}</p>
+        <p>{t(lang, 'methodsMetabolism')}</p>
         <p>{t(lang, 'methods3')} <a href="https://male-cns.janelia.org/download/">{t(lang, 'maleCns')}</a>, CC BY 4.0. <a href={asset('data/brain-atlas/manifest.json')}>{t(lang, 'hashes')}</a>.</p>
         <p>{t(lang, 'methods4')}</p>
       </details>

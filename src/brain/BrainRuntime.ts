@@ -68,6 +68,10 @@ export class BrainRuntime {
     this.post({ type: 'setGain', role, gain });
   }
 
+  setMn9ThresholdShift(shiftMv: number): void {
+    this.post({ type: 'setMn9ThresholdShift', shiftMv });
+  }
+
   dispose(): void {
     this.ready = false;
     this.worker?.terminate();

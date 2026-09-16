@@ -40,10 +40,12 @@ of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style o
 - Proboscis motor neurons: MN9 (rostrum protractor = proboscis extension), MN11/MN12 (haustellum), pharyngeal
   pump MNs. Shiu et al., Nature 2024 reproduced sugar GRN → MN9 in a LIF model. This is our ground truth.
 - Bitter GRNs (Gr66a) suppress feeding. Amino-acid / yeast sensing: Ir76b class.
-- Twaróg profile: protein-rich, mildly sour, very low sugar → drive comes mostly from amino-acid and olfactory
-  channels, not sweet. Document this as an authored assumption.
+- Twaróg profile: **vanilla-sweetened** (`TWAROG_MAMUTA_WANILIOWY`, sweet 0.75) —
+  authored, not measured. Drive is still the whole gustatory channel; `sweet`
+  only scales hemolymph trehalose yield (~3× unsweetened curd). See
+  `src/food/foodProfile.ts` and `docs/METABOLISM.md`.
 - Hunger is NOT in the connectome: model it as neuromodulatory gain (AKH raises it, DSK/insulin lower it) applied
-  to GRN→interneuron weights and to the MN9 threshold.
+  to the whole GRN channel (outgoing weights) and to the MN9 threshold.
 
   11. MaleCNS has NO sugar/bitter receptor annotations (no Gr64f, Gr5a, Gr66a — zero matches, verified).
     The feeding drive comes from class=="gustatory" AND subclass in {"labellar bristle", "taste peg",

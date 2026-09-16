@@ -50,6 +50,8 @@ export class LifNetwork {
   private readonly iExt: Float32Array;
   private readonly refrac: Int16Array;
   private readonly gain: Float32Array;
+  private readonly vTh: Float32Array;
+  private mn9ThresholdShift = 0;
   private readonly tonicRate: Float32Array;
   private readonly pulseRate: Float32Array;
   private readonly pulseLeft: Int32Array;
@@ -86,6 +88,7 @@ export class LifNetwork {
     this.iExt = new Float32Array(this.n);
     this.refrac = new Int16Array(this.n);
     this.gain = new Float32Array(this.n);
+    this.vTh = new Float32Array(this.n);
     this.tonicRate = new Float32Array(this.n);
     this.pulseRate = new Float32Array(this.n);
     this.pulseLeft = new Int32Array(this.n);
@@ -130,6 +133,8 @@ export class LifNetwork {
     this.g.fill(0);
     this.refrac.fill(0);
     this.gain.fill(1);
+    this.vTh.fill(V_TH_MV);
+    this.mn9ThresholdShift = 0;
     this.spikeCount.fill(0);
     this.windowCount.fill(0);
     this.qHead = 0;
@@ -161,6 +166,23 @@ export class LifNetwork {
     const idx = this.roleIndex.get(role);
     if (!idx) return;
     for (let k = 0; k < idx.length; k++) this.gain[idx[k]] = gain;
+  }
+
+  /**
+   * Authored neuromodulation: shift MN9 spike threshold (mV).
+   * Negative = easier to fire (hungry); positive = harder (sated).
+   * Hunger is not in the connectome — this is not a MaleCNS measurement.
+   */
+  setMn9ThresholdShift(shiftMv: number): void {
+    this.mn9ThresholdShift = shiftMv;
+    const th = V_TH_MV + shiftMv;
+    const idx = this.roleIndex.get('mn9');
+    if (!idx) return;
+    for (let k = 0; k < idx.length; k++) this.vTh[idx[k]] = th;
+  }
+
+  getMn9ThresholdShift(): number {
+    return this.mn9ThresholdShift;
   }
 
   stimulate(ids: Int32Array, rateHz: number, durationMs: number): void {
@@ -204,7 +226,7 @@ export class LifNetwork {
         const drive = gi + this.iExt[i];
         if (drive !== 0 || v[i] !== V_REST_MV) {
           v[i] += dtOverTau * (drive - (v[i] - V_REST_MV));
-          if (v[i] >= V_TH_MV) {
+          if (v[i] >= this.vTh[i]) {
             this.lastSpikes[fired++] = i;
             v[i] = V_RESET_MV;
             refrac[i] = REFRACTORY_STEPS;

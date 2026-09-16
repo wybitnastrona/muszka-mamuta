@@ -113,6 +113,20 @@ describe('deterministic RNG', () => {
   });
 });
 
+describe('MN9 threshold shift', () => {
+  it('reduces MN9 firing when the authored threshold is raised', () => {
+    const easy = new LifNetwork(graph({ n: 1, roles: ['mn9'] }), 1);
+    easy.setCurrent(0, 12);
+    easy.stepMs(200);
+    const hard = new LifNetwork(graph({ n: 1, roles: ['mn9'] }), 1);
+    hard.setMn9ThresholdShift(4);
+    hard.setCurrent(0, 12);
+    hard.stepMs(200);
+    expect(easy.spikeCount[0]).toBeGreaterThan(0);
+    expect(hard.spikeCount[0]).toBeLessThan(easy.spikeCount[0]);
+  });
+});
+
 describe.skipIf(process.env.PERF !== '1')('perf budget', () => {
   it('steps 20k neurons × 167 dt under 12 ms', () => {
     const n = 20_000;
