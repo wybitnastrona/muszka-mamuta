@@ -1,75 +1,81 @@
 {
-  "comment": "Authored landmarks in Flybody model.json space (+Z anterior, +Y dorsal, +X anatomical left). Not measured joints. front_left / front_right groups parent to the named foreleg bones at the coxa pivots from model.json.",
+  "comment": "Authored landmarks in Flybody model.json space (+Z anterior, +Y dorsal, +X anatomical left). Not measured joints. front_left / front_right groups parent to the named foreleg bones at the coxa pivots from model.json. maxRadius is in model units, derived from the body AABB (size 0.612 × 0.184 × 0.301, diag 0.706) and min distance from each bone to eyes/ocelli/thorax; mouthparts are capped below those surfaces. Flybody names the compound-eye part `red`; excludeMaterials uses the alias `eyes`.",
   "space": "public/data/flybody/model.json",
   "up": [0, 1, 0],
   "forward": [0, 0, 1],
+  "aabbSize": [0.6116, 0.1836, 0.3012],
+  "aabbDiag": 0.706,
   "bones": [
     {
       "name": "root",
       "parent": null,
       "position": [0, 0, 0],
-      "radius": 0.11
+      "maxRadius": 0.12
     },
     {
       "name": "abdomen",
       "parent": "root",
       "position": [0, -0.05, -0.14],
-      "radius": 0.08
+      "maxRadius": 0.07
     },
     {
       "name": "head",
       "parent": "root",
       "position": [0, 0.002, 0.072],
-      "radius": 0.046
+      "maxRadius": 0.038
     },
     {
       "name": "antenna_L",
       "parent": "head",
       "position": [0.012, 0.002, 0.1],
-      "radius": 0.02
+      "maxRadius": 0.0095
     },
     {
       "name": "antenna_R",
       "parent": "head",
       "position": [-0.012, 0.002, 0.1],
-      "radius": 0.02
+      "maxRadius": 0.0095
     },
     {
       "name": "rostrum",
       "parent": "head",
       "position": [0, -0.04, 0.078],
-      "radius": 0.026
+      "maxRadius": 0.013,
+      "excludeMaterials": ["eyes", "ocelli"]
     },
     {
       "name": "haustellum",
       "parent": "rostrum",
       "position": [0, -0.054, 0.072],
-      "radius": 0.018
+      "maxRadius": 0.018,
+      "excludeMaterials": ["eyes", "ocelli"]
     },
     {
       "name": "labellum_L",
       "parent": "haustellum",
       "position": [0.0141, -0.0629, 0.0657],
-      "radius": 0.014
+      "maxRadius": 0.010,
+      "excludeMaterials": ["eyes", "ocelli"]
     },
     {
       "name": "labellum_R",
       "parent": "haustellum",
       "position": [-0.0141, -0.0629, 0.0657],
-      "radius": 0.014
+      "maxRadius": 0.010,
+      "excludeMaterials": ["eyes", "ocelli"]
     },
     {
       "name": "foreleg_L_tarsus",
       "parent": "root",
       "position": [0.0209, -0.0272, 0.0317],
-      "radius": 0.0,
+      "maxRadius": 0.0,
       "legGroup": "front_left"
     },
     {
       "name": "foreleg_R_tarsus",
       "parent": "root",
       "position": [-0.0209, -0.0272, 0.0317],
-      "radius": 0.0,
+      "maxRadius": 0.0,
       "legGroup": "front_right"
     }
   ]

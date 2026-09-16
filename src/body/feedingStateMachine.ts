@@ -2,6 +2,7 @@ import type { ClipName, FeedingEvent, FeedingState } from './types.ts';
 import { headingError, turnToward, clamp, clamp01 } from './math.ts';
 import { CLIP_DURATION, PUMP_HZ, clipForState } from './feedingMotion.ts';
 import { ODOR_DETECT } from './odorField.ts';
+import { flyVisualLengthMm } from '../scene/scale.ts';
 
 export const HEADING_ALIGN_DEG = 15;
 export const MN9_EXTEND_HZ = 8;
@@ -9,8 +10,11 @@ export const MN9_HOLD_MS = 80;
 export const SATIETY_RETRACT = 0.85;
 export const BITTER_RETRACT = 0.12;
 export const TURN_RATE_RAD_S = 2.4;
-export const NEAR_FOOD = 0.055;
-export const STEP_LENGTH = 0.038;
+/** @deprecated Arrival used to compare against the food centroid. Prefer `APPROACH_ARRIVE_MM`. */
+export const NEAR_FOOD = flyVisualLengthMm() * 0.4;
+/** Close enough to the surface-standoff point to leave APPROACH. */
+export const APPROACH_ARRIVE_MM = 4;
+export const STEP_LENGTH = flyVisualLengthMm() * 0.35;
 export const TASTE_MIN_S = 0.25;
 export const TASTE_TIMEOUT_S = 1.6;
 export const GROOM_SATIETY = 0.7;
@@ -20,9 +24,16 @@ export type FeedingInput = {
   mn9Rate: number;
   bitter: number;
   satiety: number;
+  /** Vanillin gradient. Steers ORIENT only — never MN9. */
   odorYaw: number;
   odorStrength: number;
+  /**
+   * Distance to the surface-standoff point (not the food centroid).
+   * APPROACH ends when this is ≤ `APPROACH_ARRIVE_MM`.
+   */
   distanceToFood: number;
+  /** Yaw toward the surface standoff. Falls back to `odorYaw` if omitted. */
+  approachYaw?: number;
 };
 
 export type FeedingOutput = {
@@ -91,11 +102,12 @@ export class FeedingStateMachine {
           enter('APPROACH');
         }
         break;
-      case 'APPROACH':
-        this.heading = turnToward(this.heading, input.odorYaw, dt, TURN_RATE_RAD_S * 0.45);
-        if (input.distanceToFood <= NEAR_FOOD) enter('TASTE');
-        else if (this.stateAge >= this.approachNeeded * (CLIP_DURATION.approach / 3)) enter('TASTE');
+      case 'APPROACH': {
+        const yaw = input.approachYaw ?? input.odorYaw;
+        this.heading = turnToward(this.heading, yaw, dt, TURN_RATE_RAD_S * 0.45);
+        if (input.distanceToFood <= APPROACH_ARRIVE_MM) enter('TASTE');
         break;
+      }
       case 'TASTE':
         if (this.stateAge >= TASTE_MIN_S && this.mn9HoldMs >= MN9_HOLD_MS) enter('EXTEND');
         else if (this.stateAge >= TASTE_TIMEOUT_S) enter('SEARCH');

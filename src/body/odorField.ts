@@ -1,7 +1,19 @@
 import { clamp01 } from './math.ts';
 
-/** Authored vanillin plume. Not a measured concentration field. */
-export const ODOR_SIGMA = 0.22;
+import { flyVisualLengthMm } from '../scene/scale.ts';
+
+/**
+ * Authored vanillin plume — long-range 1/r, not a measured concentration.
+ *
+ * This field drives FeedingStateMachine ORIENT steering only. It must never
+ * be converted into a Poisson rate on MN9 (or any motor neuron): MaleCNS
+ * olfactory pathways are not in the extracted feeding subgraph. Taste
+ * contact uses a separate short-range sampler that stimulates gust_labellar
+ * / gust_pharyngeal via BrainRuntime.stimulate().
+ */
+export const ODOR_R0 = flyVisualLengthMm() * 12;
+/** @deprecated Alias of ODOR_R0; kept so older tests still compile. */
+export const ODOR_SIGMA = ODOR_R0;
 export const ODOR_DETECT = 0.08;
 
 export type XZ = { x: number; z: number };
@@ -10,15 +22,13 @@ export function odorConcentration(
   pos: XZ,
   food: XZ,
   strength: number,
-  sigma = ODOR_SIGMA,
+  r0 = ODOR_R0,
 ): number {
-  const dx = pos.x - food.x;
-  const dz = pos.z - food.z;
-  const g = Math.exp(-(dx * dx + dz * dz) / (2 * sigma * sigma));
-  return clamp01(strength) * g;
+  const r = Math.hypot(pos.x - food.x, pos.z - food.z);
+  return clamp01(strength) * (r0 / (r + r0));
 }
 
-/** Yaw of the strongest local gradient (toward the food in this Gaussian). */
+/** Yaw toward the food. Gradient of 1/r is radial, so this is exact. */
 export function odorGradientYaw(pos: XZ, food: XZ): number {
   return Math.atan2(food.x - pos.x, food.z - pos.z);
 }

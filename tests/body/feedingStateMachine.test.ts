@@ -3,6 +3,7 @@ import {
   FeedingStateMachine,
   HEADING_ALIGN_DEG,
   MN9_HOLD_MS,
+  NEAR_FOOD,
   SATIETY_RETRACT,
 } from '../../src/body/feedingStateMachine.ts';
 import { headingError } from '../../src/body/math.ts';
@@ -33,7 +34,7 @@ function drive(
       satiety: input.satiety ?? 0.2,
       odorYaw: input.odorYaw ?? 0,
       odorStrength: input.odorStrength ?? 1,
-      distanceToFood: input.distanceToFood ?? 0.04,
+      distanceToFood: input.distanceToFood ?? NEAR_FOOD * 0.5,
     });
     if (seen.at(-1) !== sm.state) seen.push(sm.state);
   }
@@ -44,10 +45,10 @@ describe('feeding state machine', () => {
   it('follows SEARCH → ORIENT → APPROACH → TASTE → EXTEND → PUMP → RETRACT → REST on an MN9 burst', () => {
     const sm = new FeedingStateMachine({ heading: 0.6 });
     const seen: FeedingState[] = [sm.state];
-    let dist = 0.12;
+    let dist = NEAR_FOOD * 2.2;
     for (let i = 0; i < 800; i++) {
       const t = i * dt;
-      if (sm.state === 'APPROACH') dist = Math.max(0.03, dist - 0.06 * dt);
+      if (sm.state === 'APPROACH') dist = Math.max(NEAR_FOOD * 0.4, dist - NEAR_FOOD * 1.2 * dt);
       const mn9 = sm.state === 'TASTE' || sm.state === 'EXTEND' || sm.state === 'PUMP' ? 18 : 0;
       sm.step({
         dt,
@@ -75,17 +76,17 @@ describe('feeding state machine', () => {
 
   it('holds EXTEND until MN9 stays above threshold for 80 ms', () => {
     const sm = new FeedingStateMachine({ heading: 0 });
-    drive(sm, 0.4, { mn9Rate: 0, distanceToFood: 0.03, odorStrength: 1, odorYaw: 0 });
+    drive(sm, 0.4, { mn9Rate: 0, distanceToFood: NEAR_FOOD * 0.4, odorStrength: 1, odorYaw: 0 });
     expect(sm.state).toBe('TASTE');
-    drive(sm, (MN9_HOLD_MS - 20) / 1000, { mn9Rate: 12, distanceToFood: 0.03 });
+    drive(sm, (MN9_HOLD_MS - 20) / 1000, { mn9Rate: 12, distanceToFood: NEAR_FOOD * 0.4 });
     expect(sm.state).toBe('TASTE');
-    drive(sm, 0.08, { mn9Rate: 12, distanceToFood: 0.03 });
+    drive(sm, 0.08, { mn9Rate: 12, distanceToFood: NEAR_FOOD * 0.4 });
     expect(sm.state).toBe('EXTEND');
   });
 
   it('emits a bite once per completed pump cycle', () => {
     const sm = new FeedingStateMachine({ heading: 0 });
-    drive(sm, 0.5, { mn9Rate: 12, distanceToFood: 0.03, odorStrength: 1, odorYaw: 0 });
+    drive(sm, 0.5, { mn9Rate: 12, distanceToFood: NEAR_FOOD * 0.4, odorStrength: 1, odorYaw: 0 });
     expect(['EXTEND', 'PUMP', 'RETRACT']).toContain(sm.state);
     const bites: number[] = [];
     for (let i = 0; i < 400; i++) {
@@ -96,7 +97,7 @@ describe('feeding state machine', () => {
         satiety: 0.2,
         odorYaw: 0,
         odorStrength: 1,
-        distanceToFood: 0.03,
+        distanceToFood: NEAR_FOOD * 0.4,
       });
       for (const e of out.events) if (e.type === 'bite') bites.push(e.cycle);
       if (sm.state === 'RETRACT' || sm.state === 'REST') break;
@@ -107,12 +108,12 @@ describe('feeding state machine', () => {
 
   it('retracts early when satiety exceeds 0.85', () => {
     const sm = new FeedingStateMachine({ heading: 0 });
-    drive(sm, 0.7, { mn9Rate: 20, distanceToFood: 0.03, odorStrength: 1, odorYaw: 0 });
+    drive(sm, 0.7, { mn9Rate: 20, distanceToFood: NEAR_FOOD * 0.4, odorStrength: 1, odorYaw: 0 });
     if (sm.state !== 'PUMP') {
-      drive(sm, 0.5, { mn9Rate: 20, distanceToFood: 0.03 });
+      drive(sm, 0.5, { mn9Rate: 20, distanceToFood: NEAR_FOOD * 0.4 });
     }
     expect(sm.state).toBe('PUMP');
-    drive(sm, 0.05, { mn9Rate: 20, satiety: SATIETY_RETRACT + 0.02, distanceToFood: 0.03 });
+    drive(sm, 0.05, { mn9Rate: 20, satiety: SATIETY_RETRACT + 0.02, distanceToFood: NEAR_FOOD * 0.4 });
     expect(sm.state).toBe('RETRACT');
   });
 });
@@ -135,7 +136,7 @@ describe('ORIENT', () => {
           satiety: 0.2,
           odorYaw: target,
           odorStrength: 1,
-          distanceToFood: 0.2,
+          distanceToFood: NEAR_FOOD * 2,
         });
         if (prev === 'ORIENT' && sm.state !== 'ORIENT') {
           leftOrientAt = Math.abs(headingError(sm.heading, target)) * (180 / Math.PI);

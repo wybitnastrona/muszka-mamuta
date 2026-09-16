@@ -9,9 +9,11 @@ import {
 } from '../../src/brain/params.ts';
 import {
   BITE_MASS,
+  CROP_UNITS_PER_GRAM,
   Hemolymph,
   trehaloseYield,
 } from '../../src/metabolism/hemolymph.ts';
+import { CURD_CHUNK_COUNT, CURD_TOTAL_MASS_G } from '../../src/scene/scale.ts';
 import { GUST_GAIN_ROLES, MODULATION_PUSH_MS } from '../../src/metabolism/modulation.ts';
 
 function starve(h: Hemolymph, minutes: number, dt = 1): void {
@@ -134,5 +136,14 @@ describe('hemolymph (authored, not connectome)', () => {
     expect(mh.mn9ThresholdShift).toBeLessThan(mf.mn9ThresholdShift);
     expect(GUST_GAIN_ROLES).toEqual([...MEASURED_GUST_ROLES, ...ANATOMICAL_GUST_ROLES]);
     expect(MODULATION_PUSH_MS).toBe(250);
+  });
+
+  it('converts an average Voronoi chunk into one authored bite', () => {
+    const meanChunkG = CURD_TOTAL_MASS_G / CURD_CHUNK_COUNT;
+    expect(CROP_UNITS_PER_GRAM * meanChunkG).toBeCloseTo(BITE_MASS);
+    const viaEat = new Hemolymph();
+    const viaBite = new Hemolymph();
+    expect(viaEat.eat(meanChunkG)).toBeCloseTo(viaBite.bite(BITE_MASS));
+    expect(viaEat.state.cropVolume).toBeCloseTo(viaBite.state.cropVolume);
   });
 });

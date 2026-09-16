@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { BrainScene } from './components/BrainScene';
 import { FlyScene } from './components/FlyScene';
+import type { ChemoSample } from './food/twarogSystem.ts';
 import type { FeedingEvent, FeedingState } from './body/types.ts';
 import { Environment } from './components/Environment';
 import { Attribution } from './components/Attribution';
 import { BrainRuntime } from './brain/BrainRuntime';
-import { idsForSubclasses } from './brain/csr';
-import { LABELLAR_SUBCLASSES, PROTOCOL_DURATION_MS, PROTOCOL_STIM_HZ } from './brain/params';
+import { idsForRole, idsForSubclasses } from './brain/csr';
+import { LABELLAR_SUBCLASSES, PHARYNGEAL_SUBCLASSES, PROTOCOL_DURATION_MS, PROTOCOL_STIM_HZ } from './brain/params';
 import { BRAIN_SOURCE } from './brain/protocol';
 import type { PopulationSummary } from './brain/lif';
 import { asset, loadAtlas, type Atlas } from './lib/atlas';
@@ -38,6 +39,7 @@ export function App() {
   const file = useRef<HTMLInputElement>(null);
   const runtime = useRef<BrainRuntime | null>(null);
   const hemolymph = useRef(new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY, spotsEnabled: false }));
+  const lastChemoMs = useRef(0);
   const duration = replay?.frames.at(-1)?.time ?? 30;
 
   useEffect(() => {
@@ -269,15 +271,35 @@ export function App() {
           <h2>{t(lang, 'body')} <span>Flybody</span></h2>
           <FlyScene
             playing={playing}
+            lang={lang}
             mn9Rate={summary?.mn9Rate ?? 0}
             satiety={hemoHud.satiety}
             bitter={TWAROG_MAMUTA_WANILIOWY.bitter}
             odor={TWAROG_MAMUTA_WANILIOWY.odor}
+            onChemo={(sample: ChemoSample) => {
+              // Contact → gust_labellar / gust_pharyngeal only. Vanillin odor
+              // steers ORIENT in FlyScene and must never be posted onto MN9.
+              const rt = runtime.current;
+              if (!live || !rt?.circuit) return;
+              const now = performance.now();
+              if (now - lastChemoMs.current < 80) return;
+              lastChemoMs.current = now;
+              const labIds = idsForRole(rt.circuit, 'gust_labellar');
+              const pharIds = idsForRole(rt.circuit, 'gust_pharyngeal');
+              const lab = labIds.length ? labIds : idsForSubclasses(rt.circuit, LABELLAR_SUBCLASSES);
+              const phar = pharIds.length ? pharIds : idsForSubclasses(rt.circuit, PHARYNGEAL_SUBCLASSES);
+              if (sample.rates.labellarHz > 0.5 && lab.length) {
+                rt.stimulate(lab, sample.rates.labellarHz, 80);
+              }
+              if (sample.rates.pharyngealHz > 0.5 && phar.length) {
+                rt.stimulate(phar, sample.rates.pharyngealHz, 80);
+              }
+            }}
             onEvents={(events: readonly FeedingEvent[]) => {
               let bitten = false;
               for (const event of events) {
-                if (event.type === 'bite') {
-                  hemolymph.current.bite();
+                if (event.type === 'consume') {
+                  hemolymph.current.eat(event.massGrams);
                   bitten = true;
                 }
               }
@@ -320,6 +342,7 @@ export function App() {
         <p>{t(lang, 'methodsLif')}</p>
         <p>{t(lang, 'methodsMetabolism')}</p>
         <p>{t(lang, 'methodsBody')}</p>
+        <p>{t(lang, 'methodsChemo')}</p>
         <p>{t(lang, 'methods3')} <a href="https://male-cns.janelia.org/download/">{t(lang, 'maleCns')}</a>, CC BY 4.0. <a href={asset('data/brain-atlas/manifest.json')}>{t(lang, 'hashes')}</a>.</p>
         <p>{t(lang, 'methods4')}</p>
       </details>

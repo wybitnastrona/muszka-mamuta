@@ -18,8 +18,10 @@ export const ANTENNA_SWEEP_DEG = 8;
 export const ANTENNA_SWEEP_HZ = 3;
 
 /**
- * Rostrum / haustellum pitch sign in mesh space: −X swings the hanging
- * proboscis forward (+Z) toward the food. Magnitudes match the brief.
+ * PER rotation is about the left–right axis (X). Frame: +X left, +Y dorsal,
+ * +Z anterior. Negative X pitches the hanging tip anterior and ventral
+ * (+Z, −Y) with dX = 0. Positive X folds it up/back. Y or Z would splay
+ * the tip sideways. Verified against the labellum offset; axis unchanged.
  */
 const EXTEND_ROSTRUM = -35;
 const EXTEND_HAUSTELLUM = -60;

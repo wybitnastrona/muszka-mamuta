@@ -20,6 +20,7 @@ import {
   TWAROG_MAMUTA_WANILIOWY,
   type FoodProfile,
 } from '../food/foodProfile.ts';
+import { CURD_CHUNK_COUNT, CURD_TOTAL_MASS_G } from '../scene/scale.ts';
 
 export type HemolymphState = {
   trehalose: number;
@@ -70,6 +71,9 @@ export const ABSORB_RATE = 0.02;
 
 /** Default bite volume (crop units). */
 export const BITE_MASS = 0.08;
+
+/** Crop units per gram so one average Voronoi chunk ≈ one authored bite. */
+export const CROP_UNITS_PER_GRAM = BITE_MASS / (CURD_TOTAL_MASS_G / CURD_CHUNK_COUNT);
 
 /** Gut fill that triggers a defecation dump. */
 export const GUT_FULL = 0.85;
@@ -275,6 +279,11 @@ export class Hemolymph {
     this.s.cropVolume += added;
     this.ingested += added;
     return added;
+  }
+
+  /** Ingest a twaróg chunk mass in grams. Converts to crop units, then `bite`. */
+  eat(biteMassGrams: number): number {
+    return this.bite(biteMassGrams * CROP_UNITS_PER_GRAM);
   }
 
   /** Advance the ODEs. `dtSec` defaults to one 60 fps frame. */

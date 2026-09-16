@@ -21,6 +21,12 @@ export function easeInOut(t: number): number {
   return x * x * (3 - 2 * x);
 }
 
+/** GLSL-style Hermite smoothstep. */
+export function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (edge1 === edge0) return x >= edge1 ? 1 : 0;
+  return easeInOut((x - edge0) / (edge1 - edge0));
+}
+
 export function wrapPi(rad: number): number {
   let a = rad;
   while (a > Math.PI) a -= Math.PI * 2;

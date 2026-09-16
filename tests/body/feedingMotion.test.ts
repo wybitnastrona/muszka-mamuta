@@ -15,6 +15,7 @@ import {
 import { eulerDegToQuat, headingError, turnToward } from '../../src/body/math.ts';
 import { parseDebugMode } from '../../src/body/debugQuery.ts';
 import { CAMERA_PRESETS } from '../../src/body/cameras.ts';
+import { ANCHORS } from '../../src/body/hierarchy.ts';
 
 function quatDot(a: readonly number[], b: readonly number[]): number {
   return Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
@@ -33,6 +34,35 @@ describe('feeding motion clips', () => {
     expect(quatDot(pose.haustellum.rotation, eulerDegToQuat([EXTEND_HAUSTELLUM, 0, 0]))).toBeGreaterThan(0.98);
     expect(quatDot(pose.labellum_L.rotation, eulerDegToQuat([0, 0, EXTEND_LABELLUM]))).toBeGreaterThan(0.98);
     expect(quatDot(pose.labellum_R.rotation, eulerDegToQuat([0, 0, -EXTEND_LABELLUM]))).toBeGreaterThan(0.98);
+  });
+
+  it('keeps PER on −X so the tip moves anterior +Z and ventral −Y, not sideways', () => {
+    expect(EXTEND_ROSTRUM).toBeLessThan(0);
+    expect(EXTEND_HAUSTELLUM).toBeLessThan(0);
+    const rostrum = ANCHORS.bones.find((b) => b.name === 'rostrum')!.position;
+    const labellum = ANCHORS.bones.find((b) => b.name === 'labellum_L')!.position;
+    const rel: [number, number, number] = [
+      labellum[0] - rostrum[0],
+      labellum[1] - rostrum[1],
+      labellum[2] - rostrum[2],
+    ];
+    const rad = (EXTEND_ROSTRUM * Math.PI) / 180;
+    const c = Math.cos(rad);
+    const s = Math.sin(rad);
+    const rotated: [number, number, number] = [rel[0], rel[1] * c - rel[2] * s, rel[1] * s + rel[2] * c];
+    const dX = rotated[0] - rel[0];
+    const dY = rotated[1] - rel[1];
+    const dZ = rotated[2] - rel[2];
+    expect(Math.abs(dX)).toBeLessThan(1e-9);
+    expect(dY).toBeLessThan(0);
+    expect(dZ).toBeGreaterThan(0);
+    const yaw = (EXTEND_ROSTRUM * Math.PI) / 180;
+    const ry: [number, number, number] = [
+      rel[0] * Math.cos(yaw) + rel[2] * Math.sin(yaw),
+      rel[1],
+      -rel[0] * Math.sin(yaw) + rel[2] * Math.cos(yaw),
+    ];
+    expect(Math.abs(ry[0] - rel[0])).toBeGreaterThan(1e-4);
   });
 
   it('places tarsal taps 250 ms apart', () => {
@@ -75,6 +105,7 @@ describe('debug query and cameras', () => {
     expect(parseDebugMode('?debug=motion')).toBe('motion');
     expect(parseDebugMode('debug=extend')).toBe('extend');
     expect(parseDebugMode('debug=pump')).toBe('pump');
+    expect(parseDebugMode('debug=label')).toBe('label');
     expect(parseDebugMode('')).toBe('off');
   });
 

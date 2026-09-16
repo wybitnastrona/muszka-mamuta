@@ -18,11 +18,22 @@ export type Quat = readonly [number, number, number, number];
 export type EulerDeg = readonly [number, number, number];
 export type Vec3 = readonly [number, number, number];
 
+export const MOUTHPART_BONES = ['rostrum', 'haustellum', 'labellum_L', 'labellum_R'] as const;
+export type MouthpartBone = (typeof MOUTHPART_BONES)[number];
+
+/** Flybody `model.json` names the compound-eye part `red`. `eyes` is the alias used in exclude lists. */
+export const EYE_MATERIAL_ALIAS: Record<string, string> = {
+  eyes: 'red',
+  red: 'red',
+  ocelli: 'ocelli',
+};
+
 export type BoneAnchor = {
   name: BoneName;
   parent: BoneName | null;
   position: Vec3;
-  radius: number;
+  maxRadius: number;
+  excludeMaterials?: string[];
   legGroup?: 'front_left' | 'front_right';
 };
 
@@ -31,6 +42,8 @@ export type AnchorFile = {
   space: string;
   up: Vec3;
   forward: Vec3;
+  aabbSize?: Vec3;
+  aabbDiag?: number;
   bones: BoneAnchor[];
 };
 
@@ -69,6 +82,8 @@ export type CameraPreset = (typeof CAMERA_PRESETS)[number];
 
 export type FeedingEvent =
   | { type: 'transition'; from: FeedingState; to: FeedingState; t: number }
-  | { type: 'bite'; cycle: number; t: number };
+  | { type: 'bite'; cycle: number; t: number }
+  | { type: 'consume'; massGrams: number; chunkId: number; t: number }
+  | { type: 'portion'; count: number; t: number };
 
-export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump';
+export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump' | 'label';

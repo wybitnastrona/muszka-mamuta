@@ -159,7 +159,9 @@ export function buildFlybodyRig(
       worldPos[i * 3 + 1] = src.getY(i) + pivot[1];
       worldPos[i * 3 + 2] = src.getZ(i) + pivot[2];
     }
-    const { skinIndex, skinWeight } = computeSkinWeights(worldPos, ANCHORS.bones);
+    const { skinIndex, skinWeight } = computeSkinWeights(worldPos, ANCHORS.bones, {
+      material: part.material,
+    });
     geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
     geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
     if (debug) colorGeometry(geometry, skinIndex, skinWeight);

@@ -1,20 +1,44 @@
-import type { BoneAnchor } from './types.ts';
+import { smoothstep } from './math.ts';
+import { EYE_MATERIAL_ALIAS, type BoneAnchor } from './types.ts';
 
 export type SkinBuffers = {
   skinIndex: Uint16Array;
   skinWeight: Float32Array;
 };
 
+export type SkinOptions = {
+  material?: string;
+  maxInfluences?: number;
+};
+
+export function resolvePartMaterial(name: string): string {
+  return EYE_MATERIAL_ALIAS[name] ?? name;
+}
+
+export function boneFalloff(distance: number, maxRadius: number): number {
+  if (maxRadius <= 0 || distance >= maxRadius) return 0;
+  return 1 - smoothstep(0, maxRadius, distance);
+}
+
+function excludesMaterial(bone: BoneAnchor, material: string | undefined): boolean {
+  if (!material || !bone.excludeMaterials?.length) return false;
+  const resolved = resolvePartMaterial(material);
+  return bone.excludeMaterials.some((name) => resolvePartMaterial(name) === resolved);
+}
+
 /**
- * Inverse-square falloff inside each bone's authored radius, top-4 influences.
- * Vertices with no bone in range bind fully to bone 0 (root).
+ * Smoothstep falloff inside each bone's maxRadius, hard zero beyond.
+ * Material exclusions (eyes / ocelli on mouthparts) skip that bone entirely.
+ * Raw weights are clamped so the per-vertex total never exceeds 1; any deficit
+ * is assigned to root so Three.js LBS does not implosion-scale the vertex.
  */
 export function computeSkinWeights(
   positions: Float32Array,
   bones: readonly BoneAnchor[],
-  maxInfluences = 4,
+  opts: SkinOptions = {},
 ): SkinBuffers {
   const n = Math.floor(positions.length / 3);
+  const maxInfluences = opts.maxInfluences ?? 4;
   const skinIndex = new Uint16Array(n * 4);
   const skinWeight = new Float32Array(n * 4);
   const tmpI = new Int32Array(bones.length);
@@ -25,21 +49,44 @@ export function computeSkinWeights(
     const y = positions[v * 3 + 1];
     const z = positions[v * 3 + 2];
     let count = 0;
+    let sum = 0;
     for (let b = 0; b < bones.length; b++) {
-      const r = bones[b].radius;
-      if (r <= 0) continue;
-      const p = bones[b].position;
-      const d = Math.hypot(x - p[0], y - p[1], z - p[2]);
-      const t = 1 - d / r;
-      if (t <= 0) continue;
+      if (excludesMaterial(bones[b], opts.material)) continue;
+      const w = boneFalloff(
+        Math.hypot(x - bones[b].position[0], y - bones[b].position[1], z - bones[b].position[2]),
+        bones[b].maxRadius,
+      );
+      if (w <= 0) continue;
       tmpI[count] = b;
-      tmpW[count] = t * t;
+      tmpW[count] = w;
+      sum += w;
       count++;
     }
-    if (count === 0) {
+    if (count === 0 || sum <= 0) {
       skinIndex[v * 4] = 0;
       skinWeight[v * 4] = 1;
       continue;
+    }
+    if (sum > 1) {
+      const inv = 1 / sum;
+      for (let i = 0; i < count; i++) tmpW[i] *= inv;
+      sum = 1;
+    }
+    if (sum < 1) {
+      const deficit = 1 - sum;
+      let rootSlot = -1;
+      for (let i = 0; i < count; i++) {
+        if (tmpI[i] === 0) {
+          rootSlot = i;
+          break;
+        }
+      }
+      if (rootSlot >= 0) tmpW[rootSlot] += deficit;
+      else {
+        tmpI[count] = 0;
+        tmpW[count] = deficit;
+        count++;
+      }
     }
     for (let a = 1; a < count; a++) {
       const ib = tmpI[a];
@@ -56,12 +103,32 @@ export function computeSkinWeights(
     const k = Math.min(maxInfluences, count);
     let used = 0;
     for (let j = 0; j < k; j++) used += tmpW[j];
+    const inv = used > 0 ? 1 / used : 1;
     for (let j = 0; j < k; j++) {
       skinIndex[v * 4 + j] = tmpI[j];
-      skinWeight[v * 4 + j] = tmpW[j] / used;
+      skinWeight[v * 4 + j] = tmpW[j] * inv;
     }
   }
   return { skinIndex, skinWeight };
+}
+
+export function vertexWeightSum(skinWeight: Float32Array, vertex: number): number {
+  const o = vertex * 4;
+  return skinWeight[o] + skinWeight[o + 1] + skinWeight[o + 2] + skinWeight[o + 3];
+}
+
+export function boneWeightOnVertex(
+  skinIndex: Uint16Array,
+  skinWeight: Float32Array,
+  vertex: number,
+  bone: number,
+): number {
+  const o = vertex * 4;
+  let w = 0;
+  for (let j = 0; j < 4; j++) {
+    if (skinIndex[o + j] === bone) w += skinWeight[o + j];
+  }
+  return w;
 }
 
 export function dominantBone(skinIndex: Uint16Array, skinWeight: Float32Array, vertex: number): number {
