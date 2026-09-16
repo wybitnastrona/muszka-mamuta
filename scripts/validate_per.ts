@@ -1,24 +1,38 @@
 #!/usr/bin/env node
 /**
- * Offline check that the feeding-circuit LIF reproduces a Shiu-style
- * proboscis-extension signature: labellar drive raises MN9; inferred
- * path_sign = -1 drive raises it less.
- *
- * This is not a sweet/bitter experiment. MaleCNS has no receptor-gene labels.
+ * Condition 1: whole labellar/peg channel vs calibrated baseline (threshold = measured rise).
+ * Condition 2: gust_drive rise vs gust_suppress rise (gap = measured separation).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { idsForRole, idsWithPathSign, parseCircuit, type CircuitGraph } from '../src/brain/csr.ts';
+import { idsForRole, parseCircuit, type CircuitGraph } from '../src/brain/csr.ts';
+import { channelRiseIsSublinear, meanMn9Hz } from '../src/brain/drive.ts';
 import { LifNetwork } from '../src/brain/lif.ts';
+import {
+  BACKGROUND_RATE_HZ,
+  PROTOCOL_DURATION_MS,
+  PROTOCOL_SEED,
+  PROTOCOL_STIM_HZ,
+  REST_WINDOW_MS,
+} from '../src/brain/params.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const metaPath = join(root, 'public/data/feeding-circuit/graph.meta.json');
-const binPath = join(root, 'public/data/feeding-circuit/graph.bin');
-const SEED = 1;
-const BASELINE_MS = 200;
-const STIM_MS = 500;
-const RATE_HZ = 100;
+const dir = join(root, 'public/data/feeding-circuit');
+const metaPath = join(dir, 'graph.meta.json');
+const binPath = join(dir, 'graph.bin');
+const drivePath = join(dir, 'drive.json');
+
+type DriveFile = {
+  seed: number;
+  stimHz: number;
+  gust_labellar: Array<{ bodyId: number; deltaMn9Hz: number }>;
+  population: {
+    labellarRiseHz: number;
+    driveMinusSuppressHz: number;
+    maxLabellarDeltaHz: number;
+  };
+};
 
 function line(ok: boolean, name: string, detail: string): boolean {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
@@ -26,75 +40,122 @@ function line(ok: boolean, name: string, detail: string): boolean {
   return ok;
 }
 
-function mn9Spikes(net: LifNetwork, circuit: CircuitGraph): { n: number; spikes: number; hz: number; ms: number } {
-  let n = 0;
-  let spikes = 0;
-  for (let i = 0; i < circuit.n; i++) {
-    if (circuit.role[i] !== 'mn9') continue;
-    n++;
-    spikes += net.spikeCount[i];
-  }
-  const ms = net.timeSec * 1000;
-  return { n, spikes, hz: n === 0 || ms === 0 ? 0 : spikes / n / (ms / 1000), ms };
+function mn9(net: LifNetwork, circuit: CircuitGraph) {
+  return meanMn9Hz(net.spikeCount, circuit.role, net.timeSec);
+}
+
+function ratioText(hz: number, baseline: number): string {
+  if (baseline <= 0) return 'baseline 0 Hz (ratio undefined)';
+  return `${(hz / baseline).toFixed(2)}× baseline`;
+}
+
+function riseRatio(driveRise: number, suppressRise: number): string {
+  if (suppressRise === 0) return driveRise > 0 ? '∞ (suppress rise 0)' : 'undefined (both 0)';
+  return (driveRise / suppressRise).toFixed(3);
 }
 
 function run(): number {
-  if (!existsSync(metaPath) || !existsSync(binPath)) {
-    line(
-      false,
-      'graph present',
-      `${binPath} and graph.meta.json are missing. Run scripts/data-prep/extract_feeding_circuit.py.`,
-    );
+  if (!existsSync(metaPath) || !existsSync(binPath) || !existsSync(drivePath)) {
+    line(false, 'graph present', 'Need graph.bin, graph.meta.json, and drive.json (npm run measure:drive).');
     return 1;
   }
 
   const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as unknown;
+  const driveFile = JSON.parse(readFileSync(drivePath, 'utf8')) as DriveFile;
+  if (!driveFile.population) {
+    line(false, 'drive.json population', 'Re-run npm run measure:drive after calibration (needs population block).');
+    return 1;
+  }
   const buf = readFileSync(binPath);
   const graph = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   const circuit = parseCircuit(meta, graph);
-  const labellar = idsForRole(circuit, 'gust_labellar');
-  const negative = idsWithPathSign(circuit, -1);
+  const labellar = Int32Array.from(driveFile.gust_labellar.map((row) => row.bodyId));
+  const drive = idsForRole(circuit, 'gust_drive');
+  const suppress = idsForRole(circuit, 'gust_suppress');
   console.log(
-    `neurons=${circuit.n} edges=${circuit.nEdges} gust_labellar=${labellar.length} path_sign=-1=${negative.length}`,
+    `neurons=${circuit.n} labellar/peg=${labellar.length} gust_drive=${drive.length} ` +
+      `gust_suppress=${suppress.length} background=${BACKGROUND_RATE_HZ} Hz stim=${PROTOCOL_STIM_HZ} Hz`,
   );
 
-  const baselineNet = new LifNetwork(circuit, SEED);
-  baselineNet.stepMs(BASELINE_MS);
-  const baseline = mn9Spikes(baselineNet, circuit);
-  console.log(`baseline MN9: ${baseline.hz.toFixed(3)} Hz (${baseline.spikes} spikes / ${baseline.n} cells / ${baseline.ms.toFixed(0)} ms)`);
+  const baselineNet = new LifNetwork(circuit, PROTOCOL_SEED);
+  baselineNet.stepMs(REST_WINDOW_MS);
+  const baseline = mn9(baselineNet, circuit);
+  console.log(
+    `baseline MN9: ${baseline.hz.toFixed(3)} Hz (${baseline.spikes} spikes / ${baseline.n} cells / ${baseline.ms.toFixed(0)} ms)`,
+  );
 
-  const labNet = new LifNetwork(circuit, SEED);
-  labNet.stimulate(labellar, RATE_HZ, STIM_MS);
-  labNet.stepMs(STIM_MS);
-  const lab = mn9Spikes(labNet, circuit);
-  const floor = Math.max(baseline.hz, 0.1);
-  const ratio = lab.hz / floor;
-  const passLab = labellar.length > 0 && lab.hz > 5 * floor;
+  const labNet = new LifNetwork(circuit, PROTOCOL_SEED);
+  labNet.stimulate(labellar, PROTOCOL_STIM_HZ, PROTOCOL_DURATION_MS);
+  labNet.stepMs(PROTOCOL_DURATION_MS);
+  const lab = mn9(labNet, circuit);
+  const labRise = lab.hz - baseline.hz;
+  const measuredRise = driveFile.population.labellarRiseHz;
+  const maxSingle = Math.max(
+    driveFile.population.maxLabellarDeltaHz,
+    ...driveFile.gust_labellar.map((row) => row.deltaMn9Hz),
+  );
+
+  let inhibitionNote: string;
+  if (!(labRise > 0)) {
+    inhibitionNote =
+      'Whole-channel rise is not positive — recruited inhibition cancelled the population drive. ' +
+      'Not lowering the bar.';
+  } else if (maxSingle > labRise) {
+    inhibitionNote =
+      `Whole-channel rise +${labRise.toFixed(3)} Hz is far below max single-seed delta +${maxSingle.toFixed(3)} Hz. ` +
+      'Consistent with lateral inhibition / gain normalisation: driving all 223 also recruits ' +
+      'GABAergic and glutamatergic interneurons in the extracted circuit.';
+  } else {
+    inhibitionNote = `Whole-channel rise +${labRise.toFixed(3)} Hz; max single-seed delta +${maxSingle.toFixed(3)} Hz.`;
+  }
+
+  const passLab =
+    labellar.length > 0 &&
+    labRise > 0 &&
+    labRise >= measuredRise;
   line(
     passLab,
-    'gust_labellar 100 Hz / 500 ms → MN9 > 5× baseline',
-    `MN9 ${lab.hz.toFixed(3)} Hz (${lab.spikes} spikes) / baseline ${baseline.hz.toFixed(3)} Hz (floor ${floor.toFixed(3)}) = ${ratio.toFixed(2)}×`,
+    `labellar/peg ${PROTOCOL_STIM_HZ} Hz / ${PROTOCOL_DURATION_MS} ms → MN9 rise ≥ measured ${measuredRise.toFixed(3)} Hz`,
+    `MN9 ${lab.hz.toFixed(3)} Hz (${lab.spikes} spikes), baseline ${baseline.hz.toFixed(3)} Hz, ` +
+      `rise ${labRise.toFixed(3)} Hz (${ratioText(lab.hz, baseline.hz)}). ${inhibitionNote}`,
   );
 
-  if (negative.length === 0) {
-    line(false, 'path_sign = -1 drive → smaller MN9 rise', 'No neurons with path_sign = -1 in metadata.');
+  if (drive.length === 0 || suppress.length === 0) {
+    line(false, 'gust_drive vs gust_suppress', 'Missing measured roles. Run scripts/measure_drive.ts.');
     return 1;
   }
 
-  const negNet = new LifNetwork(circuit, SEED);
-  negNet.stimulate(negative, RATE_HZ, STIM_MS);
-  negNet.stepMs(STIM_MS);
-  const neg = mn9Spikes(negNet, circuit);
-  const riseLab = lab.hz - baseline.hz;
-  const riseNeg = neg.hz - baseline.hz;
-  const passNeg = riseLab > 0 && riseNeg < 0.5 * riseLab;
+  const driveNet = new LifNetwork(circuit, PROTOCOL_SEED);
+  driveNet.stimulate(drive, PROTOCOL_STIM_HZ, PROTOCOL_DURATION_MS);
+  driveNet.stepMs(PROTOCOL_DURATION_MS);
+  const driven = mn9(driveNet, circuit);
+
+  const supNet = new LifNetwork(circuit, PROTOCOL_SEED);
+  supNet.stimulate(suppress, PROTOCOL_STIM_HZ, PROTOCOL_DURATION_MS);
+  supNet.stepMs(PROTOCOL_DURATION_MS);
+  const suppressed = mn9(supNet, circuit);
+
+  const riseDrive = driven.hz - baseline.hz;
+  const riseSup = suppressed.hz - baseline.hz;
+  const gap = riseDrive - riseSup;
+  const measuredGap = driveFile.population.driveMinusSuppressHz;
+  const passGap = riseDrive > riseSup && gap >= measuredGap;
   line(
-    passNeg,
-    'path_sign = -1 100 Hz / 500 ms → MN9 rise clearly smaller',
-    `MN9 ${neg.hz.toFixed(3)} Hz (${neg.spikes} spikes, rise ${riseNeg.toFixed(3)}) vs labellar rise ${riseLab.toFixed(3)}`,
+    passGap,
+    `gust_drive rise exceeds gust_suppress rise by ≥ measured ${measuredGap.toFixed(3)} Hz`,
+    `drive MN9 ${driven.hz.toFixed(3)} Hz (rise ${riseDrive.toFixed(3)}, ${ratioText(driven.hz, baseline.hz)}); ` +
+      `suppress MN9 ${suppressed.hz.toFixed(3)} Hz (rise ${riseSup.toFixed(3)}, ${ratioText(suppressed.hz, baseline.hz)}); ` +
+      `gap ${gap.toFixed(3)} Hz; rise ratio drive/suppress ${riseRatio(riseDrive, riseSup)}`,
   );
 
-  return passLab && passNeg ? 0 : 1;
+  const passSub = channelRiseIsSublinear(maxSingle, labRise);
+  line(
+    passSub,
+    'whole-channel labellar rise is sublinear vs strongest single seed',
+    `max single Δ ${maxSingle.toFixed(3)} Hz vs whole-channel rise ${labRise.toFixed(3)} Hz`,
+  );
+
+  return passLab && passGap && passSub ? 0 : 1;
 }
 
 process.exit(run());

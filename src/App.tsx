@@ -3,77 +3,251 @@ import { BrainScene } from './components/BrainScene';
 import { FlyScene } from './components/FlyScene';
 import { Environment } from './components/Environment';
 import { Attribution } from './components/Attribution';
+import { BrainRuntime } from './brain/BrainRuntime';
+import { idsForSubclasses } from './brain/csr';
+import { LABELLAR_SUBCLASSES, PROTOCOL_DURATION_MS, PROTOCOL_STIM_HZ } from './brain/params';
+import { BRAIN_SOURCE } from './brain/protocol';
+import type { PopulationSummary } from './brain/lif';
 import { asset, loadAtlas, type Atlas } from './lib/atlas';
-import { frameAt, parseReplay, type ModelReplay } from './lib/replay';
+import { frameAt, parseReplay, type ActivityFrame, type ModelReplay } from './lib/replay';
+import { t, type Lang } from './i18n';
+
+const hz = (value: number) => value.toFixed(2);
 
 export function App() {
-  const [atlas,setAtlas] = useState<Atlas|null>(null);
-  const [error,setError] = useState('');
-  const [replay,setReplay] = useState<ModelReplay|null>(null);
-  const [playing,setPlaying] = useState(true), [time,setTime] = useState(0);
+  const [lang, setLang] = useState<Lang>('pl');
+  const [atlas, setAtlas] = useState<Atlas | null>(null);
+  const [error, setError] = useState('');
+  const [replay, setReplay] = useState<ModelReplay | null>(null);
+  const [playing, setPlaying] = useState(true);
+  const [time, setTime] = useState(0);
+  const [seed, setSeed] = useState(1);
+  const [live, setLive] = useState(false);
+  const [liveFrame, setLiveFrame] = useState<ActivityFrame | null>(null);
+  const [summary, setSummary] = useState<PopulationSummary | null>(null);
+  const [neuronN, setNeuronN] = useState(0);
   const file = useRef<HTMLInputElement>(null);
+  const runtime = useRef<BrainRuntime | null>(null);
   const duration = replay?.frames.at(-1)?.time ?? 30;
+
   useEffect(() => {
     const abort = new AbortController();
-    void loadAtlas(abort.signal).then(setAtlas).catch(e=>{if(!abort.signal.aborted)setError(String(e));});
+    void loadAtlas(abort.signal).then(setAtlas).catch((e) => {
+      if (!abort.signal.aborted) setError(String(e));
+    });
     return () => abort.abort();
-  },[]);
+  }, []);
+
+  useEffect(() => () => { runtime.current?.dispose(); runtime.current = null; }, []);
+
   useEffect(() => {
-    if(!playing) return;
+    if (live) return;
+    if (!playing) return;
     let previous = performance.now(), frame = 0;
-    const step = (now:number) => {
-      const delta = document.hidden ? 0 : Math.min(.1,(now-previous)/1000); previous=now;
-      setTime(value => Math.min(duration,value+delta));
-      frame=requestAnimationFrame(step);
+    const step = (now: number) => {
+      const delta = document.hidden ? 0 : Math.min(0.1, (now - previous) / 1000);
+      previous = now;
+      setTime((value) => Math.min(duration, value + delta));
+      frame = requestAnimationFrame(step);
     };
-    frame=requestAnimationFrame(step);
+    frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  },[playing,duration]);
-  useEffect(()=>{if(time>=duration)setPlaying(false);},[time,duration]);
-  const accept = (value:unknown) => {
-    if(!atlas) throw Error('Wait for the atlas to load.');
-    const validated = parseReplay(value,atlas.visibleIds);
-    setReplay(validated);setTime(0);setPlaying(false);setError('');
+  }, [playing, duration, live]);
+
+  useEffect(() => {
+    if (!live && time >= duration) setPlaying(false);
+  }, [time, duration, live]);
+
+  useEffect(() => {
+    const rt = runtime.current;
+    if (!live || !rt) return;
+    if (playing) rt.start();
+    else rt.stop();
+  }, [playing, live]);
+
+  const accept = (value: unknown) => {
+    if (!atlas) throw Error('Wait for the atlas to load.');
+    stopLive();
+    const validated = parseReplay(value, atlas.visibleIds);
+    setReplay(validated);
+    setTime(0);
+    setPlaying(false);
+    setError('');
   };
+
   const example = async () => {
-    try {const response=await fetch(asset('examples/model-output.example.json'));if(!response.ok)throw Error('Example unavailable.');accept(await response.json());}
-    catch(e){setError(String(e));}
+    try {
+      const response = await fetch(asset('examples/model-output.example.json'));
+      if (!response.ok) throw Error('Example unavailable.');
+      accept(await response.json());
+    } catch (e) {
+      setError(String(e));
+    }
   };
-  const frame = replay ? frameAt(replay,time) : null;
+
+  const stopLive = () => {
+    runtime.current?.dispose();
+    runtime.current = null;
+    setLive(false);
+    setLiveFrame(null);
+    setSummary(null);
+    setNeuronN(0);
+  };
+
+  const startLive = async () => {
+    setError('');
+    setReplay(null);
+    setTime(0);
+    const rt = new BrainRuntime(seed);
+    runtime.current = rt;
+    rt.onError = (message) => setError(message);
+    rt.onReady = (n, nextSeed) => {
+      setNeuronN(n);
+      setSeed(nextSeed);
+    };
+    rt.onFrame = (frame, nextSummary) => {
+      setLiveFrame(frame);
+      setSummary(nextSummary);
+      setTime(frame.time);
+    };
+    try {
+      await rt.connect();
+      setLive(true);
+      setPlaying(true);
+      rt.start();
+    } catch (e) {
+      runtime.current = null;
+      setError(String(e));
+    }
+  };
+
+  const applySeed = (next: number) => {
+    const value = next >>> 0;
+    setSeed(value);
+    runtime.current?.setSeed(value);
+    if (live) {
+      setLiveFrame(null);
+      setSummary(null);
+      setTime(0);
+    }
+  };
+
+  const frame = replay ? frameAt(replay, time) : liveFrame;
+  const statusKind = replay ? replay.source.kind : live ? 'predicted' : null;
+  const statusLabel = statusKind === 'predicted'
+    ? t(lang, 'predicted')
+    : statusKind === 'synthetic'
+      ? t(lang, 'synthetic')
+      : statusKind === 'measured'
+        ? t(lang, 'measured')
+        : t(lang, 'anatomyOnly');
+
   return <>
-    <header><h1>YOUR EXPERIMENT</h1><span>Environment / anatomy / model output</span><a href="https://github.com/cobanov/fly-connectome-template#readme">Template guide ↗</a></header>
+    <header>
+      <h1>{t(lang, 'title')}</h1>
+      <span>{t(lang, 'subtitle')}</span>
+      <button className="lang-toggle" onClick={() => setLang(lang === 'pl' ? 'en' : 'pl')}>{t(lang, 'lang')}</button>
+      <a href="https://github.com/cobanov/fly-connectome-template#readme">{t(lang, 'guide')}</a>
+    </header>
     <main>
       <div className="toolbar">
-        <span className="status">{playing?'Running':'Paused'} · {time.toFixed(2)} s</span>
+        <span className="status">{playing ? t(lang, 'running') : t(lang, 'paused')} · {time.toFixed(2)} s{live && neuronN ? ` · ${neuronN.toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-US')} LIF` : ''}</span>
         <div className="controls">
-          <button onClick={()=>{setTime(0);setPlaying(false);}}>Reset</button>
-          <button onClick={()=>{if(time>=duration)setTime(0);setPlaying(!playing);}}>{playing?'Pause':'Play'}</button>
-          <button disabled={!atlas} onClick={()=>void example()}>Load synthetic example</button>
-          <button disabled={!atlas} onClick={()=>file.current?.click()}>Load model JSON</button>
-          {replay&&<button onClick={()=>{setReplay(null);setTime(0);setPlaying(false);}}>Clear output</button>}
-          <input ref={file} hidden type="file" accept=".json,application/json" onChange={async event=>{
-            const selected=event.target.files?.[0];event.target.value='';if(!selected)return;
-            try {if(selected.size>10*1024*1024)throw Error('Replay must be under 10 MB.');accept(JSON.parse(await selected.text()));} catch(e){setError(String(e));}
-          }}/>
+          <button onClick={() => {
+            setTime(0);
+            setPlaying(false);
+            if (live) runtime.current?.reset(seed);
+            setLiveFrame(null);
+            setSummary(null);
+          }}>{t(lang, 'reset')}</button>
+          <button onClick={() => {
+            if (!live && time >= duration) setTime(0);
+            setPlaying(!playing);
+          }}>{playing ? t(lang, 'pause') : t(lang, 'play')}</button>
+          <label className="seed-field">{t(lang, 'seed')}
+            <input
+              type="number"
+              min={0}
+              max={0xffffffff}
+              value={seed}
+              aria-label={t(lang, 'seed')}
+              onChange={(event) => applySeed(Number(event.target.value) || 0)}
+            />
+          </label>
+          {live
+            ? <button onClick={() => { stopLive(); setPlaying(false); setTime(0); }}>{t(lang, 'liveStop')}</button>
+            : <button disabled={!atlas} onClick={() => void startLive()}>{t(lang, 'live')}</button>}
+          <button disabled={!live} onClick={() => {
+            const rt = runtime.current;
+            if (!rt?.circuit) return;
+            rt.stimulate(idsForSubclasses(rt.circuit, LABELLAR_SUBCLASSES), PROTOCOL_STIM_HZ, PROTOCOL_DURATION_MS);
+          }}>{t(lang, 'stimLabellar')}</button>
+          <button disabled={!atlas} onClick={() => void example()}>{t(lang, 'loadExample')}</button>
+          <button disabled={!atlas} onClick={() => file.current?.click()}>{t(lang, 'loadJson')}</button>
+          {(replay || live) && <button onClick={() => {
+            stopLive();
+            setReplay(null);
+            setTime(0);
+            setPlaying(false);
+          }}>{t(lang, 'clearOutput')}</button>}
+          <input ref={file} hidden type="file" accept=".json,application/json" onChange={async (event) => {
+            const selected = event.target.files?.[0];
+            event.target.value = '';
+            if (!selected) return;
+            try {
+              if (selected.size > 10 * 1024 * 1024) throw Error('Replay must be under 10 MB.');
+              accept(JSON.parse(await selected.text()));
+            } catch (e) {
+              setError(String(e));
+            }
+          }} />
         </div>
       </div>
-      {error&&<p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       <div className="workbench">
-        <section className="panel environment-panel"><h2>01 / ENVIRONMENT</h2><Environment time={time}/><div className="panel-bottom">Generic stimulus · no game or reward function bundled</div></section>
-        <section className="panel brain-panel"><h2>02 / BRAIN SOMA ATLAS <span>MaleCNS v1.0</span></h2>
-          {atlas?<BrainScene atlas={atlas} frame={frame}/>:<p className="loading" role="status">Loading measured anatomy…</p>}
-          <div className="panel-bottom">{atlas?.visibleIds.size.toLocaleString('en-US') ?? '…'} measured somata <a href={asset('data/brain-atlas/NOTICE.md')}>Data notice ↗</a></div>
+        <section className="panel environment-panel">
+          <h2>{t(lang, 'env')}</h2>
+          <Environment time={time} />
+          <div className="panel-bottom">{t(lang, 'envFoot')}</div>
         </section>
-        <section className="panel fly-panel"><h2>03 / BODY <span>Flybody</span></h2><FlyScene/><div className="panel-bottom">Anatomical mesh · no motor simulation <span>Drag to rotate</span></div></section>
+        <section className="panel brain-panel">
+          <h2>{t(lang, 'brain')} <span>MaleCNS v1.0</span></h2>
+          {atlas ? <BrainScene atlas={atlas} frame={frame} /> : <p className="loading" role="status">{t(lang, 'loadingAnatomy')}</p>}
+          <div className="panel-bottom">{atlas?.visibleIds.size.toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-US') ?? '…'} {t(lang, 'somata')} <a href={asset('data/brain-atlas/NOTICE.md')}>{t(lang, 'dataNotice')}</a></div>
+        </section>
+        <section className="panel fly-panel">
+          <h2>{t(lang, 'body')} <span>Flybody</span></h2>
+          <FlyScene />
+          <div className="panel-bottom">{t(lang, 'bodyFoot')} <span>{t(lang, 'drag')}</span></div>
+        </section>
       </div>
       <section className="model-status" aria-label="Model provenance">
-        <strong>{replay ? `${replay.source.kind.toUpperCase()} OUTPUT` : 'ANATOMY ONLY'}</strong>
-        <p>{replay ? replay.source.name : 'No neural model connected. No activity is generated by default.'}</p>
-        {replay&&<><p>Normalization: {replay.source.normalization}</p><p>{replay.source.kind==='synthetic'?'Demonstration values only; not neural activity and not driven by the stimulus.':'Source category is declared by the uploaded file, not independently verified by this viewer.'}</p></>}
-        <label>Experiment time <input type="range" aria-label="Experiment time" min="0" max={duration} step=".01" value={time} onChange={event=>setTime(Number(event.target.value))}/><span>{duration.toFixed(1)} s</span></label>
+        <strong>{statusLabel}</strong>
+        <p>{replay ? replay.source.name : live ? BRAIN_SOURCE.name : t(lang, 'noModel')}</p>
+        {live && <p>{t(lang, 'liveHint')} · {t(lang, 'seed')} {seed}</p>}
+        {replay && <>
+          <p>{t(lang, 'replayNorm')}: {replay.source.normalization}</p>
+          <p>{replay.source.kind === 'synthetic' ? t(lang, 'syntheticNote') : t(lang, 'declaredNote')}</p>
+        </>}
+        {live && summary && <p>{t(lang, 'summary', {
+          mn9: hz(summary.mn9Rate),
+          drive: hz(summary.gustDriveRate),
+          neu: hz(summary.gustNeutralRate),
+          sup: hz(summary.gustSuppressRate),
+          mn: hz(summary.mnOtherRate),
+          dn: hz(summary.dnRate),
+        })}</p>}
+        {!live && <label>{t(lang, 'time')} <input type="range" aria-label={t(lang, 'time')} min="0" max={duration} step=".01" value={time} onChange={(event) => setTime(Number(event.target.value))} /><span>{duration.toFixed(1)} s</span></label>}
       </section>
-      <details><summary>Scientific scope &amp; customization</summary><p>The atlas contains curated cell-body positions, not neurite morphology or synaptic edges. Points keep native proportions. Missing soma locations are never generated. The brain filter selects optic, central and descending classes; it is not a complete brain segmentation.</p><p>Replace Environment.tsx with your environment. Pass ActivityFrame values to BrainScene using MaleCNS body IDs and time in seconds. The JSON loader validates the dataset, visible IDs and normalized values. GPU training and model inference run separately.</p><p>Dataset creators: FlyEM / HHMI Janelia, University of Cambridge, MRC Laboratory of Molecular Biology and Google Research. <a href="https://male-cns.janelia.org/download/">MaleCNS data and publication</a>, CC BY 4.0. <a href={asset('data/brain-atlas/manifest.json')}>Exact source, filters and hashes</a>.</p><p>Template code has a custom attribution-required license. Keep the linked template/author credit in your web UI and repository README. Third-party assets retain their own licenses.</p></details>
+      <details>
+        <summary>{t(lang, 'methods')}</summary>
+        <p>{t(lang, 'methods1')}</p>
+        <p>{t(lang, 'methods2')}</p>
+        <p>{t(lang, 'methodsLif')}</p>
+        <p>{t(lang, 'methods3')} <a href="https://male-cns.janelia.org/download/">{t(lang, 'maleCns')}</a>, CC BY 4.0. <a href={asset('data/brain-atlas/manifest.json')}>{t(lang, 'hashes')}</a>.</p>
+        <p>{t(lang, 'methods4')}</p>
+      </details>
     </main>
-    <Attribution/>
+    <Attribution />
   </>;
 }

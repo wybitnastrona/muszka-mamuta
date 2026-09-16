@@ -44,3 +44,8 @@ of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style o
   channels, not sweet. Document this as an authored assumption.
 - Hunger is NOT in the connectome: model it as neuromodulatory gain (AKH raises it, DSK/insulin lower it) applied
   to GRN→interneuron weights and to the MN9 threshold.
+
+  11. MaleCNS has NO sugar/bitter receptor annotations (no Gr64f, Gr5a, Gr66a — zero matches, verified).
+    The feeding drive comes from class=="gustatory" AND subclass in {"labellar bristle", "taste peg",
+    "pharyngeal sensillum"} (~271 neurons). MN9 is exactly bodyId 10331 and 16949. Never reintroduce
+    receptor-gene names anywhere in this project.

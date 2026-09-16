@@ -11,7 +11,12 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "lint": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs && vitest run",
+    "test:perf": "PERF=1 vitest run tests/brain/lif.test.ts",
+    "measure:drive": "node --experimental-strip-types --no-warnings scripts/measure_drive.ts",
+    "calibrate:background": "node --experimental-strip-types --no-warnings scripts/calibrate_background.ts",
+    "validate:circuit": "node --experimental-strip-types --no-warnings scripts/validate_per.ts",
     "check:assets": "node scripts/check-assets.mjs"
   },
   "dependencies": {
@@ -26,6 +31,7 @@
     "@types/three": "0.186.0",
     "@vitejs/plugin-react": "6.0.2",
     "typescript": "5.9.3",
-    "vite": "8.3.0"
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
   }
 }
