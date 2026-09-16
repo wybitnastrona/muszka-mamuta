@@ -12,7 +12,7 @@ import { createTable, createTwarogWedge } from '../body/kitchen.ts';
 import { odorConcentration, odorGradientYaw } from '../body/odorField.ts';
 import { WEIGHT_LEGEND } from '../body/palette.ts';
 import { applyPoseToBones, buildFlybodyRig } from '../body/rig.ts';
-import { describeFlybodyHierarchy, type FlybodyMeta } from '../body/hierarchy.ts';
+import { describeFlybodyHierarchy, ANCHORS, type FlybodyMeta } from '../body/hierarchy.ts';
 import { TWAROG_MAMUTA_WANILIOWY } from '../food/foodProfile.ts';
 
 type Model = FlybodyMeta;
@@ -98,6 +98,7 @@ export function FlyScene({
     world.add(table);
     world.add(food);
     const labWorld = new THREE.Vector3();
+    const labRight = new THREE.Vector3();
     const foodWorld = new THREE.Vector3();
     const contactMid = new THREE.Vector3();
     const closeCam = new THREE.Vector3();
@@ -135,17 +136,45 @@ export function FlyScene({
 
     const updateCloseup = (dt: number) => {
       if (!rig) return;
-      rig.contact.getWorldPosition(labWorld);
+      const left = rig.bones.get('labellum_L');
+      const right = rig.bones.get('labellum_R');
+      if (left && right) {
+        left.getWorldPosition(labWorld);
+        right.getWorldPosition(labRight);
+        labWorld.lerp(labRight, 0.5);
+      } else {
+        rig.contact.getWorldPosition(labWorld);
+      }
       food.getWorldPosition(foodWorld);
-      contactMid.lerpVectors(labWorld, foodWorld, 0.45);
+      contactMid.copy(labWorld).lerp(foodWorld, 0.12);
       const off = closeupOffset(radius);
       closeCam.copy(contactMid).add(new THREE.Vector3(off[0], off[1], off[2]));
-      const a = 1 - Math.exp(-dt / 0.28);
+      const a = 1 - Math.exp(-dt / 0.22);
       camera.position.lerp(closeCam, a);
       camera.lookAt(contactMid);
-      camera.fov = 28;
+      camera.fov = 32;
       camera.updateProjectionMatrix();
       controls.target.copy(contactMid);
+    };
+
+    const frameMouthparts = (tightMouth = false) => {
+      if (!rig) return;
+      const named = (name: (typeof ANCHORS.bones)[number]['name']) => {
+        const a = ANCHORS.bones.find((b) => b.name === name)!;
+        return new THREE.Vector3(a.position[0], a.position[1], a.position[2]).add(rig!.root.position);
+      };
+      const mouth = named('labellum_L').add(named('labellum_R')).multiplyScalar(0.5);
+      const aim = tightMouth ? mouth : named('head').lerp(mouth, 0.45);
+      if (tightMouth) {
+        camera.position.set(aim.x + 0.07, aim.y + 0.012, aim.z + 0.055);
+        camera.lookAt(aim.x, aim.y, aim.z);
+        camera.fov = 28;
+      } else {
+        camera.position.set(aim.x + 0.12, aim.y + 0.045, aim.z + 0.11);
+        camera.lookAt(aim.x, aim.y - 0.015, aim.z);
+        camera.fov = 30;
+      }
+      camera.updateProjectionMatrix();
     };
 
     const draw = () => renderer.render(scene, camera);
@@ -159,16 +188,13 @@ export function FlyScene({
       if (ready && rig) {
         if (debug === 'weights') {
           applyPoseToBones(rig.bones, sampleClip(CLIPS.idle, 0, { reduceMotion: true }));
-          rig.contact.getWorldPosition(labWorld);
-          camera.position.set(labWorld.x + 0.07, labWorld.y - 0.015, labWorld.z + 0.09);
-          camera.lookAt(labWorld);
-          camera.fov = 26;
-          camera.updateProjectionMatrix();
+          world.updateMatrixWorld(true);
+          frameMouthparts(true);
         } else if (debug === 'extend' || debug === 'pump') {
           const name = debug === 'extend' ? 'per' : 'pump';
           applyPoseToBones(rig.bones, sampleClip(CLIPS[name], reviewTime(name), { amplitude: 1, reduceMotion: true }));
           world.updateMatrixWorld(true);
-          updateCloseup(Math.max(dt, 0.05));
+          frameMouthparts(false);
         } else if (debug === 'motion') {
           const pose = mixer.update(dt);
           applyPoseToBones(rig.bones, pose);
@@ -215,7 +241,7 @@ export function FlyScene({
         }
         world.updateMatrixWorld(true);
         const want = presetRef.current;
-        if (want === 'Zbliżenie' && debug !== 'weights') updateCloseup(Math.max(dt, 1 / 60));
+        if (want === 'Zbliżenie' && debug === 'off') updateCloseup(Math.max(dt, 1 / 60));
         else if (want !== appliedPreset) applyPreset(want);
       }
       draw();
@@ -257,13 +283,7 @@ export function FlyScene({
       }
       if (debug === 'weights' || debug === 'extend' || debug === 'pump') {
         world.updateMatrixWorld(true);
-        if (debug === 'weights') {
-          built.contact.getWorldPosition(labWorld);
-          camera.position.set(labWorld.x + 0.07, labWorld.y - 0.015, labWorld.z + 0.09);
-          camera.lookAt(labWorld);
-        } else {
-          updateCloseup(1);
-        }
+        frameMouthparts(debug === 'weights');
       }
     })().catch((e) => { if (!disposed) setError(String(e)); });
 

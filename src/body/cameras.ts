@@ -28,8 +28,8 @@ export function sideFrame(radius: number): CameraFrame {
 }
 
 export function closeupOffset(radius: number): [number, number, number] {
-  const s = Math.max(0.04, radius * 0.28);
-  return [s * 0.55, s * 0.42, s * 0.95];
+  const s = Math.max(0.12, radius * 0.5);
+  return [s * 1.15, s * 0.35, s * 0.7];
 }
 
 export function frameForPreset(preset: CameraPreset, radius: number): CameraFrame {
