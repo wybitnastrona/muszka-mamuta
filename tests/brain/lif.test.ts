@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   analyticLifRateHz,
   FRAME_STEPS,
+  RATE_WINDOW_MS,
+  RATE_WINDOW_STEPS,
+  DT_MS,
   V_TH_MV,
   V_REST_MV,
 } from '../../src/brain/params.ts';
@@ -124,6 +127,14 @@ describe('MN9 threshold shift', () => {
     hard.stepMs(200);
     expect(easy.spikeCount[0]).toBeGreaterThan(0);
     expect(hard.spikeCount[0]).toBeLessThan(easy.spikeCount[0]);
+  });
+});
+
+describe('PopulationSummary rate window', () => {
+  it('is 50 ms so EXTEND can track MN9 bursts', () => {
+    expect(RATE_WINDOW_MS).toBe(50);
+    expect(RATE_WINDOW_MS).toBeLessThan(80);
+    expect(RATE_WINDOW_STEPS).toBe(Math.round(50 / DT_MS));
   });
 });
 

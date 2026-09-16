@@ -1,0 +1,76 @@
+{
+  "comment": "Authored landmarks in Flybody model.json space (+Z anterior, +Y dorsal, +X anatomical left). Not measured joints. front_left / front_right groups parent to the named foreleg bones at the coxa pivots from model.json.",
+  "space": "public/data/flybody/model.json",
+  "up": [0, 1, 0],
+  "forward": [0, 0, 1],
+  "bones": [
+    {
+      "name": "root",
+      "parent": null,
+      "position": [0, 0, 0],
+      "radius": 0.11
+    },
+    {
+      "name": "abdomen",
+      "parent": "root",
+      "position": [0, -0.05, -0.14],
+      "radius": 0.08
+    },
+    {
+      "name": "head",
+      "parent": "root",
+      "position": [0, 0.002, 0.072],
+      "radius": 0.046
+    },
+    {
+      "name": "antenna_L",
+      "parent": "head",
+      "position": [0.012, 0.002, 0.1],
+      "radius": 0.02
+    },
+    {
+      "name": "antenna_R",
+      "parent": "head",
+      "position": [-0.012, 0.002, 0.1],
+      "radius": 0.02
+    },
+    {
+      "name": "rostrum",
+      "parent": "head",
+      "position": [0, -0.04, 0.078],
+      "radius": 0.026
+    },
+    {
+      "name": "haustellum",
+      "parent": "rostrum",
+      "position": [0, -0.054, 0.072],
+      "radius": 0.018
+    },
+    {
+      "name": "labellum_L",
+      "parent": "haustellum",
+      "position": [0.0141, -0.0629, 0.0657],
+      "radius": 0.014
+    },
+    {
+      "name": "labellum_R",
+      "parent": "haustellum",
+      "position": [-0.0141, -0.0629, 0.0657],
+      "radius": 0.014
+    },
+    {
+      "name": "foreleg_L_tarsus",
+      "parent": "root",
+      "position": [0.0209, -0.0272, 0.0317],
+      "radius": 0.0,
+      "legGroup": "front_left"
+    },
+    {
+      "name": "foreleg_R_tarsus",
+      "parent": "root",
+      "position": [-0.0209, -0.0272, 0.0317],
+      "radius": 0.0,
+      "legGroup": "front_right"
+    }
+  ]
+}

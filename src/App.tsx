@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BrainScene } from './components/BrainScene';
 import { FlyScene } from './components/FlyScene';
+import type { FeedingEvent, FeedingState } from './body/types.ts';
 import { Environment } from './components/Environment';
 import { Attribution } from './components/Attribution';
 import { BrainRuntime } from './brain/BrainRuntime';
@@ -33,6 +34,7 @@ export function App() {
   const [showSpots, setShowSpots] = useState(false);
   const [spots, setSpots] = useState<DefecationEvent[]>([]);
   const [hemoHud, setHemoHud] = useState(() => new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY }).hud());
+  const [feedHud, setFeedHud] = useState<{ state: FeedingState; clip: string }>({ state: 'SEARCH', clip: 'odorTrack' });
   const file = useRef<HTMLInputElement>(null);
   const runtime = useRef<BrainRuntime | null>(null);
   const hemolymph = useRef(new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY, spotsEnabled: false }));
@@ -265,8 +267,25 @@ export function App() {
         </section>
         <section className="panel fly-panel">
           <h2>{t(lang, 'body')} <span>Flybody</span></h2>
-          <FlyScene />
-          <div className="panel-bottom">{t(lang, 'bodyFoot')} <span>{t(lang, 'drag')}</span></div>
+          <FlyScene
+            playing={playing}
+            mn9Rate={summary?.mn9Rate ?? 0}
+            satiety={hemoHud.satiety}
+            bitter={TWAROG_MAMUTA_WANILIOWY.bitter}
+            odor={TWAROG_MAMUTA_WANILIOWY.odor}
+            onEvents={(events: readonly FeedingEvent[]) => {
+              let bitten = false;
+              for (const event of events) {
+                if (event.type === 'bite') {
+                  hemolymph.current.bite();
+                  bitten = true;
+                }
+              }
+              if (bitten) setHemoHud(hemolymph.current.hud());
+            }}
+            onHud={setFeedHud}
+          />
+          <div className="panel-bottom">{t(lang, 'bodyFoot')} <span>{t(lang, 'feedHud', { state: feedHud.state, clip: feedHud.clip })}</span></div>
         </section>
       </div>
       <section className="model-status" aria-label="Model provenance">
@@ -300,6 +319,7 @@ export function App() {
         <p>{t(lang, 'methods2')}</p>
         <p>{t(lang, 'methodsLif')}</p>
         <p>{t(lang, 'methodsMetabolism')}</p>
+        <p>{t(lang, 'methodsBody')}</p>
         <p>{t(lang, 'methods3')} <a href="https://male-cns.janelia.org/download/">{t(lang, 'maleCns')}</a>, CC BY 4.0. <a href={asset('data/brain-atlas/manifest.json')}>{t(lang, 'hashes')}</a>.</p>
         <p>{t(lang, 'methods4')}</p>
       </details>
