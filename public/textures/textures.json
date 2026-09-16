@@ -1,0 +1,13 @@
+{
+  "pack_front": "pack_front.png",
+  "pack_back": "pack_back.png",
+  "twarog_crumb": "twarog_crumb.png",
+  "twarog_crumb_normal": "twarog_crumb_normal.png",
+  "twarog_crumb_rough": "twarog_crumb_rough.png",
+  "curd_median_rgb": [
+    225,
+    215,
+    202
+  ],
+  "curd_median_hex": "#e1d7ca"
+}
