@@ -1,0 +1,46 @@
+---
+description: Project rules for MUSZKA-MAMUTA (MaleCNS fly brain eating twaróg)
+alwaysApply: true
+---
+
+# MUSZKA-MAMUTA — agent rules
+
+You are modifying a fork of `cobanov/fly-connectome-template` (React 18, TypeScript strict, Three.js, Vite, Vitest).
+Goal: a browser simulation where a *Drosophila melanogaster* with a MaleCNS v1.0-driven spiking brain eats a wedge
+of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style of the viral "fly brain" reels
+(dark grid → kitchen table, side HUD, view switcher).
+
+## Non-negotiables
+
+1. NEVER invent neuron body IDs, cell-type names or synapse counts. Every ID used in code must be loaded from the
+   MaleCNS v1.0 export in `data/raw/` or from `public/data/brain-atlas/`. If you need a cell type (sugar GRNs, MN9),
+   write a data-prep script that looks it up by annotation and emits JSON with provenance. If lookup fails, STOP and
+   report — do not guess, do not substitute a plausible-sounding name.
+2. MaleCNS bulk files are Apache Arrow Feather. Read with `pd.read_feather` / `pyarrow`. They are NOT CSV.
+3. Keep the model boundary explicit: the brain simulation outputs `ActivityFrame` (existing template contract).
+   Body animation and the twaróg system consume it; they never write into it.
+4. Preserve `src/components/Attribution.tsx` and the README credit line ("Built with fly-connectome-template by
+   Mert Cobanov"). MaleCNS stays CC BY 4.0, Flybody Apache-2.0. Add a "Methods" panel stating honestly what is
+   measured (connectome graph, synapse signs) and what is authored (LIF params, hunger, food chemistry, every
+   frame of motion).
+5. UI text is Polish with an English toggle. Code, comments, commit messages in English.
+6. Performance budget: 60 fps on M1/RTX 3060 at 1080×1920 with ≤ 20k simulated neurons. Heavy loops run in a Web
+   Worker or WASM, never on the main thread.
+7. Every phase ends with `npm run lint && npm test && npm run build` passing. Add tests for new logic.
+8. No backend, no database, no auth, no analytics, no paid SDKs. Static site only.
+9. Before large edits, print a short plan and the list of files you will touch. After edits, print a summary and
+   manual verification steps.
+10. Work in small commits with conventional-commit messages. Never amend or force-push.
+
+## Domain cheat-sheet (VERIFY against MaleCNS annotations before using any name)
+
+- Sweet gustatory receptor neurons (GRNs): Gr64f / Gr5a class, labellar (labial nerve) and tarsal; axons terminate
+  in the subesophageal zone (SEZ).
+- Second-order sugar interneurons: G2N-1, IN1 (SEZ). Feeding command: Fdg.
+- Proboscis motor neurons: MN9 (rostrum protractor = proboscis extension), MN11/MN12 (haustellum), pharyngeal
+  pump MNs. Shiu et al., Nature 2024 reproduced sugar GRN → MN9 in a LIF model. This is our ground truth.
+- Bitter GRNs (Gr66a) suppress feeding. Amino-acid / yeast sensing: Ir76b class.
+- Twaróg profile: protein-rich, mildly sour, very low sugar → drive comes mostly from amino-acid and olfactory
+  channels, not sweet. Document this as an authored assumption.
+- Hunger is NOT in the connectome: model it as neuromodulatory gain (AKH raises it, DSK/insulin lower it) applied
+  to GRN→interneuron weights and to the MN9 threshold.
