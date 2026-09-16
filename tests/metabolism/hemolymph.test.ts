@@ -10,7 +10,11 @@ import {
 import {
   BITE_MASS,
   CROP_UNITS_PER_GRAM,
+  GUST_GAIN_0,
+  GUST_GAIN_H,
   Hemolymph,
+  MN9_SHIFT_0_MV,
+  MN9_SHIFT_H_MV,
   trehaloseYield,
 } from '../../src/metabolism/hemolymph.ts';
 import { CURD_CHUNK_COUNT, CURD_TOTAL_MASS_G } from '../../src/scene/scale.ts';
@@ -136,6 +140,19 @@ describe('hemolymph (authored, not connectome)', () => {
     expect(mh.mn9ThresholdShift).toBeLessThan(mf.mn9ThresholdShift);
     expect(GUST_GAIN_ROLES).toEqual([...MEASURED_GUST_ROLES, ...ANATOMICAL_GUST_ROLES]);
     expect(MODULATION_PUSH_MS).toBe(250);
+  });
+
+  it('at hunger 0.32 is slightly below rest gain, not a shutdown', () => {
+    const h = 0.32;
+    expect(GUST_GAIN_0 + GUST_GAIN_H * h).toBeCloseTo(0.94);
+    expect(MN9_SHIFT_0_MV + MN9_SHIFT_H_MV * h).toBeCloseTo(0.24);
+    const hemo = new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY });
+    expect(hemo.hungerDrive).toBeCloseTo(0.315, 2);
+    const mod = hemo.getModulation();
+    expect(mod.gustGain).toBeCloseTo(0.936, 2);
+    expect(mod.mn9ThresholdShift).toBeCloseTo(0.25, 1);
+    expect(mod.gustGain).toBeGreaterThan(0.9);
+    expect(mod.mn9ThresholdShift).toBeLessThan(0.5);
   });
 
   it('converts an average Voronoi chunk into one authored bite', () => {

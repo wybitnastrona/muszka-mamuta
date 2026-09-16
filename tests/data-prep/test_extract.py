@@ -12,8 +12,10 @@ from feeding import (
     cap_neurons,
     nt_sign,
     read_csr,
+    read_csr_compressed,
     strongest_path_sign,
     write_csr,
+    write_csr_compressed,
 )
 
 
@@ -47,6 +49,23 @@ def test_csr_round_trip(tmp_path):
     assert matrix[0, 2] == np.float32(-2.0)
     assert matrix[2, 1] == np.float32(-5.0)
     assert matrix.nnz == 5
+
+
+def test_csr_compressed_round_trip(tmp_path):
+    sources = np.array([0, 0, 1, 2, 2], dtype=np.int64)
+    targets = np.array([2, 1, 2, 0, 1], dtype=np.int64)
+    weights = np.array([1.5, -2.0, 3.0, 4.0, -5.0], dtype=np.float32)
+    indptr, indices, data = build_csr(sources, targets, weights, n_nodes=3)
+    path = tmp_path / "graph.bin"
+    write_csr_compressed(path, indptr, indices, data)
+    rt_indptr, rt_indices, rt_data = read_csr_compressed(path, n_nodes=3, n_edges=5)
+    assert np.array_equal(rt_indptr, indptr)
+    for i in range(3):
+        a, b = int(indptr[i]), int(indptr[i + 1])
+        order = np.argsort(indices[a:b], kind="stable")
+        assert np.array_equal(rt_indices[a:b], indices[a:b][order])
+        expect_w = np.asarray(data[a:b][order], dtype="<f2").astype(np.float32)
+        assert np.allclose(rt_data[a:b], expect_w)
 
 
 def test_bfs_depth_limit():

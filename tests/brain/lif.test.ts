@@ -136,6 +136,36 @@ describe('PopulationSummary rate window', () => {
     expect(RATE_WINDOW_MS).toBeLessThan(80);
     expect(RATE_WINDOW_STEPS).toBe(Math.round(50 / DT_MS));
   });
+
+  it('records MN9 and gustatory spike times for the raster', () => {
+    const net = new LifNetwork(graph({
+      n: 2,
+      roles: ['mn9', 'gust_labellar'],
+      bodyId: [10331, 2],
+    }), 1);
+    net.setCurrent(0, 15);
+    net.setCurrent(1, 15);
+    const snap = net.stepFrame();
+    expect(snap.summary.mn9SpikeTimesMs.length).toBeGreaterThan(0);
+    expect(snap.summary.gustSpikeTimesMs.length).toBeGreaterThan(0);
+    expect(snap.summary.gustRate).toBeGreaterThan(0);
+  });
+
+  it('reports Hz per cell, not spikes-per-window', () => {
+    const net = new LifNetwork(graph({
+      n: 2,
+      roles: ['mn9', 'mn9'],
+      bodyId: [10331, 16949],
+    }), 1);
+    net.setCurrent(0, 15);
+    net.setCurrent(1, 15);
+    net.stepMs(RATE_WINDOW_MS);
+    const hz0 = net.spikeCount[0] / (RATE_WINDOW_MS / 1000);
+    expect(net.rateHz(0)).toBeCloseTo(hz0, 5);
+    expect(net.rateHz(0)).not.toBe(net.spikeCount[0]);
+    const mean = (net.rateHz(0) + net.rateHz(1)) / 2;
+    expect(net.populationSummary().mn9Rate).toBeCloseTo(mean, 5);
+  });
 });
 
 describe.skipIf(process.env.PERF !== '1')('perf budget', () => {

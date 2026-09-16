@@ -2,7 +2,7 @@ import type { RoleTag } from './params.ts';
 import type { PopulationSummary } from './lif.ts';
 
 export type WorkerIn =
-  | { type: 'init'; graph: ArrayBuffer; meta: unknown; seed: number }
+  | { type: 'init'; graph: ArrayBuffer; metaBytes: ArrayBuffer; seed: number }
   | { type: 'start' }
   | { type: 'stop' }
   | { type: 'reset'; seed?: number }

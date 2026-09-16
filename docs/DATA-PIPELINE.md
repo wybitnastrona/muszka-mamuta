@@ -179,8 +179,14 @@ it as `path_sign_deprecated` only.
 
 ## Outputs
 
-- `public/data/feeding-circuit/graph.bin` — CSR, little-endian: `int32` indptr
-  (`n+1`), `int32` indices (`n_edges`), `float32` signed weights (`n_edges`).
+- `public/data/feeding-circuit/graph.bin` — **MMG1 compressed** CSR for
+  Cloudflare Pages (< 25 MB/file): magic `MMG1`, `uint32` n / n_edges,
+  `int32` indptr (`n+1`), per-row **sorted** target indices as unsigned
+  LEB128 deltas, IEEE **float16** signed weights. The Web Worker decodes
+  to int32 / float32 before LIF. Uncompressed writer `write_csr` remains
+  in `scripts/data-prep/feeding.py` for audit dumps
+  (`data/derived/feeding-circuit-graph.uncompressed.bin`, gitignored).
+  Re-encode with `npm run compress:graph`.
 - `public/data/feeding-circuit/graph.meta.json` — `bodyId`, `type`, `subclass`,
   `role` (measured gust terciles), `gust_channel` (`labellar` / `pharyngeal` on
   the 271 seeds), `path_sign_deprecated`, `nt_uncertain`, provenance.

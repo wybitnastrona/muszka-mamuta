@@ -1,5 +1,18 @@
+import {
+  decodeCompressedGraph,
+  isCompressedGraph,
+  parseUncompressedGraph,
+} from './graphCodec.ts';
 import type { RoleTag } from './params.ts';
 import { ROLE_TAGS } from './params.ts';
+
+export {
+  GRAPH_BIN_LAYOUT_COMPRESSED,
+  GRAPH_BIN_LAYOUT_UNCOMPRESSED,
+  GRAPH_MAGIC,
+  encodeCompressedGraph,
+  isCompressedGraph,
+} from './graphCodec.ts';
 
 export type CircuitGraph = {
   n: number;
@@ -33,27 +46,17 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** CSR layout: int32 indptr (n+1), int32 indices (nEdges), float32 weights (nEdges). */
+/**
+ * CSR graph.bin: uncompressed (audit) or MMG1 compressed (float16 + delta-varint).
+ * The worker calls this on init; LIF sees float32 weights after decode.
+ */
 export function parseGraphBin(buffer: ArrayBuffer, n: number, nEdges: number): {
   indptr: Int32Array;
   indices: Int32Array;
   weights: Float32Array;
 } {
-  const expected = (n + 1) * 4 + nEdges * 4 + nEdges * 4;
-  if (buffer.byteLength !== expected) {
-    throw new Error(`graph.bin length ${buffer.byteLength} != ${expected} (n=${n}, edges=${nEdges})`);
-  }
-  const indptrBytes = (n + 1) * 4;
-  const indexBytes = nEdges * 4;
-  const indptr = new Int32Array(buffer.slice(0, indptrBytes));
-  const indices = new Int32Array(buffer.slice(indptrBytes, indptrBytes + indexBytes));
-  const weights = new Float32Array(
-    buffer.slice(indptrBytes + indexBytes, indptrBytes + indexBytes + nEdges * 4),
-  );
-  if (indptr[0] !== 0 || indptr[n] !== nEdges) {
-    throw new Error(`CSR indptr ends at ${indptr[n]}, expected ${nEdges}`);
-  }
-  return { indptr, indices, weights };
+  if (isCompressedGraph(buffer)) return decodeCompressedGraph(buffer, n, nEdges);
+  return parseUncompressedGraph(buffer, n, nEdges);
 }
 
 export function parseCircuitMeta(meta: unknown): {

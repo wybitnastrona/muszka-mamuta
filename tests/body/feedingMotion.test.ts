@@ -13,7 +13,7 @@ import {
   sampleClip,
 } from '../../src/body/feedingMotion.ts';
 import { eulerDegToQuat, headingError, turnToward } from '../../src/body/math.ts';
-import { parseDebugMode } from '../../src/body/debugQuery.ts';
+import { parseDebugMode, formatGateOverlay } from '../../src/body/debugQuery.ts';
 import { CAMERA_PRESETS } from '../../src/body/cameras.ts';
 import { ANCHORS } from '../../src/body/hierarchy.ts';
 
@@ -106,11 +106,34 @@ describe('debug query and cameras', () => {
     expect(parseDebugMode('debug=extend')).toBe('extend');
     expect(parseDebugMode('debug=pump')).toBe('pump');
     expect(parseDebugMode('debug=label')).toBe('label');
+    expect(parseDebugMode('debug=gate')).toBe('gate');
     expect(parseDebugMode('')).toBe('off');
   });
 
+  it('formats the MN9 gate overlay with FSM and worker rates', () => {
+    const text = formatGateOverlay({
+      state: 'TASTE',
+      fsmMn9Hz: 12.5,
+      workerMn9Hz: 12.5,
+      mn9HoldMs: 80,
+      hunger: 0.32,
+      gustGain: 0.94,
+      mn9ThresholdShift: 0.24,
+      labellarHz: 48,
+      pharyngealHz: 0,
+      contactStrength: 1,
+    });
+    expect(text).toContain('TASTE');
+    expect(text).toContain('12.50 Hz');
+    expect(text).toContain('mn9HoldMs      80');
+    expect(text).toContain('gustGain       0.940');
+    expect(text).toContain('labellarHz     48.0');
+  });
+
   it('names camera presets exactly', () => {
-    expect(CAMERA_PRESETS).toEqual(['Widok kuchni', 'Z boku', 'Zbliżenie']);
+    expect(CAMERA_PRESETS.slice(0, 3)).toEqual(['Widok kuchni', 'Z boku', 'Zbliżenie']);
+    expect(CAMERA_PRESETS).toContain('Przegląd');
+    expect(CAMERA_PRESETS).toContain('Reel');
   });
 });
 

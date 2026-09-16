@@ -77,7 +77,7 @@ export type BonePose = { rotation: Quat };
 
 export type Pose = Record<BoneName, BonePose>;
 
-export const CAMERA_PRESETS = ['Widok kuchni', 'Z boku', 'Zbliżenie'] as const;
+export const CAMERA_PRESETS = ['Widok kuchni', 'Z boku', 'Zbliżenie', 'Przegląd', 'Reel'] as const;
 export type CameraPreset = (typeof CAMERA_PRESETS)[number];
 
 export type FeedingEvent =
@@ -86,4 +86,4 @@ export type FeedingEvent =
   | { type: 'consume'; massGrams: number; chunkId: number; t: number }
   | { type: 'portion'; count: number; t: number };
 
-export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump' | 'label';
+export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump' | 'label' | 'gate';

@@ -29,6 +29,12 @@ export type PopulationSummary = {
   gustSuppressRate: number;
   mnOtherRate: number;
   dnRate: number;
+  /** Mean Hz of the whole gustatory population (SMAK Hz). */
+  gustRate: number;
+  /** Spike times (simulation ms) in the interval since the last snapshot. MN9 only. */
+  mn9SpikeTimesMs: number[];
+  /** Spike times (simulation ms) for class-gustatory seeds since the last snapshot. */
+  gustSpikeTimesMs: number[];
 };
 
 export class LifNetwork {
@@ -67,6 +73,10 @@ export class LifNetwork {
   private stepIndex = 0;
   private readonly idToIndex: Map<number, number>;
   private readonly roleIndex: Map<RoleTag, Int32Array>;
+  private readonly isMn9: Uint8Array;
+  private readonly isGust: Uint8Array;
+  private readonly frameMn9: number[] = [];
+  private readonly frameGust: number[] = [];
   private readonly synDecay = Math.exp(-DT_MS / TAU_SYN_MS);
   private readonly dtOverTau = DT_MS / TAU_M_MS;
 
@@ -112,6 +122,12 @@ export class LifNetwork {
     }
     this.roleIndex = new Map();
     for (const [role, list] of buckets) this.roleIndex.set(role, Int32Array.from(list));
+    this.isMn9 = new Uint8Array(this.n);
+    this.isGust = new Uint8Array(this.n);
+    for (let i = 0; i < this.n; i++) {
+      if (this.role[i] === 'mn9') this.isMn9[i] = 1;
+      if (isGustatorySeed(this.role[i])) this.isGust[i] = 1;
+    }
     this.seed = seed >>> 0;
     this.rng = new Xoshiro128ss(this.seed);
     this.clearState();
@@ -143,6 +159,8 @@ export class LifNetwork {
     this.lastSpikeN = 0;
     this.live.fill(0);
     this.rosterN = 0;
+    this.frameMn9.length = 0;
+    this.frameGust.length = 0;
   }
 
   private applyTonic(): void {
@@ -292,6 +310,12 @@ export class LifNetwork {
     }
     this.rosterN = kept;
     this.lastSpikeN = fired;
+    const tMs = this.stepIndex * DT_MS;
+    for (let s = 0; s < fired; s++) {
+      const i = this.lastSpikes[s]!;
+      if (this.isMn9[i]) this.frameMn9.push(tMs);
+      if (this.isGust[i]) this.frameGust.push(tMs);
+    }
     return fired;
   }
 
@@ -307,7 +331,10 @@ export class LifNetwork {
 
   snapshot(): { time: number; values: [number, number][]; summary: PopulationSummary } {
     const values = this.activityValues();
-    return { time: this.timeSec, values, summary: this.populationSummary() };
+    const summary = this.populationSummary();
+    this.frameMn9.length = 0;
+    this.frameGust.length = 0;
+    return { time: this.timeSec, values, summary };
   }
 
   get timeSec(): number {
@@ -328,6 +355,17 @@ export class LifNetwork {
     return sum / idx.length;
   }
 
+  meanGustatoryRate(): number {
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (!this.isGust[i]) continue;
+      sum += this.rateHz(i);
+      n++;
+    }
+    return n === 0 ? 0 : sum / n;
+  }
+
   populationSummary(): PopulationSummary {
     return {
       mn9Rate: this.meanRoleRate('mn9'),
@@ -336,6 +374,9 @@ export class LifNetwork {
       gustSuppressRate: this.meanRoleRate('gust_suppress'),
       mnOtherRate: this.meanRoleRate('mn_other'),
       dnRate: this.meanRoleRate('dn'),
+      gustRate: this.meanGustatoryRate(),
+      mn9SpikeTimesMs: this.frameMn9.slice(),
+      gustSpikeTimesMs: this.frameGust.slice(),
     };
   }
 

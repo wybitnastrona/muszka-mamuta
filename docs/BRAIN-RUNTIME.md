@@ -54,7 +54,7 @@ Worker URL: `src/brain/lif-worker.ts` (Vite module worker).
 
 | `type` | Payload | Notes |
 | --- | --- | --- |
-| `init` | `graph: ArrayBuffer`, `meta: object`, `seed: number` | Transfer `graph`. CSR + `graph.meta.json`. |
+| `init` | `graph: ArrayBuffer`, `metaBytes: ArrayBuffer`, `seed: number` | Transfer both buffers. Worker `JSON.parse`s meta and decodes MMG1 CSR. Main thread does not clone `graph.meta.json`. |
 | `start` | | Pace ~one 16.7 ms sim frame per wall-clock frame. |
 | `stop` | | Freeze state; does not dispose the graph. |
 | `reset` | `seed?: number` | Clear V, g, drive, spike window; optional new seed. |
@@ -85,7 +85,9 @@ The same seed must replay the same spike train (see Vitest).
 ## Wiring
 
 `BrainRuntime` fetches `public/data/feeding-circuit/graph.bin` and
-`graph.meta.json`, then owns the worker. `App.tsx` keeps the JSON **replay**
+`graph.meta.json`, then owns the worker. `parseGraphBin` accepts the
+shipped **MMG1** encoding (float16 weights, delta-varint indices) and
+the uncompressed audit layout. `App.tsx` keeps the JSON **replay**
 adapter: loading a replay disposes the live runtime. Live LIF does not go
 through `parseReplay` (circuit IDs need not be in the soma-atlas visible set).
 

@@ -60,6 +60,10 @@ export type ChunkRecord = {
   biteDistance: number;
   neighbours: number[];
   eaten: boolean;
+  /** Local-space top of the cell (food origin). Used by supportHeightAt. */
+  topY: number;
+  /** XZ radius of the cell around its centroid. */
+  radiusXz: number;
 };
 
 export type ConsumeEvent = {
@@ -104,6 +108,15 @@ export type TwarogStepInput = {
   profile?: FoodProfile;
   foodXZ: XZ;
   flyXZ: XZ;
+  /**
+   * TASTE / EXTEND / PUMP: tarsi are authored to be on the food, but the
+   * coxa bones sit ~2 mm in front of the root and the rest labellum is
+   * 4 mm — both short of `standoffMm()` (15 mm). The extracted circuit
+   * also has no tarsal GRNs, only labellar / peg / pharyngeal seeds.
+   * When true, chemo includes the nearest surface chunk so the labellar
+   * channel sees food chemistry before PER.
+   */
+  tasting?: boolean;
 };
 
 export type TwarogStepResult = {
@@ -374,6 +387,7 @@ function neighbourRadiusMm(): number {
   return Math.max(mm(CURD_MM.width) / 8, mm(CURD_MM.length) / 8) * 2.15;
 }
 
+/** Strength falls off in 3D toward the chunk centroid. Pass `contactReachMm()` when the target is a Voronoi centroid. */
 export function sampleContactFields(
   sensors: readonly Vec3[],
   target: Vec3 | null,
@@ -400,6 +414,11 @@ export function sampleContactFields(
  * Map contact chemistry onto whole-channel gustatory Poisson rates.
  * MaleCNS has no sweet/bitter receptor split, so we do not pick a sugar-only
  * subset of seeds — both roles receive a drive scaled by the profile.
+ *
+ * Falloff radius must match `nearestUneaten` (`contactReachMm` = contact
+ * radius plus chunk half-extent). A 6 mm 3D radius to the centroid misses
+ * even a labellum standing on the top face: Voronoi centroids sit millimetres
+ * inside the block.
  */
 export function contactToGustRates(contact: ContactFields, pumping: boolean): GustRates {
   const drive = (contact.sweet + 0.45 * contact.aa + 0.15 * contact.sour) * (1 - contact.bitter);
@@ -417,8 +436,9 @@ export function sampleChemo(
   foodXZ: XZ,
   pumping: boolean,
   profile: FoodProfile = TWAROG_MAMUTA_WANILIOWY,
+  radius = contactRadiusMm(),
 ): ChemoSample {
-  const contact = sampleContactFields(sensors, nearest, profile);
+  const contact = sampleContactFields(sensors, nearest, profile, radius);
   return {
     contact,
     odor: odorConcentration(flyXZ, foodXZ, profile.odor),
@@ -449,11 +469,16 @@ export class TwarogSystem {
   private readonly initialBiteFront: Vec3;
 
   constructor(
-    chunks: ChunkRecord[],
+    chunks: Array<Omit<ChunkRecord, 'topY' | 'radiusXz'> & Partial<Pick<ChunkRecord, 'topY' | 'radiusXz'>>>,
     biteFront: Vec3,
     opts: { seed?: number; store?: KvStore | null; hx?: number; hy?: number; hz?: number } = {},
   ) {
-    this.chunks = chunks;
+    const defaultR = Math.max(2, (opts.hx ?? mm(CURD_MM.width) / 2) / 8);
+    this.chunks = chunks.map((c) => ({
+      ...c,
+      topY: c.topY ?? c.centroid.y + defaultR,
+      radiusXz: c.radiusXz ?? defaultR,
+    }));
     this.biteFront = biteFront;
     this.initialBiteFront = { ...biteFront };
     this.lastBiteFront = { ...biteFront };
@@ -474,14 +499,24 @@ export class TwarogSystem {
     opts: { seed?: number; store?: KvStore | null } = {},
   ): TwarogSystem {
     const masses = massesFromFracture(fractured);
-    const chunks: ChunkRecord[] = fractured.cells.map((cell, index) => ({
-      index,
-      centroid: { ...cell.centroid },
-      massGrams: masses[index]!,
-      biteDistance: cell.biteDistance,
-      neighbours: [],
-      eaten: false,
-    }));
+    const chunks: ChunkRecord[] = fractured.cells.map((cell, index) => {
+      let topY = cell.centroid.y;
+      let radiusXz = 1.5;
+      for (const v of cell.poly.vertices) {
+        if (v.y > topY) topY = v.y;
+        radiusXz = Math.max(radiusXz, Math.hypot(v.x - cell.centroid.x, v.z - cell.centroid.z));
+      }
+      return {
+        index,
+        centroid: { ...cell.centroid },
+        massGrams: masses[index]!,
+        biteDistance: cell.biteDistance,
+        neighbours: [],
+        eaten: false,
+        topY,
+        radiusXz,
+      };
+    });
     const rad = neighbourRadiusMm();
     for (let i = 0; i < chunks.length; i++) {
       for (let j = i + 1; j < chunks.length; j++) {
@@ -545,6 +580,15 @@ export class TwarogSystem {
     this.remaining = this.uneatenMass();
   }
 
+  /** Fresh 250 g portion after EXIT_FRAME. Authored eternity loop, not connectome. */
+  nextPortion(): number {
+    this.reset();
+    this.portionCount += 1;
+    savePortionCount(this.portionCount, this.store);
+    this.appearT = 0;
+    return this.portionCount;
+  }
+
   /** Intact block AABB in world XZ (food is axis-aligned). */
   worldAabb(origin: XZ): XzAabb {
     return { cx: origin.x, cz: origin.z, hx: this.hx, hz: this.hz };
@@ -578,13 +622,19 @@ export class TwarogSystem {
     };
   }
 
+  /** Intact hull, or the remaining-chunk AABB once a bite face has receded. */
+  foodBounds(origin: XZ): XzAabb {
+    if (this.uneatenCount === this.chunkCount) return this.worldAabb(origin);
+    return this.uneatenAabb(origin);
+  }
+
   /**
    * Surface standoff: ray from the fly toward the food centroid, first hit
    * on the uneaten block (or remaining-chunk AABB once fractured), then
    * `standoffMm` back along that ray.
    */
   approachTarget(fly: Vec3, foodOrigin: Vec3, standoff = standoffMm()): ApproachTarget {
-    const box = this.uneatenAabb(foodOrigin);
+    const box = this.foodBounds(foodOrigin);
     const target = standoffOnRay(fly, foodOrigin, box, standoff);
     target.point.y = fly.y;
     target.hit.y = foodOrigin.y - this.hy * 0.45;
@@ -593,8 +643,52 @@ export class TwarogSystem {
 
   /** Push the body root outside the remaining food volume (padded by half body length). */
   clampRoot(fly: Vec3, foodOrigin: Vec3, pad = bodyCollisionPadMm()): Vec3 {
-    const out = clampOutsideXzAabb(fly, this.uneatenAabb(foodOrigin), pad);
+    const out = clampOutsideXzAabb(fly, this.foodBounds(foodOrigin), pad);
     return { x: out.x, y: fly.y, z: out.z };
+  }
+
+  /**
+   * World Y of the standing surface at `(x, z)`: the top of the tallest uneaten
+   * chunk whose XZ footprint contains the point, otherwise 0 (table).
+   * Collision is still XZ for the table/pouch; this is the vertical support.
+   */
+  supportHeightAt(x: number, z: number, foodOrigin: Vec3): number {
+    const lx = x - foodOrigin.x;
+    const lz = z - foodOrigin.z;
+    let best = -Infinity;
+    for (const c of this.chunks) {
+      if (c.eaten) continue;
+      if (Math.hypot(lx - c.centroid.x, lz - c.centroid.z) <= c.radiusXz) {
+        const top = foodOrigin.y + c.topY;
+        if (top > best) best = top;
+      }
+    }
+    return best === -Infinity ? 0 : best;
+  }
+
+  /**
+   * Project the body onto a vertical food face (outward XZ normal) so a side
+   * approach can walk up the wall. Y is left unchanged for the caller to climb.
+   */
+  projectOntoVerticalFace(fly: Vec3, foodOrigin: Vec3, standoff = 0): {
+    x: number;
+    y: number;
+    z: number;
+    nx: number;
+    nz: number;
+  } {
+    const box = this.foodBounds(foodOrigin);
+    const hit = closestXzAabb(fly, box);
+    const nlen = Math.hypot(hit.nx, hit.nz) || 1;
+    const nx = hit.nx / nlen;
+    const nz = hit.nz / nlen;
+    return {
+      x: hit.x + nx * standoff,
+      y: fly.y,
+      z: hit.z + nz * standoff,
+      nx,
+      nz,
+    };
   }
 
   /**
@@ -602,9 +696,8 @@ export class TwarogSystem {
    * so eating starts where she stands, not a fixed +X/−Z corner.
    */
   followBiteFront(flyLocal: Vec3): void {
-    const box: XzAabb = { cx: 0, cz: 0, hx: this.hx, hz: this.hz };
-    const uneaten: XzAabb = this.uneatenAabb({ x: 0, z: 0 });
-    const target = standoffOnRay(flyLocal, { x: 0, z: 0 }, uneaten.hx > 0 ? uneaten : box, 0);
+    const box: XzAabb = this.foodBounds({ x: 0, z: 0 });
+    const target = standoffOnRay(flyLocal, { x: 0, z: 0 }, box, 0);
     const y = -this.hy * 0.45;
     this.biteFront = { x: target.hit.x, y, z: target.hit.z };
     if (this.uneatenCount === this.chunkCount) this.lastBiteFront = { ...this.biteFront };
@@ -616,16 +709,27 @@ export class TwarogSystem {
   nearestUneaten(point: Vec3, radius = contactRadiusMm()): number | null {
     let best = -1;
     let bestD = radius;
-    for (const id of this.grid.query(point, radius)) {
-      const c = this.chunks[id]!;
+    for (const c of this.chunks) {
       if (c.eaten) continue;
       const d = hypot3(point, c.centroid);
       if (d <= bestD) {
         bestD = d;
-        best = id;
+        best = c.index;
       }
     }
     return best < 0 ? null : best;
+  }
+
+  /** Half-size of a mean Voronoi cell (mm). Labellum-to-centroid contact includes this. */
+  chunkHalfExtentMm(): number {
+    const meanG = this.totalMassGrams / Math.max(1, this.chunkCount);
+    const volMm3 = (meanG / CURD_DENSITY_G_CM3) * 1000;
+    return 0.5 * Math.cbrt(Math.max(0, volMm3));
+  }
+
+  /** Labellum reach for eating: contact radius plus the chunk's own half-extent. */
+  contactReachMm(): number {
+    return contactRadiusMm() + this.chunkHalfExtentMm();
   }
 
   /** Instantly eat one uneaten chunk. Returns grams ingested (0 if already eaten). */
@@ -643,7 +747,7 @@ export class TwarogSystem {
   step(input: TwarogStepInput): TwarogStepResult {
     const dt = Math.max(0, input.dt);
     const events: TwarogEvent[] = [];
-    const radius = contactRadiusMm();
+    const radius = this.contactReachMm();
     const fade = lodFadeSec();
     const lodTarget = input.cameraDist <= lodDistanceMm() ? 1 : 0;
     if (fade > 0) {
@@ -690,9 +794,15 @@ export class TwarogSystem {
       if (ev) events.push(ev);
     }
 
-    const nearestIdx = this.nearestUneaten(input.labellum, radius);
+    const sensors = input.sensors.length ? [...input.sensors] : [input.labellum];
+    let nearestIdx = this.nearestUneaten(input.labellum, radius);
+    if (nearestIdx === null && input.tasting) {
+      nearestIdx = this.nearestUneaten(this.biteFront, radius);
+    }
+    if (input.tasting && nearestIdx !== null) {
+      sensors.push(this.chunks[nearestIdx]!.centroid);
+    }
     const nearest = nearestIdx !== null ? this.chunks[nearestIdx]!.centroid : null;
-    const sensors = input.sensors.length ? input.sensors : [input.labellum];
     const chemo = sampleChemo(
       sensors,
       nearest,
@@ -700,6 +810,7 @@ export class TwarogSystem {
       input.foodXZ,
       input.pumping,
       input.profile ?? TWAROG_MAMUTA_WANILIOWY,
+      radius,
     );
 
     return {

@@ -100014,7 +100014,7 @@
   ],
   "graph_bin": {
     "path": "graph.bin",
-    "layout": "CSR little-endian: int32 indptr (n+1), int32 indices (n_edges), float32 signed weights (n_edges)",
+    "layout": "MMG1 little-endian: uint32 n, uint32 nEdges, int32 indptr (n+1), unsigned LEB128 delta-encoded indices (rows sorted by target), IEEE float16 signed weights (n_edges)",
     "indptr_count": 20001,
     "indices_count": 4053445,
     "weights_count": 4053445,

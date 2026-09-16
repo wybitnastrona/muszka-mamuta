@@ -39,7 +39,8 @@ onmessage = (event: MessageEvent<WorkerIn>) => {
       case 'init': {
         running = false;
         if (timer !== null) { clearTimeout(timer); timer = null; }
-        const circuit = parseCircuit(msg.meta, msg.graph);
+        const meta = JSON.parse(new TextDecoder().decode(msg.metaBytes)) as unknown;
+        const circuit = parseCircuit(meta, msg.graph);
         net = new LifNetwork(circuit, msg.seed);
         send({ type: 'ready', nNeurons: net.n, seed: net.seed });
         break;

@@ -10,3 +10,5 @@ data/derived/
 .venv/
 __pycache__/
 *.pyc
+docs/review/*.webm
+docs/review/*.mp4

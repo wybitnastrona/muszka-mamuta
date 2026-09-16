@@ -23,6 +23,7 @@ export type KitchenLayout = {
  * Fly approaches from −Z (mesh +Z is anterior). Bite corner is the
  * anterior-left of the block ( +X, −Z ) — the corner toward the pouch.
  * Pouch sits to +X, slightly +Z of the curd, yawed 15°, open at local −X.
+ * Empty film rests on the table (local Y ≈ 0); XZ offset and yaw are unchanged.
  */
 export function kitchenLayout(): KitchenLayout {
   const curd = { x: 0, y: mm(CURD_MM.height) / 2, z: 0 };
@@ -41,7 +42,7 @@ export function kitchenLayout(): KitchenLayout {
   const openWorldZ = 8;
   const pouch = {
     x: openWorldX - openLocalX * Math.cos(yaw),
-    y: mm(POUCH_MM.height) / 2 + 1.2,
+    y: 1.2,
     z: openWorldZ - openLocalX * Math.sin(yaw),
     yaw,
   };

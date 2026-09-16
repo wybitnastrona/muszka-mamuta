@@ -1,14 +1,13 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Xoshiro128ss } from '../brain/rng.ts';
 import { SimplexNoise } from './simplex.ts';
-import { labelPlaneSize } from './layout.ts';
 import type { KitchenTextures, UvRect } from './textures.ts';
 import {
-  LABEL_LIFT_MM,
-  POUCH_BEVEL_MM,
+  POUCH_BASE_HEIGHT_MM,
+  POUCH_DEPTH_SEGMENTS,
   POUCH_FILM_THICKNESS,
-  POUCH_FLANGE_THICK_MM,
   POUCH_MM,
+  POUCH_WIDTH_SEGMENTS,
   POUCH_WRINKLE_MM,
   SEAL_MM,
   mm,
@@ -20,131 +19,211 @@ export type PackagingBuild = {
   labelBack: THREE.Mesh;
 };
 
-export function filmMaterial(envMap?: THREE.Texture | null): THREE.MeshPhysicalMaterial {
+const WRINKLE_FREQ = 0.2;
+const DEPRESSION_MM = 1.65;
+const TABLE_EPS = 0.12;
+const FOLD_ANGLE = -2.55;
+const ROUGH_MAP_SIZE = 256;
+
+function smoothstep(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / Math.max(1e-8, e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+function distToSegment(
+  px: number,
+  pz: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): number {
+  const vx = bx - ax;
+  const vz = bz - az;
+  const len2 = vx * vx + vz * vz;
+  if (len2 < 1e-10) return Math.hypot(px - ax, pz - az);
+  const t = Math.min(1, Math.max(0, ((px - ax) * vx + (pz - az) * vz) / len2));
+  return Math.hypot(px - (ax + t * vx), pz - (az + t * vz));
+}
+
+export function filmMaterial(
+  envMap?: THREE.Texture | null,
+  roughnessMap?: THREE.Texture | null,
+  side: THREE.Side = THREE.FrontSide,
+): THREE.MeshPhysicalMaterial {
   return new THREE.MeshPhysicalMaterial({
-    color: 0xa8b6be,
-    roughness: 0.15,
+    color: 0xc5d0d4,
+    roughness: 0.25,
     metalness: 0,
-    transmission: 0.85,
+    roughnessMap: roughnessMap ?? null,
+    transmission: 0.9,
     thickness: POUCH_FILM_THICKNESS,
     ior: 1.5,
-    envMapIntensity: 0.6,
+    envMapIntensity: 1.15,
     envMap: envMap ?? null,
+    attenuationColor: new THREE.Color(0xd8e0e4),
+    attenuationDistance: 4,
     opacity: 1,
     transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
+    side,
+    depthWrite: true,
   });
 }
 
-/** Drop triangles whose averaged vertex normal points along `dir` (open the pouch). */
-export function dropFacesByNormal(
-  geo: THREE.BufferGeometry,
-  dir: THREE.Vector3,
-  minDot = 0.72,
-): void {
-  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
-  const nrm = geo.getAttribute('normal') as THREE.BufferAttribute;
-  const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
-  const idx = geo.getIndex();
-  const keepPos: number[] = [];
-  const keepNrm: number[] = [];
-  const keepUv: number[] = [];
-  const triCount = idx ? idx.count / 3 : pos.count / 3;
-  dir.normalize();
-  for (let t = 0; t < triCount; t++) {
-    const a = idx ? idx.getX(t * 3) : t * 3;
-    const b = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
-    const c = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
-    const dx = (nrm.getX(a) + nrm.getX(b) + nrm.getX(c)) / 3;
-    const dy = (nrm.getY(a) + nrm.getY(b) + nrm.getY(c)) / 3;
-    const dz = (nrm.getZ(a) + nrm.getZ(b) + nrm.getZ(c)) / 3;
-    const len = Math.hypot(dx, dy, dz) || 1;
-    if ((dx * dir.x + dy * dir.y + dz * dir.z) / len > minDot) continue;
-    for (const i of [a, b, c]) {
-      keepPos.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-      keepNrm.push(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
-      if (uv) keepUv.push(uv.getX(i), uv.getY(i));
+export function wrinkleRoughnessMap(seed: number, anisotropy: number): THREE.DataTexture {
+  const size = ROUGH_MAP_SIZE;
+  const data = new Uint8Array(size * size * 4);
+  const noise = new SimplexNoise(seed + 91);
+  const length = mm(POUCH_MM.length);
+  const width = mm(POUCH_MM.width);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const u = i / (size - 1);
+      const v = j / (size - 1);
+      const x = (u - 0.5) * length;
+      const z = (0.5 - v) * width;
+      const n =
+        noise.noise2(x * WRINKLE_FREQ, z * WRINKLE_FREQ) * 0.65 +
+        noise.noise2(x * WRINKLE_FREQ * 2.4, z * WRINKLE_FREQ * 2.4) * 0.35;
+      const r = Math.min(255, Math.max(0, Math.round(150 + n * 95)));
+      const o = (j * size + i) * 4;
+      data[o] = r;
+      data[o + 1] = r;
+      data[o + 2] = r;
+      data[o + 3] = 255;
     }
   }
-  geo.setIndex(null);
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(keepPos, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(keepNrm, 3));
-  if (uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(keepUv, 2));
-  geo.clearGroups();
+  const tex = new THREE.DataTexture(data, size, size);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = anisotropy;
+  tex.flipY = false;
+  tex.needsUpdate = true;
+  return tex;
 }
 
-export function wrinkleY(geometry: THREE.BufferGeometry, seed: number): void {
-  const noise = new SimplexNoise(seed);
+function flangeMask(x: number, z: number, hx: number, hz: number): number {
+  const seal = mm(SEAL_MM);
+  const edgeX = smoothstep(hx - seal, hx - 1.5, Math.abs(x));
+  const edgeZ = smoothstep(hz - seal, hz - 1.5, Math.abs(z));
+  return Math.max(edgeX, edgeZ);
+}
+
+function cornerLift(x: number, z: number, cx: number, cz: number, radius: number, amp: number): number {
+  const d = Math.hypot(x - cx, z - cz);
+  const w = 1 - smoothstep(0, radius, d);
+  return amp * w * w;
+}
+
+type Crease = { ax: number; az: number; bx: number; bz: number; amp: number; sigma: number };
+
+function makeCreases(seed: number, hx: number, hz: number): Crease[] {
+  const rng = new Xoshiro128ss(seed + 17);
+  const creases: Crease[] = [
+    { ax: -hx * 0.42, az: -hz * 0.22, bx: hx * 0.48, bz: hz * 0.28, amp: 3.1, sigma: 1.7 },
+    { ax: -hx * 0.18, az: hz * 0.5, bx: hx * 0.55, bz: -hz * 0.32, amp: -2.5, sigma: 1.55 },
+  ];
+  const extra = 2 + Math.floor(rng.nextFloat() * 2);
+  for (let i = 0; i < extra; i++) {
+    const ax = (rng.nextFloat() * 2 - 1) * hx * 0.78;
+    const az = (rng.nextFloat() * 2 - 1) * hz * 0.78;
+    const ang = rng.nextFloat() * Math.PI;
+    const len = 42 + rng.nextFloat() * 55;
+    let bx = ax + Math.cos(ang) * len;
+    let bz = az + Math.sin(ang) * len;
+    bx = Math.min(hx * 0.92, Math.max(-hx * 0.92, bx));
+    bz = Math.min(hz * 0.92, Math.max(-hz * 0.92, bz));
+    creases.push({
+      ax,
+      az,
+      bx,
+      bz,
+      amp: (rng.nextFloat() < 0.5 ? -1 : 1) * (2.1 + rng.nextFloat() * 1.8),
+      sigma: 1.55 + rng.nextFloat() * 1.2,
+    });
+  }
+  return creases;
+}
+
+/**
+ * Collapse a 130×110 mm plane into an empty vacuum pouch on the table.
+ * Local +X is length, +Z width, +Y up.
+ */
+export function deformEmptyPouch(geometry: THREE.BufferGeometry, seed: number): void {
   const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const amp = mm(POUCH_WRINKLE_MM);
+  const noise = new SimplexNoise(seed);
+  const hx = mm(POUCH_MM.length) / 2;
+  const hz = mm(POUCH_MM.width) / 2;
+  const base = mm(POUCH_BASE_HEIGHT_MM);
+  const wrinkleAmp = mm(POUCH_WRINKLE_MM);
+  const innerX = hx - mm(SEAL_MM);
+  const innerZ = hz - mm(SEAL_MM);
+  const creases = makeCreases(seed, hx, hz);
+  const foldX = -hx + 26;
+  const flapZ1 = -hz + 46;
+
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    pos.setY(i, y + noise.noise2(x * 0.065, z * 0.065) * amp);
+    const x0 = pos.getX(i);
+    const z0 = pos.getZ(i);
+    const flange = flangeMask(x0, z0, hx, hz);
+    const inner = 1 - flange;
+
+    const nx = innerX > 1e-6 ? Math.abs(x0) / innerX : 1;
+    const nz = innerZ > 1e-6 ? Math.abs(z0) / innerZ : 1;
+    const bowl = 1 - smoothstep(0.72, 1.18, Math.max(nx, nz));
+    let y = base - mm(DEPRESSION_MM) * bowl * bowl * inner;
+
+    let crease = 0;
+    for (const c of creases) {
+      const d = distToSegment(x0, z0, c.ax, c.az, c.bx, c.bz);
+      crease += c.amp * Math.exp(-((d / c.sigma) ** 2));
+    }
+    y += crease * (0.22 + 0.78 * inner);
+
+    const n1 = noise.noise2(x0 * WRINKLE_FREQ, z0 * WRINKLE_FREQ);
+    const n2 = noise.noise2(x0 * WRINKLE_FREQ * 2.4 + 8, z0 * WRINKLE_FREQ * 2.4);
+    y += wrinkleAmp * (n1 * 0.7 + n2 * 0.3) * (0.18 + 0.82 * inner);
+
+    y += cornerLift(x0, z0, hx, hz, 28, 3.4) * Math.max(flange, 0.35);
+    y += cornerLift(x0, z0, hx, -hz, 26, 2.6) * Math.max(flange, 0.35);
+
+    const dx = x0 - foldX;
+    const along = 1 - smoothstep(flapZ1 - 8, flapZ1 + 4, z0);
+    const t = smoothstep(foldX + 7, foldX - 3, x0) * along;
+    let x = x0;
+    let z = z0;
+    if (t > 1e-4) {
+      const ang = FOLD_ANGLE * t;
+      const c = Math.cos(ang);
+      const s = Math.sin(ang);
+      const yRel = y - base;
+      x = foldX + dx * c - yRel * s;
+      y = base + dx * s + yRel * c;
+      z = z0 + t * 3.5;
+    }
+
+    if (y < TABLE_EPS) y = TABLE_EPS;
+    pos.setXYZ(i, x, y, z);
   }
   pos.needsUpdate = true;
   geometry.computeVertexNormals();
 }
 
-function roundedRectShape(width: number, depth: number, radius: number): THREE.Shape {
-  const hw = width / 2;
-  const hd = depth / 2;
-  const r = Math.min(radius, hw * 0.45, hd * 0.45);
-  const s = new THREE.Shape();
-  s.moveTo(-hw + r, -hd);
-  s.lineTo(hw - r, -hd);
-  s.quadraticCurveTo(hw, -hd, hw, -hd + r);
-  s.lineTo(hw, hd - r);
-  s.quadraticCurveTo(hw, hd, hw - r, hd);
-  s.lineTo(-hw + r, hd);
-  s.quadraticCurveTo(-hw, hd, -hw, hd - r);
-  s.lineTo(-hw, -hd + r);
-  s.quadraticCurveTo(-hw, -hd, -hw + r, -hd);
-  return s;
-}
-
-function filmCap(y: number, seed?: number): THREE.BufferGeometry {
-  const geo = new THREE.ShapeGeometry(
-    roundedRectShape(mm(POUCH_MM.length), mm(POUCH_MM.width), mm(POUCH_BEVEL_MM)),
-    24,
+/** Empty PET film: 40×32 subdivided plane, 130×110 mm, collapsed onto the table. */
+export function pouchFilmGeometry(seed = 11): THREE.BufferGeometry {
+  const geo = new THREE.PlaneGeometry(
+    mm(POUCH_MM.length),
+    mm(POUCH_MM.width),
+    POUCH_WIDTH_SEGMENTS,
+    POUCH_DEPTH_SEGMENTS,
   );
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, y, 0);
-  if (seed !== undefined) wrinkleY(geo, seed);
-  else geo.computeVertexNormals();
+  deformEmptyPouch(geo, seed);
   return geo;
-}
-
-function filmWall(w: number, h: number, d: number, x: number, z: number): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  geo.translate(x, 0, z);
-  return geo;
-}
-
-/**
- * Thin open pouch: rounded top + bottom film, three side walls, −X open.
- * 130×110×32 mm, 4 mm corner radius, 1.5 mm top wrinkle.
- */
-export function pouchFilmGeometry(seed = 11): THREE.BufferGeometry {
-  const hy = mm(POUCH_MM.height) / 2;
-  const hx = mm(POUCH_MM.length) / 2;
-  const hz = mm(POUCH_MM.width) / 2;
-  const wall = 0.7;
-  const sideH = mm(POUCH_MM.height) - 1;
-  const top = filmCap(hy, seed);
-  const bottom = filmCap(-hy);
-  const far = filmWall(wall, sideH, mm(POUCH_MM.width) - mm(POUCH_BEVEL_MM) * 2, hx - wall / 2, 0);
-  const left = filmWall(mm(POUCH_MM.length) - mm(POUCH_BEVEL_MM), sideH, wall, 0, hz - wall / 2);
-  const right = filmWall(mm(POUCH_MM.length) - mm(POUCH_BEVEL_MM), sideH, wall, 0, -(hz - wall / 2));
-  const parts = [top, bottom, far, left, right].map((g) => {
-    g.computeVertexNormals();
-    return g.index ? g.toNonIndexed() : g;
-  });
-  const merged = mergeGeometries(parts);
-  if (!merged) throw new Error('pouch film merge failed');
-  return merged;
 }
 
 function prepareLabelMap(map: THREE.Texture, anisotropy: number): void {
@@ -158,75 +237,90 @@ function prepareLabelMap(map: THREE.Texture, anisotropy: number): void {
 }
 
 /**
- * Planar UVs: photograph U follows pouch +X, V follows pouch +Z (after the
- * plane is laid flat). Transparent letterbox is cropped via `rect`.
- * Image top maps to world +Z so text is upright in Widok kuchni.
+ * Map plane UVs into the photograph's opaque rect.
+ *
+ * Default (no `contain`): plane U → photo U, plane V → photo V, so a unit
+ * test plane fills the opaque rect.
+ *
+ * `contain`: the standing-pack photo is rotated 90° onto the lying 130×110 mm
+ * film (photo height along pouch +X, photo width along pouch ±Z) and fitted
+ * without stretch. File top sits at local +X (sealed end). Outside the print,
+ * UVs sample the transparent corner (0, 0).
  */
 export function setPackLabelUVs(
   geometry: THREE.BufferGeometry,
   rect: UvRect,
-  opts: { flipY?: boolean; mirrorU?: boolean } = {},
+  opts: { flipY?: boolean; mirrorU?: boolean; contain?: boolean } = {},
 ): void {
   const flipY = opts.flipY ?? true;
   const mirrorU = opts.mirrorU ?? false;
-  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
   const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
+  let u0p = 0;
+  let u1p = 1;
+  let v0p = 0;
+  let v1p = 1;
+  const rotateToLength = !!opts.contain;
+  if (opts.contain) {
+    const faceL = mm(POUCH_MM.length);
+    const faceW = mm(POUCH_MM.width);
+    const margin = 0.93;
+    let spanX = faceL * margin;
+    let spanZ = spanX * rect.aspect;
+    if (spanZ > faceW * margin) {
+      spanZ = faceW * margin;
+      spanX = spanZ / Math.max(1e-8, rect.aspect);
+    }
+    u0p = 0.5 - spanX / faceL / 2;
+    u1p = 0.5 + spanX / faceL / 2;
+    v0p = 0.5 - spanZ / faceW / 2;
+    v1p = 0.5 + spanZ / faceW / 2;
   }
-  const len = Math.max(1e-8, maxX - minX);
-  const wid = Math.max(1e-8, maxY - minY);
-  for (let i = 0; i < pos.count; i++) {
-    const sx = (pos.getX(i) - minX) / len;
-    const sy = (pos.getY(i) - minY) / wid;
-    const uSrc = mirrorU ? 1 - sx : sx;
-    const u = rect.u0 + (rect.u1 - rect.u0) * uSrc;
+  for (let i = 0; i < uv.count; i++) {
+    const pu = (uv.getX(i) - u0p) / Math.max(1e-8, u1p - u0p);
+    const pv = (uv.getY(i) - v0p) / Math.max(1e-8, v1p - v0p);
+    let su: number;
+    let sv: number;
+    if (rotateToLength) {
+      su = pv;
+      sv = 1 - pu;
+    } else {
+      su = pu;
+      sv = pv;
+    }
+    if (mirrorU) su = 1 - su;
+    if (su < -0.002 || su > 1.002 || sv < -0.002 || sv > 1.002) {
+      uv.setXY(i, 0, 0);
+      continue;
+    }
+    su = Math.min(1, Math.max(0, su));
+    sv = Math.min(1, Math.max(0, sv));
+    const u = rect.u0 + (rect.u1 - rect.u0) * su;
     const v = flipY
-      ? (1 - rect.v0) + (rect.v0 - rect.v1) * sy
-      : rect.v0 + (rect.v1 - rect.v0) * sy;
+      ? (1 - rect.v0) + (rect.v0 - rect.v1) * sv
+      : rect.v0 + (rect.v1 - rect.v0) * sv;
     uv.setXY(i, u, v);
   }
   uv.needsUpdate = true;
 }
 
-function labelPlane(
-  map: THREE.Texture,
-  rect: UvRect,
-  width: number,
-  height: number,
-  y: number,
-  faceDown: boolean,
-): THREE.Mesh {
-  const material = new THREE.MeshBasicMaterial({
+function labelMaterial(map: THREE.Texture, side: THREE.Side): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
     map,
     transparent: true,
     depthWrite: true,
-    side: THREE.FrontSide,
+    alphaTest: 0.08,
+    side,
+    roughness: 0.48,
+    metalness: 0,
     polygonOffset: true,
-    polygonOffsetFactor: -4,
-    polygonOffsetUnits: -4,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
-  const geometry = new THREE.PlaneGeometry(width, height);
-  setPackLabelUVs(geometry, rect, { flipY: map.flipY, mirrorU: false });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.rotation.x = faceDown ? Math.PI / 2 : -Math.PI / 2;
-  if (faceDown) mesh.rotation.z = Math.PI;
-  mesh.position.y = y;
-  mesh.renderOrder = 3;
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  return mesh;
 }
 
 /**
- * Flat vacuum pouch on the table. Local +X is length, +Z width, +Y height.
- * Open at local −X (no film wall, no seal flange on that end).
+ * Limp empty vacuum pouch on the table. Local +X is length, +Z width, +Y up.
+ * Open / torn at local −X. Labels share the deformed film surface.
  */
 export function createPackaging(
   textures: KitchenTextures,
@@ -234,55 +328,48 @@ export function createPackaging(
 ): PackagingBuild {
   const group = new THREE.Group();
   group.name = 'packaging';
-  const film = filmMaterial(opts.envMap);
-  const hy = mm(POUCH_MM.height) / 2;
-  const hx = mm(POUCH_MM.length) / 2;
-  const hz = mm(POUCH_MM.width) / 2;
-  const body = new THREE.Mesh(pouchFilmGeometry(opts.seed ?? 11), film);
-  body.name = 'pouchFilm';
-  body.castShadow = true;
-  body.receiveShadow = false;
-  group.add(body);
+  const seed = opts.seed ?? 11;
+  const anisotropy = opts.anisotropy;
+  const filmGeo = pouchFilmGeometry(seed);
+  const roughnessMap = wrinkleRoughnessMap(seed, anisotropy);
+  const filmFront = new THREE.Mesh(filmGeo, filmMaterial(opts.envMap, roughnessMap, THREE.FrontSide));
+  filmFront.name = 'pouchFilm';
+  filmFront.castShadow = true;
+  filmFront.receiveShadow = true;
+  filmFront.renderOrder = 2;
+  const filmBack = new THREE.Mesh(filmGeo, filmMaterial(opts.envMap, roughnessMap, THREE.BackSide));
+  filmBack.name = 'pouchFilmBack';
+  filmBack.castShadow = false;
+  filmBack.receiveShadow = true;
+  filmBack.renderOrder = 2;
+  group.add(filmFront, filmBack);
 
-  const seal = mm(SEAL_MM);
-  const thick = mm(POUCH_FLANGE_THICK_MM);
-  const flangeY = -hy + thick / 2;
-  const addFlange = (w: number, d: number, x: number, z: number, name: string) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, thick, d), film);
-    mesh.position.set(x, flangeY, z);
-    mesh.name = name;
-    mesh.castShadow = true;
-    mesh.receiveShadow = false;
-    group.add(mesh);
-  };
-  addFlange(seal, mm(POUCH_MM.width), hx + seal / 2, 0, 'flangeFar');
-  addFlange(mm(POUCH_MM.length) + seal, seal, seal / 2, hz + seal / 2, 'flangeLeft');
-  addFlange(mm(POUCH_MM.length) + seal, seal, seal / 2, -(hz + seal / 2), 'flangeRight');
+  prepareLabelMap(textures.packFront, anisotropy);
+  prepareLabelMap(textures.packBack, anisotropy);
 
-  prepareLabelMap(textures.packFront, opts.anisotropy);
-  prepareLabelMap(textures.packBack, opts.anisotropy);
-  const frontSize = labelPlaneSize(textures.packFrontUv.aspect);
-  const backSize = labelPlaneSize(textures.packBackUv.aspect);
-  const labelY = hy + mm(POUCH_WRINKLE_MM) + mm(LABEL_LIFT_MM);
-  const labelFront = labelPlane(
-    textures.packFront,
-    textures.packFrontUv,
-    frontSize.length,
-    frontSize.width,
-    labelY,
-    false,
-  );
+  const frontGeo = filmGeo.clone();
+  setPackLabelUVs(frontGeo, textures.packFrontUv, {
+    flipY: textures.packFront.flipY,
+    contain: true,
+  });
+  const labelFront = new THREE.Mesh(frontGeo, labelMaterial(textures.packFront, THREE.FrontSide));
   labelFront.name = 'packLabelFront';
-  const labelBack = labelPlane(
-    textures.packBack,
-    textures.packBackUv,
-    backSize.length,
-    backSize.width,
-    -hy - mm(LABEL_LIFT_MM),
-    true,
-  );
-  labelBack.name = 'packLabelBack';
-  group.add(labelFront, labelBack);
+  labelFront.castShadow = false;
+  labelFront.receiveShadow = false;
+  labelFront.renderOrder = 3;
 
+  const backGeo = filmGeo.clone();
+  setPackLabelUVs(backGeo, textures.packBackUv, {
+    flipY: textures.packBack.flipY,
+    mirrorU: true,
+    contain: true,
+  });
+  const labelBack = new THREE.Mesh(backGeo, labelMaterial(textures.packBack, THREE.BackSide));
+  labelBack.name = 'packLabelBack';
+  labelBack.castShadow = false;
+  labelBack.receiveShadow = false;
+  labelBack.renderOrder = 3;
+
+  group.add(labelFront, labelBack);
   return { group, labelFront, labelBack };
 }

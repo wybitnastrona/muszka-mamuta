@@ -13,7 +13,7 @@ export const TURN_RATE_RAD_S = 2.4;
 /** @deprecated Arrival used to compare against the food centroid. Prefer `APPROACH_ARRIVE_MM`. */
 export const NEAR_FOOD = flyVisualLengthMm() * 0.4;
 /** Close enough to the surface-standoff point to leave APPROACH. */
-export const APPROACH_ARRIVE_MM = 4;
+export const APPROACH_ARRIVE_MM = 1;
 export const STEP_LENGTH = flyVisualLengthMm() * 0.35;
 export const TASTE_MIN_S = 0.25;
 export const TASTE_TIMEOUT_S = 1.6;
@@ -49,11 +49,11 @@ export class FeedingStateMachine {
   state: FeedingState = 'SEARCH';
   heading: number;
   time = 0;
+  pumpCycles = 0;
+  pumpTarget = 6;
+  mn9HoldMs = 0;
   private stateAge = 0;
-  private mn9HoldMs = 0;
-  private pumpCycles = 0;
   private pumpCycleT = 0;
-  private pumpTarget = 2;
   private approachNeeded = 3;
   private biteThisCycle = false;
 
@@ -69,7 +69,7 @@ export class FeedingStateMachine {
     this.mn9HoldMs = 0;
     this.pumpCycles = 0;
     this.pumpCycleT = 0;
-    this.pumpTarget = 2;
+    this.pumpTarget = 6;
     this.approachNeeded = 3;
     this.biteThisCycle = false;
   }
@@ -105,7 +105,8 @@ export class FeedingStateMachine {
       case 'APPROACH': {
         const yaw = input.approachYaw ?? input.odorYaw;
         this.heading = turnToward(this.heading, yaw, dt, TURN_RATE_RAD_S * 0.45);
-        if (input.distanceToFood <= APPROACH_ARRIVE_MM) enter('TASTE');
+        const aligned = Math.abs(headingError(this.heading, yaw)) < HEADING_ALIGN_DEG * Math.PI / 180;
+        if (input.distanceToFood <= APPROACH_ARRIVE_MM && aligned) enter('TASTE');
         break;
       }
       case 'TASTE':
@@ -140,7 +141,7 @@ export class FeedingStateMachine {
     }
 
     const clip = clipForState(this.state, input.satiety);
-    const walk = this.state === 'APPROACH' ? 1 : 0;
+    const walk = this.state === 'APPROACH' && input.distanceToFood > APPROACH_ARRIVE_MM ? 1 : 0;
     return {
       state: this.state,
       clip,

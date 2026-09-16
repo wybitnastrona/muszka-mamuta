@@ -5,6 +5,13 @@ import { ANCHORS, type FlybodyMeta } from './hierarchy.ts';
 import { computeSkinWeights, mixBoneColor } from './skinWeights.ts';
 import { BONE_PALETTE, BONE_COLORS } from './palette.ts';
 import type { Pose } from './types.ts';
+import { attachSplitWings, splitMembraneWings, type WingRig } from './wings.ts';
+import {
+  ensurePlanarUv,
+  ensureSphericalUv,
+  setAbdomenAttributes,
+  thinEveryOtherTriangle,
+} from './flyMaterials.ts';
 
 export { ANCHORS, describeFlybodyHierarchy, type FlybodyMeta, type HierarchyReport } from './hierarchy.ts';
 
@@ -16,6 +23,8 @@ export type BuiltRig = {
   boneList: THREE.Bone[];
   skinned: THREE.SkinnedMesh[];
   contact: THREE.Object3D;
+  wings: WingRig | null;
+  tarsusRest: { L: THREE.Vector3; R: THREE.Vector3 };
 };
 
 export function boneIndex(name: BoneName): number {
@@ -101,9 +110,10 @@ export function buildFlybodyRig(
   root.name = 'flybody';
   root.add(armature);
 
-  const skinned: THREE.SkinnedMesh[] = [];
-  const debug = !!opts.debugWeights;
-  const byName = new Map(ANCHORS.bones.map((b) => [b.name, b]));
+    const skinned: THREE.SkinnedMesh[] = [];
+    const debug = !!opts.debugWeights;
+    const byName = new Map(ANCHORS.bones.map((b) => [b.name, b]));
+    let wings: WingRig | null = null;
 
   for (const part of meta.parts) {
     const geometry = new THREE.BufferGeometry();
@@ -121,9 +131,32 @@ export function buildFlybodyRig(
       ),
     );
     geometry.computeVertexNormals();
+    if (part.material === 'red') ensureSphericalUv(geometry);
+    else if (part.material !== 'membrane') ensurePlanarUv(geometry);
+    if (part.material === 'bristle-brown') thinEveryOtherTriangle(geometry);
 
     const pivot = meta.pivots[part.group] ?? [0, 0, 0];
     const baseMat = materials[part.material] ?? materials.body;
+
+    if (part.group === 'body' && part.material === 'membrane') {
+      const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+      const idx = geometry.getIndex();
+      const indices = idx
+        ? new Uint32Array(idx.array as ArrayLike<number>)
+        : new Uint32Array();
+      try {
+        const split = splitMembraneWings(new Float32Array(pos.array as ArrayLike<number>), indices);
+        const mat = debug
+          ? new THREE.MeshLambertMaterial({ color: 0x88ccee, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
+          : (baseMat as THREE.Material).clone();
+        wings = attachSplitWings(root, split, mat);
+      } catch {
+        wings = null;
+      }
+      geometry.dispose();
+      continue;
+    }
+
     const material = debug
       ? new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })
       : (baseMat as THREE.Material).clone();
@@ -132,6 +165,7 @@ export function buildFlybodyRig(
     if (legBone) {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `${part.group}:${part.material}`;
+      if (!debug) mesh.castShadow = true;
       const parent = bones.get(legBone.name);
       if (parent) parent.add(mesh);
       else {
@@ -164,10 +198,14 @@ export function buildFlybodyRig(
     });
     geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
     geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
+    if (part.material === 'body') {
+      setAbdomenAttributes(geometry, skinIndex, skinWeight, worldPos, boneIndex('abdomen'));
+    }
     if (debug) colorGeometry(geometry, skinIndex, skinWeight);
     const mesh = new THREE.SkinnedMesh(geometry, material);
     mesh.name = `${part.group}:${part.material}`;
     mesh.frustumCulled = false;
+    if (!debug && part.material !== 'bristle-brown') mesh.castShadow = true;
     mesh.bind(skeleton);
     root.add(mesh);
     skinned.push(mesh);
@@ -181,5 +219,10 @@ export function buildFlybodyRig(
   const r = byName.get('labellum_R')!.position;
   contact.position.set((l[0] + r[0]) / 2 - h[0], (l[1] + r[1]) / 2 - h[1], (l[2] + r[2]) / 2 - h[2]);
 
-  return { root, armature, skeleton, bones, boneList, skinned, contact };
+  const tarsusRest = {
+    L: bones.get('foreleg_L_tarsus')!.position.clone(),
+    R: bones.get('foreleg_R_tarsus')!.position.clone(),
+  };
+
+  return { root, armature, skeleton, bones, boneList, skinned, contact, wings, tarsusRest };
 }

@@ -179,12 +179,25 @@ def build_csr(
     return indptr.astype(np.int32), tgt, w
 
 
+GRAPH_MAGIC = b"MMG1"
+GRAPH_BIN_LAYOUT_UNCOMPRESSED = (
+    "CSR little-endian: int32 indptr (n+1), int32 indices (n_edges), "
+    "float32 signed weights (n_edges)"
+)
+GRAPH_BIN_LAYOUT_COMPRESSED = (
+    "MMG1 little-endian: uint32 n, uint32 nEdges, int32 indptr (n+1), "
+    "unsigned LEB128 delta-encoded indices (rows sorted by target), "
+    "IEEE float16 signed weights (n_edges)"
+)
+
+
 def write_csr(
     path: Path,
     indptr: np.ndarray,
     indices: np.ndarray,
     weights: np.ndarray,
 ) -> None:
+    """Uncompressed CSR writer — kept for audit dumps."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
         np.asarray(indptr, dtype="<i4").tofile(handle)
@@ -192,9 +205,111 @@ def write_csr(
         np.asarray(weights, dtype="<f4").tofile(handle)
 
 
+def _uleb128(n: int) -> bytes:
+    if n < 0:
+        raise ValueError("uleb128 is unsigned")
+    out = bytearray()
+    x = int(n)
+    while x >= 0x80:
+        out.append((x & 0x7F) | 0x80)
+        x >>= 7
+    out.append(x)
+    return bytes(out)
+
+
+def write_csr_compressed(
+    path: Path,
+    indptr: np.ndarray,
+    indices: np.ndarray,
+    weights: np.ndarray,
+) -> None:
+    """Ship format: float16 weights + per-row sorted index deltas as uleb128."""
+    indptr = np.asarray(indptr, dtype=np.int32)
+    indices = np.asarray(indices, dtype=np.int32)
+    weights = np.asarray(weights, dtype=np.float32)
+    n = int(indptr.size - 1)
+    n_edges = int(indices.size)
+    if int(indptr[0]) != 0 or int(indptr[-1]) != n_edges:
+        raise ValueError("CSR indptr does not match n_edges")
+    packed = bytearray()
+    sorted_w = np.empty(n_edges, dtype=np.float32)
+    for i in range(n):
+        a = int(indptr[i])
+        b = int(indptr[i + 1])
+        order = np.argsort(indices[a:b], kind="stable")
+        row_i = indices[a:b][order]
+        row_w = weights[a:b][order]
+        sorted_w[a:b] = row_w
+        prev = 0
+        for idx in row_i.tolist():
+            delta = int(idx) - prev
+            if delta < 0:
+                raise ValueError("row indices must be non-decreasing after sort")
+            packed.extend(_uleb128(delta))
+            prev = int(idx)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as handle:
+        handle.write(GRAPH_MAGIC)
+        np.asarray([n, n_edges], dtype="<u4").tofile(handle)
+        np.asarray(indptr, dtype="<i4").tofile(handle)
+        handle.write(packed)
+        np.asarray(sorted_w, dtype="<f2").tofile(handle)
+
+
+def _read_uleb128(buf: memoryview, offset: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    i = offset
+    n = len(buf)
+    while i < n:
+        b = buf[i]
+        i += 1
+        result |= (b & 0x7F) << shift
+        if (b & 0x80) == 0:
+            return result, i
+        shift += 7
+        if shift > 35:
+            raise ValueError("uleb128 overflow")
+    raise ValueError("uleb128 truncated")
+
+
+def read_csr_compressed(
+    path: Path, n_nodes: int, n_edges: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    raw = path.read_bytes()
+    if raw[:4] != GRAPH_MAGIC:
+        raise ValueError("not an MMG1 compressed CSR")
+    n_hdr = int(np.frombuffer(raw, dtype="<u4", count=1, offset=4)[0])
+    e_hdr = int(np.frombuffer(raw, dtype="<u4", count=1, offset=8)[0])
+    if n_hdr != n_nodes or e_hdr != n_edges:
+        raise ValueError(f"MMG1 header n={n_hdr} e={e_hdr} != {n_nodes}/{n_edges}")
+    indptr_off = 12
+    indptr = np.frombuffer(raw, dtype="<i4", count=n_nodes + 1, offset=indptr_off).copy()
+    packed_off = indptr_off + (n_nodes + 1) * 4
+    packed = memoryview(raw)[packed_off:]
+    indices = np.empty(n_edges, dtype=np.int32)
+    cursor = 0
+    for i in range(n_nodes):
+        a = int(indptr[i])
+        b = int(indptr[i + 1])
+        prev = 0
+        for e in range(a, b):
+            delta, cursor = _read_uleb128(packed, cursor)
+            prev += delta
+            indices[e] = prev
+    remain = len(packed) - cursor
+    if remain != n_edges * 2:
+        raise ValueError(f"MMG1 weight blob {remain} bytes, expected {n_edges * 2}")
+    weights = np.frombuffer(raw, dtype="<f2", offset=packed_off + cursor, count=n_edges).astype(
+        np.float32, copy=True
+    )
+    return indptr, indices, weights
+
+
 def read_csr(
     path: Path, n_nodes: int, n_edges: int
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Uncompressed CSR reader (audit). Compressed files use read_csr_compressed."""
     with path.open("rb") as handle:
         indptr = np.fromfile(handle, dtype="<i4", count=n_nodes + 1)
         indices = np.fromfile(handle, dtype="<i4", count=n_edges)

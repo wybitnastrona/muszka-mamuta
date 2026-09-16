@@ -22,14 +22,18 @@ import {
   type Vec3,
 } from '../../src/food/twarogSystem.ts';
 import {
+  CURD_MM,
   CURD_TOTAL_MASS_G,
   LOD_BODY_LENGTHS,
   LOD_FADE_MS,
   contactRadiusMm as scaleContactRadiusMm,
   flyVisualLengthMm,
+  labellumRestReachMm,
   lodDistanceMm,
   lodFadeSec,
+  mm,
 } from '../../src/scene/scale.ts';
+import { kitchenLayout } from '../../src/scene/layout.ts';
 
 class MemoryStore implements KvStore {
   private readonly data = new Map<string, string>();
@@ -213,5 +217,101 @@ describe('twarog system', () => {
     expect(sys.biteFront.x).toBeGreaterThan(sys.hx * 0.6);
     const nearPosX = sys.chunks.slice().sort((a, b) => a.biteDistance - b.biteDistance)[0]!;
     expect(nearPosX.centroid.x).toBeGreaterThan(0);
+  });
+
+  it('supportHeightAt is the tallest uneaten chunk, else table, and drops when that chunk is eaten', () => {
+    const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
+    const origin = { x: 0, y: mm(CURD_MM.height) / 2, z: 0 };
+    const top = sys.chunks.reduce((a, c) => (c.topY > a.topY ? c : a));
+    const wx = origin.x + top.centroid.x;
+    const wz = origin.z + top.centroid.z;
+    const before = sys.supportHeightAt(wx, wz, origin);
+    expect(before).toBeCloseTo(origin.y + top.topY, 5);
+    expect(sys.supportHeightAt(400, 400, origin)).toBe(0);
+    const covering = sys.chunks.filter((c) => !c.eaten
+      && Math.hypot(wx - (origin.x + c.centroid.x), wz - (origin.z + c.centroid.z)) <= c.radiusXz);
+    expect(covering.length).toBeGreaterThan(0);
+    for (const c of covering) sys.commitChunk(c.index);
+    const after = sys.supportHeightAt(wx, wz, origin);
+    expect(after).toBeLessThan(before);
+    for (const c of sys.chunks) sys.commitChunk(c.index);
+    expect(sys.supportHeightAt(wx, wz, origin)).toBe(0);
+  });
+
+  it('projectOntoVerticalFace sits on the outward XZ normal', () => {
+    const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
+    const origin = { x: 0, y: 15, z: 0 };
+    const p = sys.projectOntoVerticalFace({ x: 0, y: 8, z: -10 }, origin, 4);
+    expect(Math.hypot(p.nx, p.nz)).toBeCloseTo(1);
+    expect(p.y).toBe(8);
+    const box = sys.worldAabb(origin);
+    expect(pointInXzAabb({ x: p.x, z: p.z }, box, -0.5)).toBe(false);
+  });
+
+  it('picks a 3D-near top chunk, not an XZ-deep interior cell', () => {
+    const layout = kitchenLayout();
+    const food = layout.curd;
+    const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
+    const y = sys.supportHeightAt(food.x, food.z, food) + 2;
+    const labellum = {
+      x: 0,
+      y: y - food.y,
+      z: labellumRestReachMm(),
+    };
+    const idx = sys.nearestUneaten(labellum, sys.contactReachMm());
+    expect(idx).not.toBeNull();
+    expect(sys.chunks[idx!]!.centroid.y).toBeGreaterThan(5);
+    const silent = sys.step(input({
+      labellum,
+      sensors: [labellum],
+      flyXZ: { x: food.x, z: food.z },
+      foodXZ: { x: food.x, z: food.z },
+      cameraDist: 20,
+    }));
+    expect(silent.chemo.rates.labellarHz).toBeGreaterThan(8);
+    const tasting = sys.step(input({
+      labellum,
+      sensors: [labellum],
+      tasting: true,
+      flyXZ: { x: food.x, z: food.z },
+      foodXZ: { x: food.x, z: food.z },
+      cameraDist: 20,
+    }));
+    expect(tasting.chemo.rates.labellarHz).toBeGreaterThan(20);
+    expect(tasting.chemo.rates.pharyngealHz).toBe(0);
+  });
+
+  it('drives labellar Poisson from the bite-front chunk during side TASTE', () => {
+    const layout = kitchenLayout();
+    const food = layout.curd;
+    const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
+    const fly = { x: layout.fly.x, y: 2, z: layout.fly.z };
+    const approach = sys.approachTarget(fly, food);
+    sys.followBiteFront({
+      x: approach.point.x - food.x,
+      y: 2 - food.y,
+      z: approach.point.z - food.z,
+    });
+    const restLab = {
+      x: approach.point.x + Math.sin(approach.yaw) * labellumRestReachMm() - food.x,
+      y: 2 - food.y,
+      z: approach.point.z + Math.cos(approach.yaw) * labellumRestReachMm() - food.z,
+    };
+    const miss = sys.step(input({
+      labellum: restLab,
+      sensors: [restLab],
+      tasting: false,
+      flyXZ: { x: approach.point.x, z: approach.point.z },
+      foodXZ: { x: food.x, z: food.z },
+    }));
+    expect(miss.chemo.rates.labellarHz).toBe(0);
+    const taste = sys.step(input({
+      labellum: restLab,
+      sensors: [restLab],
+      tasting: true,
+      flyXZ: { x: approach.point.x, z: approach.point.z },
+      foodXZ: { x: food.x, z: food.z },
+    }));
+    expect(taste.chemo.rates.labellarHz).toBeGreaterThan(8);
   });
 });

@@ -19,6 +19,8 @@ from feeding import (
     DATASET_VERSION,
     DERIVED_DIR,
     FILTER_DEFINITIONS,
+    GRAPH_BIN_LAYOUT_COMPRESSED,
+    GRAPH_BIN_LAYOUT_UNCOMPRESSED,
     MAX_DEPTH,
     MAX_NEURONS,
     MN9_BODY_IDS,
@@ -33,11 +35,13 @@ from feeding import (
     cap_neurons,
     nt_sign,
     read_csr,
+    read_csr_compressed,
     resolve_seeds,
     resolve_weight_columns,
     sha256_file,
     strongest_path_sign_coo,
     utc_now,
+    write_csr_compressed,
     write_csr,
 )
 
@@ -345,11 +349,15 @@ def main() -> int:
         "nt_uncertain": [bool(x) for x in neuron_unc],
         "graph_bin": {
             "path": "graph.bin",
-            "layout": "CSR little-endian: int32 indptr (n+1), int32 indices (n_edges), float32 signed weights (n_edges)",
+            "layout": GRAPH_BIN_LAYOUT_COMPRESSED,
+            "audit_uncompressed": {
+                "path": "data/derived/feeding-circuit-graph.uncompressed.bin",
+                "layout": GRAPH_BIN_LAYOUT_UNCOMPRESSED,
+            },
             "indptr_count": n + 1,
             "indices_count": int(len(data)),
             "weights_count": int(len(data)),
-            "note": "indices are positions into bodyId. signed weight = synapse_count * NT_sign(pre).",
+            "note": "indices are positions into bodyId. signed weight = synapse_count * NT_sign(pre). Rows are sorted by target at encode time; LIF is order-independent.",
         },
         "provenance": {
             "date": utc_now(),
@@ -425,17 +433,31 @@ def main() -> int:
     }
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    DERIVED_DIR.mkdir(parents=True, exist_ok=True)
     bin_path = OUT_DIR / "graph.bin"
     meta_path = OUT_DIR / "graph.meta.json"
-    write_csr(bin_path, indptr, indices, data)
-    rt_indptr, rt_indices, rt_data = read_csr(bin_path, n, len(data))
+    audit_path = DERIVED_DIR / "feeding-circuit-graph.uncompressed.bin"
+    write_csr(audit_path, indptr, indices, data)
+    rt_indptr, rt_indices, rt_data = read_csr(audit_path, n, len(data))
     if not (
         np.array_equal(rt_indptr, indptr)
         and np.array_equal(rt_indices, indices)
         and np.allclose(rt_data, data)
     ):
-        raise RuntimeError("CSR round-trip failed")
+        raise RuntimeError("uncompressed CSR round-trip failed")
+    write_csr_compressed(bin_path, indptr, indices, data)
+    c_indptr, c_indices, c_data = read_csr_compressed(bin_path, n, len(data))
+    if not np.array_equal(c_indptr, indptr):
+        raise RuntimeError("compressed CSR indptr round-trip failed")
+    for i in range(n):
+        a, b = int(indptr[i]), int(indptr[i + 1])
+        order = np.argsort(indices[a:b], kind="stable")
+        if not np.array_equal(c_indices[a:b], indices[a:b][order]):
+            raise RuntimeError(f"compressed CSR indices mismatch at row {i}")
+        if not np.allclose(c_data[a:b], np.asarray(data[a:b][order], dtype="<f2").astype(np.float32)):
+            raise RuntimeError(f"compressed CSR weights mismatch at row {i}")
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    log(f"wrote audit {audit_path} ({audit_path.stat().st_size / 1e6:.1f} MB)")
     log(f"wrote {bin_path} ({bin_path.stat().st_size / 1e6:.1f} MB)")
     log(f"wrote {meta_path}")
     log(f"done, peak RSS {peak_rss_mb():.1f} MiB")

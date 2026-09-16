@@ -74,13 +74,16 @@ describe('APPROACH surface standoff', () => {
       }
       expect(sm.state).toBe('TASTE');
       expect(pointInXzAabb(pos, box)).toBe(false);
+      const approach = sys.approachTarget(pos, food);
       const reach = extendedLabellumReachMm();
       const labellum = {
         x: pos.x + Math.sin(heading) * reach - food.x,
         y: -sys.hy * 0.45,
         z: pos.z + Math.cos(heading) * reach - food.z,
       };
-      const chunk = sys.nearestUneaten(labellum, contactRadiusMm());
+      const toHit = Math.hypot(pos.x + Math.sin(heading) * reach - approach.hit.x, pos.z + Math.cos(heading) * reach - approach.hit.z);
+      expect(toHit).toBeLessThanOrEqual(contactRadiusMm() + APPROACH_ARRIVE_MM);
+      const chunk = sys.nearestUneaten(labellum, sys.contactReachMm());
       expect(chunk).not.toBeNull();
     }
   });

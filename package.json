@@ -17,6 +17,8 @@
     "measure:drive": "node --experimental-strip-types --no-warnings scripts/measure_drive.ts",
     "calibrate:background": "node --experimental-strip-types --no-warnings scripts/calibrate_background.ts",
     "validate:circuit": "node --experimental-strip-types --no-warnings scripts/validate_per.ts",
+    "compress:graph": "node --experimental-strip-types --no-warnings scripts/compress_graph.ts",
+    "soak": "node --experimental-strip-types --no-warnings --expose-gc scripts/soak.ts",
     "check:assets": "node scripts/check-assets.mjs"
   },
   "dependencies": {

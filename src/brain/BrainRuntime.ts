@@ -1,6 +1,6 @@
 import { asset } from '../lib/atlas.ts';
 import type { ActivityFrame } from '../lib/replay.ts';
-import { idsForRole, parseCircuit, type CircuitGraph } from './csr.ts';
+import { idsForRole, parseCircuitMeta, type CircuitGraph } from './csr.ts';
 import type { PopulationSummary } from './lif.ts';
 import type { RoleTag } from './params.ts';
 import type { WorkerIn, WorkerOut } from './protocol.ts';
@@ -10,6 +10,8 @@ export class BrainRuntime {
   circuit: CircuitGraph | null = null;
   private worker: Worker | null = null;
   private ready = false;
+  private metaUrl = '';
+  private hydrating: Promise<void> | null = null;
   onFrame: ((frame: ActivityFrame, summary: PopulationSummary, seed: number) => void) | null = null;
   onReady: ((nNeurons: number, seed: number) => void) | null = null;
   onError: ((message: string) => void) | null = null;
@@ -20,21 +22,53 @@ export class BrainRuntime {
 
   async connect(): Promise<void> {
     this.dispose();
-    const metaUrl = asset('data/feeding-circuit/graph.meta.json');
+    this.metaUrl = asset('data/feeding-circuit/graph.meta.json');
     const binUrl = asset('data/feeding-circuit/graph.bin');
-    const [metaRes, binRes] = await Promise.all([fetch(metaUrl), fetch(binUrl)]);
+    const [metaRes, binRes] = await Promise.all([fetch(this.metaUrl), fetch(binUrl)]);
     if (!metaRes.ok || !binRes.ok) {
       throw new Error(
         'Feeding-circuit graph is missing. Run scripts/data-prep/extract_feeding_circuit.py.',
       );
     }
-    const meta: unknown = await metaRes.json();
+    const metaBytes = await metaRes.arrayBuffer();
     const graph = await binRes.arrayBuffer();
-    this.circuit = parseCircuit(meta, graph);
     this.worker = new Worker(new URL('./lif-worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<WorkerOut>) => this.handle(event.data);
     this.worker.onerror = (event) => this.onError?.(event.message);
-    this.post({ type: 'init', graph, meta, seed: this.seed }, [graph]);
+    this.post({ type: 'init', graph, metaBytes, seed: this.seed }, [graph, metaBytes]);
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => { void this.ensureCircuit(); }, 4000);
+    } else {
+      void this.ensureCircuit();
+    }
+  }
+
+  async ensureCircuit(): Promise<void> {
+    if (this.circuit) return;
+    if (this.hydrating) return this.hydrating;
+    this.hydrating = (async () => {
+      const res = await fetch(this.metaUrl);
+      if (!res.ok) throw new Error('graph.meta.json missing');
+      const parsed = parseCircuitMeta(await res.json());
+      this.circuit = {
+        n: parsed.n,
+        nEdges: parsed.nEdges,
+        indptr: new Int32Array(0),
+        indices: new Int32Array(0),
+        weights: new Float32Array(0),
+        bodyId: parsed.bodyId,
+        role: parsed.role,
+        pathSign: parsed.pathSign,
+        type: parsed.type,
+        subclass: parsed.subclass,
+        ntUncertain: parsed.ntUncertain,
+      };
+    })();
+    try {
+      await this.hydrating;
+    } finally {
+      this.hydrating = null;
+    }
   }
 
   start(): void {
@@ -74,6 +108,8 @@ export class BrainRuntime {
 
   dispose(): void {
     this.ready = false;
+    this.circuit = null;
+    this.hydrating = null;
     this.worker?.terminate();
     this.worker = null;
   }

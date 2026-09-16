@@ -327,6 +327,17 @@ function applySecondary(pose: Pose, clipName: ClipName, opts: SampleOpts): Pose 
   return out;
 }
 
+export function overlayEuler(pose: Pose, overlay: Partial<Record<BoneName, EulerDeg>>): Pose {
+  const out = {} as Pose;
+  for (const name of BONE_NAMES) {
+    const extra = overlay[name];
+    out[name] = extra
+      ? { rotation: mulApprox(pose[name].rotation, eulerDegToQuat(extra)) }
+      : pose[name];
+  }
+  return out;
+}
+
 export function blendPoses(a: Pose, b: Pose, alpha: number): Pose {
   const t = clamp01(alpha);
   const u = easeInOut(t);

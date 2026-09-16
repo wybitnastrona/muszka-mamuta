@@ -34,9 +34,15 @@ export const CURD_NORMAL_SCALE = 1.4;
 export const CURD_RIM_HEX = '#f6efdc';
 
 export const POUCH_BEVEL_MM = 4;
-export const POUCH_WRINKLE_MM = 1.5;
-export const POUCH_FILM_THICKNESS = 0.5;
+/** Fine wrinkle amplitude on the empty film (mm). */
+export const POUCH_WRINKLE_MM = 0.8;
+/** MeshPhysicalMaterial thickness for thin PET. */
+export const POUCH_FILM_THICKNESS = 0.15;
 export const POUCH_FLANGE_THICK_MM = 2;
+/** Collapsed empty-pouch rest height, not the original 32 mm filled pack. */
+export const POUCH_BASE_HEIGHT_MM = 2.5;
+export const POUCH_WIDTH_SEGMENTS = 40;
+export const POUCH_DEPTH_SEGMENTS = 32;
 export const POUCH_YAW_DEG = 15;
 export const LABEL_LIFT_MM = 1;
 export const LABEL_IMAGE_W = 1024;

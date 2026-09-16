@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
 import * as THREE from 'three';
 import { t, type Lang } from '../i18n.ts';
+import { CAPTION_EN } from '../hud/captions.ts';
 import type { ProceduralTwarog } from '../food/proceduralTwarog.ts';
 import type { ConsumeEvent, TwarogSystem } from '../food/twarogSystem.ts';
 import { REFILL_ANIM_S } from '../food/twarogSystem.ts';
-import { CURD_ALBEDO_HEX } from '../scene/scale.ts';
+import { CURD_ALBEDO_HEX, CURD_MM, mm } from '../scene/scale.ts';
+import { Xoshiro128ss } from '../brain/rng.ts';
 
 const CRUMB_POOL = 64;
+const TABLE_CRUMB_COUNT = 12;
 const GRAVITY = 420;
 
 type Crumb = {
@@ -54,6 +57,26 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
   }));
   let crumbCursor = 0;
   const tableY = -group.position.y + 0.7;
+
+  const seedTableCrumbs = () => {
+    const rng = new Xoshiro128ss(11);
+    const hx = mm(CURD_MM.width) / 2;
+    const hz = mm(CURD_MM.length) / 2;
+    for (let i = 0; i < TABLE_CRUMB_COUNT; i++) {
+      const slot = crumbs[i]!;
+      const ang = rng.nextFloat() * Math.PI * 2;
+      const rad = Math.max(hx, hz) + 5 + rng.nextFloat() * 11;
+      slot.active = true;
+      slot.settled = true;
+      slot.x = Math.cos(ang) * rad;
+      slot.y = tableY;
+      slot.z = Math.sin(ang) * rad;
+      slot.vx = 0;
+      slot.vy = 0;
+      slot.vz = 0;
+    }
+    crumbCursor = TABLE_CRUMB_COUNT;
+  };
 
   const spawnCrumbs = (event: ConsumeEvent) => {
     const c = event.centroid;
@@ -153,8 +176,12 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
 
   const resetCrumbs = () => {
     for (const p of crumbs) p.active = false;
+    seedTableCrumbs();
     updateCrumbs(0);
   };
+
+  seedTableCrumbs();
+  updateCrumbs(0);
 
   return {
     group,
@@ -168,20 +195,28 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
   };
 }
 
+export { CAPTION_EN };
+
 export function TwarogHud({
   lang,
   toast,
   portions,
+  caption,
 }: {
   lang: Lang;
   toast: boolean;
   portions: number;
+  caption?: string;
 }) {
+  const shown = caption ? (lang === 'en' ? (CAPTION_EN[caption] ?? caption) : caption) : '';
   return (
     <>
       <div className="twarog-portions" aria-live="polite">
         {t(lang, 'portionCount', { n: String(portions) })}
       </div>
+      {shown && (
+        <div className="fly-caption" aria-live="polite">{shown}</div>
+      )}
       {toast && (
         <div className="twarog-toast" role="status">{t(lang, 'freshPortion')}</div>
       )}
