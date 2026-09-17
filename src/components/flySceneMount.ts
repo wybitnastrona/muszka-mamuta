@@ -21,6 +21,7 @@ import {
 import { applyWingVisual } from '../body/wings.ts';
 import { describeFlybodyHierarchy, type FlybodyMeta } from '../body/hierarchy.ts';
 import { SceneDirector } from '../body/sceneDirector.ts';
+import { createHeadstage, type Headstage } from '../body/headstage.ts';
 import { odorGradientYaw } from '../body/odorField.ts';
 import { createProceduralTwarog, type ProceduralTwarog } from '../food/proceduralTwarog.ts';
 import { TwarogSystem, type ChemoSample } from '../food/twarogSystem.ts';
@@ -96,6 +97,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   let twarog: ProceduralTwarog | null = null;
   let twarogView: TwarogView | null = null;
   let director: SceneDirector | null = null;
+  let headstage: Headstage | null = null;
   let packLabel: THREE.Object3D | null = null;
   let kitchenTex: KitchenTextures | null = null;
   let cuttingBoard: ReturnType<typeof createCuttingBoard> | null = null;
@@ -564,6 +566,8 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
         if (out.loopWrapped && rec) void rec.stop();
       }
       world.updateMatrixWorld(true);
+      // After the rig's world matrices: the cable socket is a bone child.
+      headstage?.update(dt);
       const want: CameraPreset = rec ? 'Reel' : opts.presetRef.current;
       if (debug === 'weights') {
         frameWeights();
@@ -639,6 +643,13 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     built.root.scale.setScalar(flyRootScale());
     built.root.position.set(0, 0, 0);
     world.add(built.root);
+    // Headstage prop: cap rides the head bone, cable lives in world space.
+    const headBone = built.bones.get('head');
+    if (headBone && debug !== 'weights') {
+      headstage = createHeadstage();
+      headBone.add(headstage.cap);
+      world.add(headstage.cable);
+    }
     built.root.updateMatrixWorld(true);
     const bounds = new THREE.Box3().setFromObject(built.root);
     const spawnY = layout.board.topY + (-bounds.min.y);
@@ -728,6 +739,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     if (cuttingBoard) disposeCuttingBoard(cuttingBoard);
     kitchen.maps.forEach((m) => m.dispose());
     twarogView?.dispose();
+    headstage?.dispose();
     view.dispose();
   };
 }
