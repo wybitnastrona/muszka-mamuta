@@ -132,6 +132,12 @@ export type DirectorOutput = {
   gag: GagId | null;
   spoonShadow: number;
   crumbAttach: CrumbBone;
+  /**
+   * Morsel held between the forelegs while PUMP consumes a chunk. `progress`
+   * is the measured `TwarogSystem.consumeProgress` (0 → 1); the visual shrinks
+   * with it. Null outside PUMP. Authored prop, see docs/BODY-MODEL.md.
+   */
+  heldCrumb: { progress: number; chunkIndex: number } | null;
   bites: number;
   bitesTarget: number;
   remainingFrac: number;
@@ -835,6 +841,14 @@ export class SceneDirector {
     };
   }
 
+  /** The chunk being pumped, as a shrinking morsel in the forelegs (PUMP only). */
+  private heldCrumb(): DirectorOutput['heldCrumb'] {
+    if (this.fsm.state !== 'PUMP' || this.refillClip) return null;
+    const idx = this.food.consumingIndex();
+    if (idx === null) return null;
+    return { progress: this.food.consumeProgress(idx), chunkIndex: idx };
+  }
+
   /** Solids and the 200 ms lookahead segment, for the `?debug=flight` overlay. */
   debugSolids(): {
     aabbs: Aabb3[];
@@ -1197,6 +1211,7 @@ export class SceneDirector {
       gag: this.scriptedLoop ? this.loop.gag : null,
       spoonShadow: this.spoonShadow,
       crumbAttach: this.crumbAttach,
+      heldCrumb: this.heldCrumb(),
       bites: this.fsm.pumpCycles,
       bitesTarget: this.fsm.pumpTarget,
       // Normalised to the portion as served (opening bite already taken), so

@@ -29,7 +29,7 @@ import { createFlyViewport } from './flyViewport.ts';
 import { createPackaging } from '../scene/Packaging.tsx';
 import { createCuttingBoard, disposeCuttingBoard, loadBoardMaps } from '../scene/CuttingBoard.tsx';
 import { kitchenLayout } from '../scene/layout.ts';
-import { POUCH_MM, flyRootScale, mm } from '../scene/scale.ts';
+import { POUCH_MM, crumbSizeMm, flyRootScale, mm } from '../scene/scale.ts';
 import { disposeKitchenTextures, loadKitchenTextures, type KitchenTextures } from '../scene/textures.ts';
 import { KITCHEN_ENV_INTENSITY, loadKitchenEnvironment } from '../scene/kitchenEnvironment.ts';
 import { updateStudioFog } from '../scene/kitchenFog.ts';
@@ -158,6 +158,17 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   );
   gagCrumb.visible = false;
   world.add(gagCrumb);
+  // Morsel held between the forelegs while PUMP consumes a chunk. Scaled by
+  // 1 − consumeProgress so it visibly disappears as the chunk is eaten.
+  // Authored prop; the progress itself is the twaróg system's state.
+  const heldCrumbSize = crumbSizeMm() * 1.6;
+  const heldCrumb = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(heldCrumbSize * 0.5, 0),
+    new THREE.MeshStandardMaterial({ color: 0xe1d7ca, roughness: 0.9 }),
+  );
+  heldCrumb.castShadow = true;
+  heldCrumb.visible = false;
+  world.add(heldCrumb);
   const rootEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
   const obbOutline = (hx: number, hy: number, hz: number): THREE.LineSegments => {
@@ -481,6 +492,22 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           }
         } else {
           gagCrumb.visible = false;
+        }
+        const held = out.heldCrumb;
+        const tL = rig.bones.get('foreleg_L_tarsus');
+        const tR = rig.bones.get('foreleg_R_tarsus');
+        if (held && tL && tR && held.progress < 0.97) {
+          tL.getWorldPosition(tarsusL);
+          tR.getWorldPosition(tarsusR);
+          heldCrumb.position.lerpVectors(tarsusL, tarsusR, 0.5);
+          // Lift slightly toward the labellum so it reads as "held", not "dropped".
+          heldCrumb.position.y += heldCrumbSize * 0.35;
+          const s = Math.max(0.05, 1 - held.progress);
+          heldCrumb.scale.setScalar(s);
+          heldCrumb.rotation.y = held.chunkIndex * 0.61 + out.flyPose.heading;
+          heldCrumb.visible = true;
+        } else {
+          heldCrumb.visible = false;
         }
         if (out.caption !== lastCaption) {
           lastCaption = out.caption;

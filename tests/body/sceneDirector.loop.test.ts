@@ -90,6 +90,35 @@ describe('SceneDirector scripted loop (reel)', () => {
     expect(best).toBeLessThanOrEqual(flyVisualLengthMm() + 0.05);
   });
 
+  it('holds a shrinking morsel in the forelegs only while PUMP consumes a chunk', () => {
+    const d = makeLoopDirector();
+    const progress: number[] = [];
+    let sawTaste = false;
+    let sawPump = false;
+    for (let i = 0; i < 30 * 12; i++) {
+      const out = d.update({ ...drive, satiety: 0.2 });
+      if (d.fsm.state === 'TASTE' || d.fsm.state === 'EXTEND' || d.fsm.state === 'REST') {
+        sawTaste = true;
+        expect(out.heldCrumb).toBeNull();
+      }
+      if (d.fsm.state === 'PUMP' && out.heldCrumb) {
+        sawPump = true;
+        progress.push(out.heldCrumb.progress);
+        expect(d.food.chunks[out.heldCrumb.chunkIndex]!.eaten).toBe(false);
+      }
+      if (d.fsm.state === 'RETRACT') break;
+    }
+    expect(sawTaste).toBe(true);
+    expect(sawPump).toBe(true);
+    expect(progress.length).toBeGreaterThan(2);
+    expect(progress[0]!).toBeLessThan(0.5);
+    expect(Math.max(...progress)).toBeGreaterThan(progress[0]!);
+    for (const p of progress) {
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('completes one reel loop at seed 1 without ORBIT / EXIT_FRAME', () => {
     const d = makeLoopDirector();
     const seen: string[] = [];

@@ -597,6 +597,11 @@ export class TwarogSystem {
     return this.chunks.length;
   }
 
+  /** Index of the chunk currently being pumped, or null. */
+  consumingIndex(): number | null {
+    return this.consuming?.index ?? null;
+  }
+
   /** 1 = fully shrunk. */
   consumeProgress(index: number): number {
     if (this.chunks[index]?.eaten) return 1;
