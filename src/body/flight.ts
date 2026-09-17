@@ -9,6 +9,7 @@
  *   Card & Dickinson 2008 — voluntary (type 1) vs escape (type 2) takeoff.
  * See docs/BODY-MODEL.md.
  */
+import * as THREE from 'three';
 import { Xoshiro128ss } from '../brain/rng.ts';
 import { clamp, clamp01, headingError, lerp, perlin1, wrapPi } from './math.ts';
 import { BLUR_LAND_FADE_S, WING_FLICKER_DEG, WING_FLICKER_HZ } from './wings.ts';
@@ -61,7 +62,7 @@ export { LOOKAHEAD_S, FLIGHT_CEILING_MM };
 
 export type Vec3 = { x: number; y: number; z: number };
 
-export type FlightKind = 'orbit' | 'land' | 'takeoff1' | 'takeoff2' | 'exit' | 'idle';
+export type FlightKind = 'orbit' | 'land' | 'takeoff1' | 'takeoff2' | 'exit' | 'idle' | 'spline';
 
 export type FlightLandPhase = 'face' | 'decel' | 'extend' | 'squash' | 'fold' | 'done';
 
@@ -90,6 +91,12 @@ export type OrbitOpts = {
   altitude?: number;
   descend?: boolean;
   seed?: number;
+};
+
+export type SplineOpts = {
+  points: readonly Vec3[];
+  duration: number;
+  endHeading?: number;
 };
 
 export type LandOpts = {
@@ -194,6 +201,11 @@ export class FlightController {
   private lastNormal: Normal3 | null = null;
   /** Solid hits this frame's update resolved (0 when the path is clear). */
   hitCount = 0;
+  private spline: THREE.CatmullRomCurve3 | null = null;
+  private splineDuration = 1;
+  private splineEndHeading: number | undefined;
+  /** Skip solid resolve so authored paths can enter the open tub. */
+  private ghostSolids = false;
 
   setWorld(opts: {
     obstacles?: Aabb3[];
@@ -238,6 +250,7 @@ export class FlightController {
   startOrbit(opts: OrbitOpts): void {
     this.kind = 'orbit';
     this.done = false;
+    this.ghostSolids = false;
     this.time = 0;
     this.rng = new Xoshiro128ss(opts.seed ?? 1);
     this.target = { ...opts.target };
@@ -264,6 +277,7 @@ export class FlightController {
   startLand(opts: LandOpts): void {
     this.kind = 'land';
     this.done = false;
+    this.ghostSolids = false;
     this.time = 0;
     this.rng = new Xoshiro128ss(opts.seed ?? 1);
     const clamped = clampLandTarget(opts.target, opts.supportY, this.obstacles);
@@ -282,6 +296,7 @@ export class FlightController {
   startTakeoff1(): void {
     this.kind = 'takeoff1';
     this.done = false;
+    this.ghostSolids = false;
     this.time = 0;
     this.raiseT = 0;
     this.hopT = 0;
@@ -299,6 +314,7 @@ export class FlightController {
   startTakeoff2(recover: Vec3): void {
     this.kind = 'takeoff2';
     this.done = false;
+    this.ghostSolids = false;
     this.time = 0;
     this.hopT = 0;
     this.tumbleT = 0;
@@ -313,9 +329,28 @@ export class FlightController {
     this.roll = 0;
   }
 
+  startSpline(opts: SplineOpts): void {
+    this.kind = 'spline';
+    this.done = false;
+    this.time = 0;
+    this.ghostSolids = true;
+    this.splineDuration = Math.max(0.25, opts.duration);
+    this.splineEndHeading = opts.endHeading;
+    const pts = opts.points.length >= 2 ? opts.points : [this.position, this.position];
+    this.spline = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(p.x, p.y, p.z)));
+    this.wingRaise = 1;
+    this.blurAlpha = 1;
+    this.forelegExtend = 0.35;
+    this.landPhase = null;
+    this.pitch = 0;
+    this.bank = 0;
+    this.roll = 0;
+  }
+
   startExit(heading = this.heading): void {
     this.kind = 'exit';
     this.done = false;
+    this.ghostSolids = false;
     this.time = 0;
     this.heading = heading;
     this.wingRaise = 1;
@@ -334,11 +369,44 @@ export class FlightController {
       case 'takeoff1': this.stepTakeoff1(step); break;
       case 'takeoff2': this.stepTakeoff2(step); break;
       case 'exit': this.stepExit(step); break;
+      case 'spline': this.stepSpline(step); break;
       default: break;
     }
-    this.steerAroundSolids();
-    this.applySolidConstraints();
+    if (!this.ghostSolids) {
+      this.steerAroundSolids();
+      this.applySolidConstraints();
+    }
     return this.snapshot();
+  }
+
+  private stepSpline(dt: number): void {
+    if (!this.spline) {
+      this.done = true;
+      this.ghostSolids = false;
+      return;
+    }
+    const u = clamp01(this.time / this.splineDuration);
+    const p = this.spline.getPoint(u);
+    const tan = this.spline.getTangent(u);
+    const inv = Math.max(1e-4, dt);
+    this.velocity = {
+      x: (p.x - this.position.x) / inv,
+      y: (p.y - this.position.y) / inv,
+      z: (p.z - this.position.z) / inv,
+    };
+    this.position = { x: p.x, y: p.y, z: p.z };
+    this.heading = wrapPi(Math.atan2(tan.x, tan.z));
+    if (this.splineEndHeading !== undefined && u > 0.8) {
+      this.heading = wrapPi(this.heading + headingError(this.heading, this.splineEndHeading) * Math.min(1, dt * 6));
+    }
+    this.pitch = clamp(tan.y * 0.2, -0.25, 0.25);
+    this.bank = lerp(this.bank, 0, 1 - Math.exp(-dt / 0.08));
+    this.wingRaise = 1;
+    this.blurAlpha = 1;
+    this.forelegExtend = lerp(0.25, 0.55, u);
+    if (u >= 1) {
+      this.done = true;
+    }
   }
 
   private wobbleY(base: number): number {
@@ -538,7 +606,7 @@ export class FlightController {
   }
 
   private steerAroundSolids(): void {
-    if (this.kind === 'idle' || this.kind === 'takeoff1') return;
+    if (this.kind === 'idle' || this.kind === 'takeoff1' || this.kind === 'spline') return;
     const speed = Math.hypot(this.velocity.x, this.velocity.z) || CRUISE_MM_S;
     const hx = Math.sin(this.heading);
     const hz = Math.cos(this.heading);

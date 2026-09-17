@@ -23,6 +23,7 @@ import {
   BOARD_MM,
   BOARD_YAW_DEG,
   PILE_MM,
+  TUB_MM,
   boardTopY,
   tableTopY,
   mm,
@@ -115,7 +116,7 @@ describe('cutting board', () => {
 
   it('keeps the powder mound on the table top', () => {
     const layout = kitchenLayout();
-    expect(layout.pile.y - mm(PILE_MM.height) / 2).toBeCloseTo(layout.board.topY);
+    expect(layout.pile.y - mm(PILE_MM.height) / 2).toBeCloseTo(layout.board.topY + mm(TUB_MM.wall));
     expect(layout.mill.deckY).toBeGreaterThan(layout.board.topY);
     expect(layout.board.topY).toBe(tableTopY());
   });

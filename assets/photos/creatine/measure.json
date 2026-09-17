@@ -1,31 +1,38 @@
 {
-  "note": "GrabCut bbox aspect includes the lid. Scene TUB_MM is authored fly-scale.",
+  "note": "Label-band crop on #151515. Tub H=142 mm measured; \u00d8 from packshot aspect.",
   "right": {
     "bbox_px": {
-      "w": 648,
-      "h": 843
+      "w": 311,
+      "h": 334
     },
-    "aspect_h_over_w": 1.3009259259259258
+    "aspect_h_over_w": 1.0739549839228295
   },
   "back": {
     "bbox_px": {
-      "w": 648,
-      "h": 838
+      "w": 311,
+      "h": 314
     },
-    "aspect_h_over_w": 1.2932098765432098
+    "aspect_h_over_w": 1.0096463022508038
   },
   "left": {
     "bbox_px": {
-      "w": 648,
-      "h": 829
+      "w": 311,
+      "h": 381
     },
-    "aspect_h_over_w": 1.279320987654321
+    "aspect_h_over_w": 1.22508038585209
   },
   "front": {
     "bbox_px": {
-      "w": 648,
-      "h": 838
+      "w": 311,
+      "h": 386
     },
-    "aspect_h_over_w": 1.2932098765432098
+    "aspect_h_over_w": 1.2411575562700965
+  },
+  "pack_front": {
+    "bbox_px": {
+      "w": 409,
+      "h": 590
+    },
+    "aspect_h_over_w": 1.4425427872860637
   }
 }

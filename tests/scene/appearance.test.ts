@@ -24,6 +24,8 @@ import {
   REEL_FOV_DEG,
   TABLE_BEVEL_MM,
   TERGITE_BANDS,
+  bristleOpaqueFraction,
+  fillBristleAlpha,
   fillHexNormal,
   fillSimplexRoughness,
   kelvinToRgb,
@@ -142,7 +144,10 @@ describe('fly materials', () => {
     expect(wing.iridescence).toBe(1);
     expect(wing.iridescenceThicknessRange[0]).toBe(100);
     expect(wing.iridescenceThicknessRange[1]).toBe(400);
-    expect(bristle.alphaTest).toBeGreaterThan(0);
+    expect(bristle.alphaTest).toBeGreaterThan(0.4);
+    const bristleMap = new Uint8Array(32 * 32 * 4);
+    fillBristleAlpha(bristleMap, 32);
+    expect(bristleOpaqueFraction(bristleMap, 32, bristle.alphaTest)).toBeLessThan(0.22);
     expect(ocelli.clearcoat).toBeLessThan(0.5);
     expect(TERGITE_BANDS).toBe(5);
     expect(EXPOSURE).toBeCloseTo(1.1);

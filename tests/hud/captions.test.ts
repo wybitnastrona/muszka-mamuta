@@ -40,6 +40,8 @@ describe('HUD captions', () => {
     }
     expect(translateCaption('Czyści się', 'en')).toBe('Grooming');
     expect(translateCaption('Chodzi na bieżni', 'en')).toBe('Walking the mill');
+    expect(translateCaption('Wpada do puszki', 'en')).toBe('Flying into the tub');
+    expect(translateCaption('Wędruje', 'en')).toBe('Roaming');
   });
 
   it('formats readouts', () => {

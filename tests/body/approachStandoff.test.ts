@@ -12,6 +12,7 @@ import {
 } from '../../src/food/twarogSystem.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
 import {
+  CURD_MM,
   FLY_RENDER_SCALE,
   FLY_WALK_MM_S,
   POUCH_MM,
@@ -36,7 +37,7 @@ const ROOT_STAND = 2;
 describe('APPROACH surface standoff', () => {
   it('ends outside the food AABB with the labellum on a surface chunk from 12 starts', () => {
     const layout = kitchenLayout();
-    const food = { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z };
+    const food = { x: layout.curd.x, y: tableTopY() + mm(CURD_MM.height) / 2, z: layout.curd.z };
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
     const box = sys.worldAabb(food);
     const pouch = {
@@ -123,7 +124,7 @@ describe('APPROACH surface standoff', () => {
 
   it('reaches a surface chunk in TASTE at 0.5×, 1× and 2× FLY_RENDER_SCALE', () => {
     const layout = kitchenLayout();
-    const food = { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z };
+    const food = { x: layout.curd.x, y: tableTopY() + mm(CURD_MM.height) / 2, z: layout.curd.z };
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
     for (const mul of [0.5, 1, 2] as const) {
       const scale = FLY_RENDER_SCALE * mul;

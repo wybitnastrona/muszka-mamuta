@@ -15,14 +15,23 @@ export type CameraFrame = {
 
 export const REEL_ASPECT = 9 / 16;
 
-/** 3/4 kitchen view: open KFD wrap, lid, scoop, mill and fly in one frame. */
+/** 3/4 kitchen view from the mill / +X quarter so the KFD face is readable. */
 export function kitchenFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { lid, mill } = kitchenLayout();
-  const lookAt: [number, number, number] = [(lid.x + mill.x) / 2, 11, 0];
+  const { tub, mill } = kitchenLayout();
+  const frontX = tub.x + tub.diameter / 2;
+  const lookAt: [number, number, number] = [
+    (frontX + mill.x) * 0.5,
+    Math.min(22, mill.deckY + 8),
+    mill.z,
+  ];
   return {
-    position: [lookAt[0] + 36, 90, -270],
+    position: [
+      mill.x + mill.hx * 0.08,
+      Math.max(124, tub.height * 0.88),
+      -Math.max(176, tub.height * 1.2),
+    ],
     lookAt,
-    fov: 42,
+    fov: 38,
   };
 }
 
@@ -44,22 +53,34 @@ export function labelCloseupFrame(label: THREE.Object3D): CameraFrame {
   const p = new THREE.Vector3();
   label.getWorldPosition(p);
   const { tub } = kitchenLayout();
-  const pull = Math.max(58, tub.height * 2.2);
+  const dir = new THREE.Vector3(p.x - tub.x, 0, p.z - tub.z);
+  if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
+  dir.normalize();
+  const pull = Math.max(250, tub.height * 1.75);
   return {
-    position: [p.x, p.y + tub.height * 0.22, p.z - pull],
+    position: [p.x + dir.x * pull, p.y + tub.height * 0.08, p.z + dir.z * pull],
     lookAt: [p.x, p.y, p.z],
     fov: 28,
   };
 }
 
-/** Front of the KFD wrap (authored −Z face) without needing the mesh. */
+/** Front of the KFD wrap (local −Z, yaw'd toward the mill / +X). */
 export function tubLabelFrame(): CameraFrame {
   const { tub } = kitchenLayout();
   const r = tub.diameter / 2;
-  const pull = Math.max(58, tub.height * 2.2);
+  const yaw = tub.yaw;
+  const frontX = tub.x + Math.sin(-yaw) * r;
+  const frontZ = tub.z - Math.cos(-yaw) * r;
+  const pull = Math.max(250, tub.height * 1.75);
+  const labelY = tub.y + tub.height * 0.12;
+  const dx = frontX - tub.x;
+  const dz = frontZ - tub.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const ux = dx / len;
+  const uz = dz / len;
   return {
-    position: [tub.x, tub.y + tub.height * 0.18, tub.z - r - pull],
-    lookAt: [tub.x, tub.y, tub.z - r],
+    position: [frontX + ux * pull, labelY + tub.height * 0.08, frontZ + uz * pull],
+    lookAt: [frontX, labelY, frontZ],
     fov: 28,
   };
 }

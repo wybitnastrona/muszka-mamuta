@@ -34,8 +34,9 @@ każdy klip ruchu, lot, czyszczenie, sen, gag-i,
 mapowanie MN9 Hz → czas pompy. Konektom steruje **tylko bramką żerowania**
 (kanał gustatoryczny → MN9). `ActivityFrame` jest jednokierunkowy: ciało
 i proszek go czytają, nigdy do niego nie zapisują. MaleCNS **nie ma** adnotacji
-kreatyny / Ir76b (0 trafień). Puszka KFD: wrap etykiety ze zdjęć; Ø/H i miarka
-są authored pod rolkę (15 mm mucha), nie milimetrach słoika 500 g.
+kreatyny / Ir76b (0 trafień). Puszka KFD: wysokość 142 mm zmierzona, Ø z
+aspectu packshotu, wrap z artworku na czarnym plastiku, kopiec proszku 3D
+(1/3 H). Miarka, bieżnia i chód dwunożny są autorskie.
 
 **OGRANICZENIA:** charakter pobudzający vs hamujący jest wnioskowany, nie
 zmierzony. Cały kanał gustatoryczny napędza MN9 słabiej niż pojedyncze seedy

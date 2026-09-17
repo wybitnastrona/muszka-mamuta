@@ -41,6 +41,8 @@ export const CRUMB_MIN = 3;
 export const CRUMB_MAX = 8;
 export const LABELLAR_RATE_MAX_HZ = 48;
 export const PHARYNGEAL_RATE_MAX_HZ = 36;
+/** Authored extra drive while PUMP so MN9 / SMAK raster reads the bout. */
+export const PUMP_GUST_GAIN = 1.85;
 export const PUMP_PERIOD_S = 1 / PUMP_HZ;
 /** Retract 0.42 s + groom 0.7 s, authored clip lengths. */
 export const REFILL_ANIM_S = 1.12;
@@ -424,9 +426,10 @@ export function sampleContactFields(
 export function contactToGustRates(contact: ContactFields, pumping: boolean): GustRates {
   const drive = (contact.sweet + 0.45 * contact.aa + 0.15 * contact.sour) * (1 - contact.bitter);
   const gated = clamp01(drive);
+  const gain = pumping ? PUMP_GUST_GAIN : 1;
   return {
-    labellarHz: LABELLAR_RATE_MAX_HZ * gated,
-    pharyngealHz: pumping ? PHARYNGEAL_RATE_MAX_HZ * gated : 0,
+    labellarHz: LABELLAR_RATE_MAX_HZ * gated * gain,
+    pharyngealHz: pumping ? PHARYNGEAL_RATE_MAX_HZ * gated * gain : 0,
   };
 }
 

@@ -95,15 +95,18 @@ export function createPowderView(
     group,
     update(dt, system) {
       dummy.rotation.set(0, 0, 0);
+      // The 3D fill is the lathe mound in creatineTub. These grains are a
+      // light crust on that surface, not a second photo disc.
+      const shown = Math.min(16, GRAIN_POOL, system.chunkCount);
       for (let i = 0; i < GRAIN_POOL; i++) {
         const c = system.chunks[i];
-        if (!c || c.eaten) {
+        if (i >= shown || !c || c.eaten) {
           hide(grains, i);
           continue;
         }
-        const s = Math.max(0.12, system.scaleOf(i));
-        dummy.position.set(c.centroid.x, c.topY - 0.6, c.centroid.z);
-        dummy.scale.setScalar(s * (0.7 + 0.45 * (c.radiusXz / 2.4)));
+        const s = Math.max(0.08, system.scaleOf(i) * 0.45);
+        dummy.position.set(c.centroid.x, c.topY - 0.2, c.centroid.z);
+        dummy.scale.setScalar(s);
         dummy.rotation.y = i * 0.47;
         dummy.updateMatrix();
         grains.setMatrixAt(i, dummy.matrix);

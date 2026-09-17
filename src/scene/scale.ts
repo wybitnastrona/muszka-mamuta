@@ -3,9 +3,9 @@
  *
  * One scene unit = 1 millimetre at render scale. The real fly is 2.5 mm;
  * FLY_RENDER_SCALE (6) is a documented visual exaggeration, so the on-screen
- * fly is 15 mm long against the authored KFD tub (~50 mm across). Raised
- * from 4× so she reads on a 1080×1920 reel. The unused twaróg / pouch
- * constants stay at true millimetre size for fixtures.
+ * fly is 15 mm long against a measured 142 mm KFD tub (Ø from packshot
+ * aspect). Raised from 4× so she reads on a 1080×1920 reel. The unused
+ * twaróg / pouch constants stay at true millimetre size for fixtures.
  *
  * Flybody's native mesh is ~0.301 units along +Z; `flyRootScale()` maps that
  * onto `REAL_FLY_BODY_MM * FLY_RENDER_SCALE`. Standoff, contact radius, LOD
@@ -22,9 +22,9 @@ export const FLYBODY_NATIVE_LENGTH = 0.3012;
 export const CURD_MM = { length: 100, width: 80, height: 30 };
 /**
  * Powder fill inside the tub well. Radius stays inside `tubInnerRadiusMm()`.
- * Height is the authored fill (near the rim, with scoop headroom).
+ * Height is one third of the open tub (authored fill, not a weigh-out).
  */
-export const PILE_MM = { radius: 20, height: 14 };
+export const PILE_MM = { radius: 48, height: 142 / 3 };
 export const PILE_CELL_COUNT = 80;
 export const PILE_TOTAL_MASS_G = 250;
 export const CREATINE_ALBEDO_HEX = '#e6e2d8';
@@ -32,19 +32,20 @@ export const CREATINE_ALBEDO_HEX = '#e6e2d8';
 export const SCOOP_MM = { bowlRadius: 5.5, bowlDepth: 4, handleLength: 12, handleRadius: 0.9 };
 export const SCOOP_CAPACITY_G = 4;
 export const SCOOP_EMPTY_S = 8;
-/** Lab mill on the table. Belt top is `deck` above y = 0. */
-export const MILL_MM = { length: 120, width: 50, height: 22, deck: 8 };
+/** Lab mill on the table. Belt top is `deck` above y = 0. Sized for the 15 mm fly. */
+export const MILL_MM = { length: 180, width: 56, height: 28, deck: 12 };
+/** Slow mill walk (authored). Table roam stays at `FLY_WALK_MM_S`. */
+export const MILL_WALK_MM_S = 4.5;
 /**
- * KFD tub, fly-readable millimetres (authored). Photo wrap is the real
- * label; Ø/H are not the 500 g jar. Aspect from product shots is ~1.29
- * including the lid; the live body is shorter so the 15 mm fly can dip.
+ * Open KFD tub. Height is the measured 142 mm product body (lid off);
+ * diameter ~110 mm follows packshot aspect ~1.29 with the lid.
  */
 export const TUB_MM = {
-  diameter: 50,
-  height: 26,
-  wall: 2,
-  lidDiameter: 52,
-  lidHeight: 6,
+  diameter: 110,
+  height: 142,
+  wall: 3,
+  lidDiameter: 114,
+  lidHeight: 20,
 };
 /** @deprecated Use `TUB_MM`. Same diameter / height. */
 export const TUB_SLOT_MM = { diameter: TUB_MM.diameter, height: TUB_MM.height };
@@ -281,6 +282,21 @@ export function tubRadiusMm(): number {
 
 export function tubInnerRadiusMm(): number {
   return tubRadiusMm() - mm(TUB_MM.wall);
+}
+
+/**
+ * Table stand for scoop-feeding. `standoffMm()` is a cheese-wall bite (~5 mm)
+ * and is far too tight for Ø110 tub + 15 mm fly + scoop. Clearance is from
+ * the tub axis, on the kitchen-camera side (−Z).
+ */
+export function scoopEatClearanceMm(): number {
+  return (
+    tubRadiusMm()
+    + flyVisualHalfLengthMm()
+    + mm(SCOOP_MM.handleLength)
+    + mm(SCOOP_MM.bowlRadius)
+    + 8
+  );
 }
 
 export const POUCH_INNER_MM = {

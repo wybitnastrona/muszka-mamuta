@@ -87,10 +87,10 @@ describe('NAP threshold (Murphy 2016)', () => {
 });
 
 describe('scene loop seed 1 (reel default)', () => {
-  it('starts at the scoop and never orbits or exits frame', () => {
+  it('starts flying into the tub and ends in AUTONOMOUS roam', () => {
     const loop = new SceneLoop(1);
     expect(LOOP_STATES[0]).toBe('ORBIT');
-    expect(loop.state).toBe('WALK_SCOOP');
+    expect(loop.state).toBe('FLY_INTO_TUB');
     const seen: string[] = [loop.state];
     let wrapped = false;
     let guard = 0;
@@ -98,56 +98,59 @@ describe('scene loop seed 1 (reel default)', () => {
       const out = loop.step(0.2, done);
       if (out.wrapped) wrapped = true;
       if (out.advanced && !seen.includes(out.state)) seen.push(out.state);
-      if (wrapped && out.state === 'WALK_SCOOP' && seen.length > 6) break;
+      if (out.state === 'AUTONOMOUS' && seen.length > 6) break;
     }
     expect(seen).toContain('PICK_SCOOP');
-    expect(seen).toContain('DIP_SCOOP');
+    expect(seen).toContain('FLY_OUT_WITH_SCOOP');
+    expect(seen).toContain('DROP_SCOOP');
     expect(seen).toContain('EAT_SCOOP');
-    expect(seen).toContain('WALK_MILL');
-    expect(seen).toContain('WALK_BIPED');
-    expect(seen).toContain('GROOM_FULL');
-    expect(seen).toContain('NAP');
-    expect(seen).toContain('WAKE');
+    expect(seen).toContain('WALK_BIPED_ON_MILL');
+    expect(seen).toContain('AUTONOMOUS');
+    expect(seen).not.toContain('DIP_SCOOP');
     expect(seen).not.toContain('ORBIT');
     expect(seen).not.toContain('ORBIT_SHORT');
     expect(seen).not.toContain('EXIT_FRAME');
     expect(seen).not.toContain('TAKEOFF_EXIT');
-    expect(wrapped).toBe(true);
+    expect(wrapped).toBe(false);
   });
 
-  it('holds EAT_SCOOP until the 45 s cap when the bout does not satiety-retract', () => {
+  it('reaches EAT_SCOOP within 20–30 s of soft caps', () => {
     const loop = new SceneLoop(1);
-    loop.step(1, { ...done, walkDone: true });
+    expect(loop.state).toBe('FLY_INTO_TUB');
+    loop.step(6, { ...done, flightDone: true });
     expect(loop.state).toBe('PICK_SCOOP');
     loop.step(1, { ...done, propDone: true });
-    expect(loop.state).toBe('APPROACH_TUB');
-    loop.step(1, { ...done, walkDone: true });
-    expect(loop.state).toBe('DIP_SCOOP');
+    expect(loop.state).toBe('FLY_OUT_WITH_SCOOP');
+    loop.step(6, { ...done, flightDone: true });
+    expect(loop.state).toBe('DROP_SCOOP');
     loop.step(1, { ...done, propDone: true });
     expect(loop.state).toBe('EAT_SCOOP');
+    const toEat = 6 + 1 + 6 + 1;
+    expect(toEat).toBeLessThanOrEqual(30);
+    expect(toEat).toBeGreaterThanOrEqual(10);
     let t = 0;
     while (loop.state === 'EAT_SCOOP' && t < 50) {
       loop.step(0.5, { ...done, eatBoutDone: false, satiety: 0.3 });
       t += 0.5;
     }
     expect(t).toBeGreaterThanOrEqual(EAT_BOUT_CAP_S);
-    expect(loop.state).toBe('DROP_SCOOP');
+    expect(loop.state).toBe('TAKEOFF_MILL');
   });
 
-  it('emits a mill caption on WALK_MILL', () => {
+  it('emits a mill caption on WALK_BIPED_ON_MILL', () => {
     const loop = new SceneLoop(1);
     const seen: string[] = [];
     let millCaption = '';
     for (let i = 0; i < 40; i++) {
       const out = loop.step(0.5, done);
       if (!seen.includes(out.state)) seen.push(out.state);
-      if (out.state === 'WALK_MILL' && !millCaption) millCaption = out.caption ?? '';
+      if (out.state === 'WALK_BIPED_ON_MILL' && !millCaption) millCaption = out.caption ?? '';
     }
-    expect(seen).toContain('WALK_MILL');
-    expect(millCaption).toBe('Chodzi na bieżni');
+    expect(seen).toContain('WALK_BIPED_ON_MILL');
+    expect(millCaption).toBe('Chodzi na dwóch');
   });
 
-  it('skips NAP when satiety is below threshold and wraps without takeoff-exit', () => {
+  it('stays in AUTONOMOUS instead of wrapping to takeoff-exit', () => {
     const loop = new SceneLoop(1);
     const seen: string[] = [];
     for (let i = 0; i < 40; i++) {
@@ -160,7 +163,7 @@ describe('scene loop seed 1 (reel default)', () => {
     }
     expect(seen).not.toContain('NAP');
     expect(seen).not.toContain('TAKEOFF_EXIT');
-    expect(seen).toContain('WALK_BIPED');
+    expect(seen).toContain('AUTONOMOUS');
   });
 });
 
@@ -176,10 +179,10 @@ describe('scene loop seed 1 (full / debug)', () => {
       if (seen.includes('EXIT_FRAME') && out.state === 'ORBIT' && seen.length > 8) break;
     }
     expect(seen).toContain('LAND_TOP');
+    expect(seen).toContain('FLY_INTO_TUB');
     expect(seen).toContain('EAT_SCOOP');
     expect(seen).toContain('GROOM_SHORT');
-    expect(seen).toContain('WALK_MILL');
-    expect(seen).toContain('WALK_BIPED');
+    expect(seen).toContain('WALK_BIPED_ON_MILL');
     expect(seen).toContain('GROOM_FULL');
     expect(seen).toContain('NAP');
     expect(seen).toContain('EXIT_FRAME');

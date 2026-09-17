@@ -14,6 +14,7 @@ import {
   GUST_GAIN_0,
   GUST_GAIN_H,
   Hemolymph,
+  MILL_EFFORT,
   MN9_SHIFT_0_MV,
   MN9_SHIFT_H_MV,
   trehaloseYield,
@@ -166,5 +167,14 @@ describe('hemolymph (authored, not connectome)', () => {
     const viaBite = new Hemolymph();
     expect(viaEat.eat(meanChunkG)).toBeCloseTo(viaBite.bite(BITE_MASS));
     expect(viaEat.state.cropVolume).toBeCloseTo(viaBite.state.cropVolume);
+  });
+
+  it('burns trehalose faster at mill effort', () => {
+    const rest = new Hemolymph();
+    const mill = new Hemolymph();
+    rest.step(20);
+    mill.step(20, { effort: MILL_EFFORT });
+    expect(mill.state.trehalose).toBeLessThan(rest.state.trehalose);
+    expect(mill.state.fat).toBeLessThan(rest.state.fat);
   });
 });

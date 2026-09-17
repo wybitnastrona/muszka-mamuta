@@ -2,7 +2,7 @@ import type { ClipName, FeedingEvent, FeedingState } from './types.ts';
 import { headingError, turnToward, clamp, clamp01 } from './math.ts';
 import { CLIP_DURATION, PUMP_HZ, clipForState } from './feedingMotion.ts';
 import { ODOR_DETECT } from './odorField.ts';
-import { phaseMayComplete } from './tempo.ts';
+import { phaseMayComplete, PHASE_MIN_REEL_S, PHASE_MIN_S } from './tempo.ts';
 import { flyVisualLengthMm } from '../scene/scale.ts';
 
 export const HEADING_ALIGN_DEG = 15;
@@ -23,6 +23,8 @@ export const TASTE_TIMEOUT_S = 3.0;
 /** Pump cycles per bout at threshold / at strong MN9 drive. PUMP_HZ is unchanged. */
 export const PUMP_CYCLES_MIN = 8;
 export const PUMP_CYCLES_MAX = 14;
+export const PUMP_CYCLES_REEL_MIN = 5;
+export const PUMP_CYCLES_REEL_MAX = 8;
 export const GROOM_SATIETY = 0.7;
 
 export type FeedingInput = {
@@ -58,6 +60,8 @@ export class FeedingStateMachine {
   pumpCycles = 0;
   pumpTarget = 6;
   mn9HoldMs = 0;
+  /** Reel path uses shorter phase dwells / fewer pump cycles. */
+  fastConsume = false;
   private stateAge = 0;
   private pumpCycleT = 0;
   private approachNeeded = 3;
@@ -174,7 +178,7 @@ export class FeedingStateMachine {
 
   /** Authored readability dwell (tempo.ts). Interrupt transitions do not call this. */
   private mayComplete(): boolean {
-    return phaseMayComplete(this.state, this.stateAge);
+    return phaseMayComplete(this.state, this.stateAge, this.fastConsume ? PHASE_MIN_REEL_S : PHASE_MIN_S);
   }
 
   private beginApproach(distance: number): void {
@@ -185,7 +189,7 @@ export class FeedingStateMachine {
     this.pumpCycles = 0;
     this.pumpCycleT = 0;
     this.biteThisCycle = false;
-    this.pumpTarget = pumpCycleCount(mn9Rate);
+    this.pumpTarget = pumpCycleCount(mn9Rate, this.fastConsume);
   }
 }
 
@@ -202,11 +206,13 @@ export function pumpAmplitude(mn9Rate: number): number {
  * Cycles per bout scale with MN9 drive above threshold. 8–14 cycles at the
  * unchanged 6 Hz pump is 1.3–2.3 s of POMPUJ; each cycle is still one bite.
  */
-export function pumpCycleCount(mn9Rate: number): number {
-  const span = PUMP_CYCLES_MAX - PUMP_CYCLES_MIN;
+export function pumpCycleCount(mn9Rate: number, fast = false): number {
+  const min = fast ? PUMP_CYCLES_REEL_MIN : PUMP_CYCLES_MIN;
+  const max = fast ? PUMP_CYCLES_REEL_MAX : PUMP_CYCLES_MAX;
+  const span = max - min;
   return clamp(
-    PUMP_CYCLES_MIN + Math.round(span * clamp01((mn9Rate - MN9_EXTEND_HZ) / 40)),
-    PUMP_CYCLES_MIN,
-    PUMP_CYCLES_MAX,
+    min + Math.round(span * clamp01((mn9Rate - MN9_EXTEND_HZ) / 40)),
+    min,
+    max,
   );
 }

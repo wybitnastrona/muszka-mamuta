@@ -148,7 +148,33 @@ describe('flight vs solids', () => {
   });
 
   it('derives the food half-size from the real block', () => {
-    expect(FOOD_HALF_SIZE_MM).toBe(25);
+    expect(FOOD_HALF_SIZE_MM).toBe(55);
+  });
+
+  it('follows an authored spline into a solid when ghosting', () => {
+    const f = new FlightController();
+    f.setWorld({ obstacles: [FOOD_BOX], floorY: 2, ceilingY: 220 });
+    f.place({ x: 80, y: 28, z: 0 }, Math.PI);
+    f.startSpline({
+      points: [
+        { x: 80, y: 28, z: 0 },
+        { x: 40, y: 40, z: 0 },
+        { x: 0, y: 20, z: 0 },
+        { x: 0, y: 10, z: 0 },
+      ],
+      duration: 1,
+    });
+    let inside = false;
+    for (let i = 0; i < 90; i++) {
+      const frame = f.update(dt);
+      if (pointInAabb3(frame.position, FOOD_BOX, -0.05)) inside = true;
+      if (frame.done) {
+        expect(frame.kind).toBe('spline');
+        expect(frame.position.y).toBeCloseTo(10, 0);
+        break;
+      }
+    }
+    expect(inside).toBe(true);
   });
 
   it('clamps landing targets to at or above local support', () => {

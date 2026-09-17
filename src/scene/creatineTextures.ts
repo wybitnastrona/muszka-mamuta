@@ -18,6 +18,8 @@ export type CreatineTextureManifest = Record<CreatineTextureKey, string> & {
   creatine_median_hex?: string;
 };
 
+export const LABEL_WRAP_FLIP_Y = false;
+
 export type CreatineTextures = {
   manifest: CreatineTextureManifest;
   labelWrap: THREE.Texture;
@@ -86,6 +88,8 @@ export async function loadCreatineTextures(signal?: AbortSignal): Promise<Creati
   labelWrap.wrapS = THREE.RepeatWrapping;
   labelWrap.wrapT = THREE.ClampToEdgeWrapping;
   labelWrap.anisotropy = 8;
+  // CylinderGeometry uses uv.y = 1 − v; keep JPEG top at the rim (KFD above PREMIUM).
+  labelWrap.flipY = LABEL_WRAP_FLIP_Y;
   crumb.wrapS = THREE.RepeatWrapping;
   crumb.wrapT = THREE.RepeatWrapping;
   crumbNormal.wrapS = THREE.RepeatWrapping;

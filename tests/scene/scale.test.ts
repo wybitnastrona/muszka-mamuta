@@ -12,6 +12,7 @@ import {
   LOD_FADE_MS,
   MILL_MM,
   PILE_MM,
+  TUB_MM,
   POUCH_INNER_MM,
   POUCH_MM,
   REAL_FLY_BODY_MM,
@@ -31,11 +32,12 @@ import {
   lodFadeSec,
   mm,
   pitchedTipAt,
+  scoopEatClearanceMm,
   standoffMm,
   proboscisReachMm,
 } from '../../src/scene/scale.ts';
 import { closeupOffset, reelFrame } from '../../src/body/cameras.ts';
-import { kitchenLayout } from '../../src/scene/layout.ts';
+import { kitchenLayout, scoopEatStand } from '../../src/scene/layout.ts';
 
 describe('scene scale', () => {
   it('uses one millimetre per scene unit at 6× render scale', () => {
@@ -51,8 +53,9 @@ describe('scene scale', () => {
     expect(BOARD_EDGE_RADIUS_MM).toBe(6);
     expect(BOARD_YAW_DEG).toBe(12);
     expect(boardTopY()).toBe(40);
-    expect(PILE_MM).toEqual({ radius: 20, height: 14 });
-    expect(MILL_MM.length).toBe(120);
+    expect(PILE_MM.radius).toBe(48);
+    expect(PILE_MM.height).toBeCloseTo(142 / 3);
+    expect(MILL_MM.length).toBe(180);
   });
 
   it('derives pouch inner size from curd plus seals', () => {
@@ -93,9 +96,24 @@ describe('scene scale', () => {
     const reel = reelFrame(half);
     expect(reel.position[1]).toBeGreaterThan(8);
     expect(Math.hypot(reel.position[0] - layout.pile.x, reel.position[2] - layout.pile.z)).toBeGreaterThan(200);
-    expect(layout.pile.x).toBeLessThan(layout.scoop.x);
+    expect(layout.scoop.x).toBe(layout.pile.x);
     expect(layout.scoop.x).toBeLessThan(layout.mill.x);
     expect(layout.tubSlot.diameter).toBe(layout.tub.diameter);
     expect(layout.tub.x).toBe(layout.pile.x);
+  });
+
+  it('stands south of the Ø110 tub to eat from the dropped scoop', () => {
+    const r = scoopEatClearanceMm();
+    expect(r).toBeGreaterThanOrEqual(80);
+    expect(r).toBeLessThanOrEqual(100);
+    const stand = scoopEatStand();
+    const layout = kitchenLayout();
+    expect(stand.x).toBe(layout.tub.x);
+    expect(stand.z).toBeCloseTo(layout.tub.z - r);
+    expect(stand.heading).toBeCloseTo(Math.PI);
+    expect(r).toBeGreaterThan(standoffMm() * 8);
+    expect(layout.tub.yaw).toBeCloseTo(-Math.PI / 2);
+    expect(layout.tub.height).toBe(mm(TUB_MM.height));
+    expect(layout.mill.x).toBeGreaterThan(layout.tub.x + layout.tub.diameter / 2);
   });
 });

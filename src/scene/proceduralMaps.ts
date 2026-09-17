@@ -97,12 +97,20 @@ export function fillHexNormal(data: Uint8Array, size: number, cells = 30): void 
   }
 }
 
-/** Opaque at the root, transparent at the tip (V). */
+/**
+ * Sparse hair cards: thin shafts in U, fade toward the tip in V.
+ * A solid V-wash read as a fat fur coat on the 15 mm reel fly.
+ */
 export function fillBristleAlpha(data: Uint8Array, size: number): void {
+  const hairs = 22;
   for (let y = 0; y < size; y++) {
     const tip = y / Math.max(1, size - 1);
-    const a = Math.round(255 * Math.max(0, 1 - tip * tip));
+    const fade = Math.max(0, 1 - tip * tip * 1.15);
     for (let x = 0; x < size; x++) {
+      const u = (x + 0.5) / size;
+      const hair = Math.abs((u * hairs) % 1 - 0.5);
+      const shaft = hair < 0.028 ? 1 - hair / 0.028 : 0;
+      const a = Math.round(255 * fade * shaft);
       const i = (y * size + x) * 4;
       data[i] = a;
       data[i + 1] = a;
@@ -110,6 +118,16 @@ export function fillBristleAlpha(data: Uint8Array, size: number): void {
       data[i + 3] = a;
     }
   }
+}
+
+/** Fraction of texels that would pass `alphaTest` — bristles must stay sparse. */
+export function bristleOpaqueFraction(data: Uint8Array, size: number, alphaTest = 0.42): number {
+  const cut = Math.round(alphaTest * 255);
+  let n = 0;
+  for (let i = 3; i < data.length; i += 4) {
+    if ((data[i] ?? 0) > cut) n += 1;
+  }
+  return n / (size * size);
 }
 
 export function fillOakAlbedo(data: Uint8Array, size: number, seed: number): void {

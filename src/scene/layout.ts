@@ -7,6 +7,7 @@ import {
   TUB_MM,
   flyVisualLengthMm,
   mm,
+  scoopEatClearanceMm,
   tableTopY,
   tubInnerRadiusMm,
   tubRadiusMm,
@@ -42,8 +43,6 @@ export type KitchenLayout = {
     innerRadius: number;
     yaw: number;
   };
-  /** Lid off, on the table beside the open tub. */
-  lid: { x: number; y: number; z: number; diameter: number; height: number; yaw: number };
   /**
    * @deprecated Same pose as `tub`. Kept for older callers.
    */
@@ -66,12 +65,21 @@ export type KitchenLayout = {
   };
 };
 
+/** Tub axis on −X; mill on +X with a gap past the Ø110 rim. */
+const TUB_X_MM = -90;
+const MILL_GAP_MM = 28;
+
+function millCentreX(): number {
+  return TUB_X_MM + tubRadiusMm() + MILL_GAP_MM + mm(MILL_MM.length) / 2;
+}
+
 function tableSizeForProps(): { width: number; depth: number } {
   const tubR = tubRadiusMm();
   const millHx = mm(MILL_MM.length) / 2;
   const millHz = mm(MILL_MM.width) / 2;
-  const spanX = 85 + tubR + 8 + mm(TUB_MM.lidDiameter) + 75 + millHx;
-  const spanZ = Math.max(tubR, millHz, mm(TUB_MM.lidDiameter) / 2) + 40;
+  const millX = millCentreX();
+  const spanX = Math.max(Math.abs(TUB_X_MM) + tubR, millX + millHx);
+  const spanZ = Math.max(tubR, millHz) + 48;
   return {
     width: Math.ceil(spanX * 2 + TABLE_MARGIN_MM),
     depth: Math.ceil(spanZ * 2 + TABLE_MARGIN_MM),
@@ -98,40 +106,31 @@ export function kitchenLayout(): KitchenLayout {
   const tubR = tubRadiusMm();
   const tubH = mm(TUB_MM.height);
   const tub = {
-    x: -85,
+    x: TUB_X_MM,
     y: topY + tubH / 2,
     z: 0,
     diameter: mm(TUB_MM.diameter),
     height: tubH,
     innerRadius: tubInnerRadiusMm(),
-    yaw: 0,
+    // Cylinder u=0.5 is local −Z; yaw −π/2 aims that front at the mill (+X).
+    yaw: -Math.PI / 2,
   };
   const hy = mm(PILE_MM.height) / 2;
-  const pile = { x: tub.x, y: topY + hy, z: tub.z };
+  const pile = { x: tub.x, y: topY + mm(TUB_MM.wall) + hy, z: tub.z };
   const biteFront = {
     x: pile.x,
-    y: topY + mm(PILE_MM.height) * 0.85,
+    y: topY + mm(TUB_MM.wall) + mm(PILE_MM.height) * 0.85,
     z: pile.z - tubR,
   };
-  const lidR = mm(TUB_MM.lidDiameter) / 2;
-  const lidH = mm(TUB_MM.lidHeight);
-  const lid = {
-    x: tub.x - tubR - lidR - 8,
-    y: topY + lidH / 2,
-    z: 22,
-    diameter: mm(TUB_MM.lidDiameter),
-    height: lidH,
-    yaw: 0.35,
-  };
   const scoop = {
-    x: tub.x + tubR + 14,
-    y: topY + 0.6,
-    z: 18,
-    yaw: -0.4,
+    x: tub.x,
+    y: topY + mm(TUB_MM.wall) + mm(PILE_MM.height),
+    z: tub.z,
+    yaw: 0.2,
   };
   const millHy = mm(MILL_MM.height) / 2;
   const mill = {
-    x: 75,
+    x: millCentreX(),
     y: topY + millHy,
     z: 0,
     yaw: 0,
@@ -141,8 +140,8 @@ export function kitchenLayout(): KitchenLayout {
     deckY: topY + mm(MILL_MM.deck),
   };
   const fly = {
-    x: scoop.x - 4,
-    z: scoop.z - flyVisualLengthMm() * 1.1,
+    x: tub.x,
+    z: tub.z - tubR - flyVisualLengthMm() * 1.4,
   };
   const pouch = {
     x: mill.x,
@@ -165,7 +164,6 @@ export function kitchenLayout(): KitchenLayout {
     scoop,
     mill,
     tub,
-    lid,
     tubSlot,
     pouch,
     table,
@@ -205,6 +203,20 @@ export function pointInBoardFootprint(x: number, z: number, pad = 0): boolean {
 export function supportHeightAt(x: number, z: number, foodHeight: number): number {
   if (foodHeight > 0) return foodHeight;
   return pointInBoardFootprint(x, z) ? tableTopY() : 0;
+}
+
+/**
+ * Table pose for eating from the held scoop: south of the tub (−Z, camera
+ * side), far enough that body and scoop miss the cylinder. Heading π faces
+ * −Z (away from the wall), so the bowl does not aim at the jacket.
+ */
+export function scoopEatStand(): { x: number; z: number; heading: number } {
+  const tub = kitchenLayout().tub;
+  return {
+    x: tub.x,
+    z: tub.z - scoopEatClearanceMm(),
+    heading: Math.PI,
+  };
 }
 
 /**

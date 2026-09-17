@@ -15,7 +15,7 @@ import { asset, loadAtlas, type Atlas } from './lib/atlas';
 import { frameAt, type ActivityFrame, type ModelReplay } from './lib/replay';
 import { t, type Lang } from './i18n';
 import { CREATINE_KFD } from './food/foodProfile';
-import { Hemolymph } from './metabolism/hemolymph';
+import { Hemolymph, MILL_EFFORT } from './metabolism/hemolymph';
 import { MODULATION_PUSH_MS, pushModulation } from './metabolism/modulation';
 import { parseReelMode, REEL_SLOGAN_EN, REEL_SLOGAN_PL } from './hud/reel.ts';
 import {
@@ -87,7 +87,10 @@ export function App() {
       const delta = document.hidden ? 0 : Math.min(0.1, (now - previous) / 1000);
       previous = now;
       if (delta > 0) {
-        hemolymph.current.step(delta);
+        const millWalk = sceneHudRef.current.macro === 'WALK_BIPED_ON_MILL'
+          || sceneHudRef.current.macro === 'WALK_MILL'
+          || sceneHudRef.current.macro === 'WALK_BIPED';
+        hemolymph.current.step(delta, { effort: millWalk ? MILL_EFFORT : 1 });
         pushMs += delta * 1000;
         if (pushMs >= MODULATION_PUSH_MS) {
           pushMs = 0;

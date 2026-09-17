@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { SceneDirector } from '../../src/body/sceneDirector.ts';
 import { overviewFrame, frameForPreset, CAMERA_PRESETS } from '../../src/body/cameras.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
-import { POUCH_MM, flyVisualLengthMm, mm } from '../../src/scene/scale.ts';
+import { CURD_MM, POUCH_MM, flyVisualLengthMm, mm, tableTopY } from '../../src/scene/scale.ts';
 import { TWAROG_MAMUTA_WANILIOWY } from '../../src/food/foodProfile.ts';
 import { fractureCurdBlock } from '../../src/food/proceduralTwarog.ts';
 import { TwarogSystem } from '../../src/food/twarogSystem.ts';
@@ -22,7 +22,7 @@ function makeDirector() {
   const food = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
   return new SceneDirector({
     food,
-    foodOrigin: { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z },
+    foodOrigin: { x: layout.curd.x, y: tableTopY() + mm(CURD_MM.height) / 2, z: layout.curd.z },
     pouch: {
       cx: layout.pouch.x,
       cz: layout.pouch.z,

@@ -37,6 +37,10 @@ export const LOOP_CAPTIONS_PL: Record<string, string> = {
   DROP_SCOOP: 'Odkłada miarkę',
   WALK_MILL: 'Chodzi na bieżni',
   WALK_BIPED: 'Chodzi na dwóch',
+  WALK_BIPED_ON_MILL: 'Chodzi na dwóch',
+  FLY_INTO_TUB: 'Wpada do puszki',
+  FLY_OUT_WITH_SCOOP: 'Wylatuje z miarką',
+  AUTONOMOUS: 'Wędruje',
   EAT_SCOOP: 'Je kreatynę',
 };
 
@@ -54,6 +58,9 @@ const LOOP_CAPTIONS_EN: Record<string, string> = {
   'Odkłada miarkę': 'Putting the scoop down',
   'Chodzi na bieżni': 'Walking the mill',
   'Chodzi na dwóch': 'Walking on two legs',
+  'Wpada do puszki': 'Flying into the tub',
+  'Wylatuje z miarką': 'Flying out with the scoop',
+  'Wędruje': 'Roaming',
   'Je kreatynę': 'Eating creatine',
   'Śpiewa do krowy': 'Singing to the cow',
   'Śliska folia': 'Slippery foil',

@@ -30,7 +30,7 @@ import { CreatineSystem } from '../food/creatineSystem.ts';
 import type { ChemoSample } from '../food/twarogSystem.ts';
 import { createPowderView, type PowderView } from './Powder.tsx';
 import { createFlyViewport } from './flyViewport.ts';
-import { kitchenLayout } from '../scene/layout.ts';
+import { kitchenLayout, scoopEatStand } from '../scene/layout.ts';
 import { crumbSizeMm, flyRootScale, tableTopY } from '../scene/scale.ts';
 import { disposeKitchenTextures, loadKitchenTextures, type KitchenTextures } from '../scene/textures.ts';
 import { disposeCreatineTextures, loadCreatineTextures, type CreatineTextures } from '../scene/creatineTextures.ts';
@@ -435,6 +435,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           dt, mn9Rate, satiety: live.satiety, bitter: live.bitter, odor: live.odor,
           cameraDist: camera.position.distanceTo(powderView.group.position),
           cropVolume: live.cropVolume,
+          hungerDrive: opts.hemoRef?.current.hungerDrive ?? 0.5,
         });
         applyPoseToBones(rig.bones, out.flyPose.pose);
         const abd = rig.bones.get('abdomen');
@@ -506,22 +507,27 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           const grip = new THREE.Matrix4();
           tR.updateWorldMatrix(true, false);
           grip.copy(tR.matrixWorld);
+          const eat = scoopEatStand();
           scoopHandle.update({
-            mode: out.scoop?.mode ?? 'table',
+            mode: out.scoop?.mode ?? 'well',
             fill: out.scoop?.fill ?? 0,
             dipU: out.scoop?.dipU ?? 0,
             table: layout.scoop,
             dropped: {
-              x: layout.mill.x - layout.mill.hx - 10,
-              y: tableTopY() + 0.6,
-              z: layout.mill.z + 16,
-              yaw: 0.3,
+              x: eat.x,
+              y: tableTopY() + 0.8,
+              z: eat.z,
+              yaw: eat.heading + 0.4,
             },
             gripWorld: out.scoop?.mode === 'held' ? grip : null,
             heading: out.flyPose.heading,
           });
         }
-        millHandle?.update(dt, out.mode === 'mill');
+        millHandle?.update(
+          dt,
+          out.macro === 'WALK_BIPED_ON_MILL' || out.macro === 'WALK_MILL' || out.macro === 'WALK_BIPED',
+          out.millDistanceMm,
+        );
         if (out.caption !== lastCaption) {
           lastCaption = out.caption;
           opts.setCaption(out.caption);

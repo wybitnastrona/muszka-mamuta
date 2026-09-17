@@ -27,7 +27,23 @@ export const PHASE_MIN_S: Record<FeedingState, number> = {
   REST: 0,
 };
 
+/** Shorter authored dwell on the reel path only (start→PUMP ≤ 20–30 s). */
+export const PHASE_MIN_REEL_S: Record<FeedingState, number> = {
+  SEARCH: 0,
+  ORIENT: 0,
+  APPROACH: 0.45,
+  TASTE: 0.4,
+  EXTEND: 0.55,
+  PUMP: 0,
+  RETRACT: 0.45,
+  REST: 0,
+};
+
 /** True when `state` has lasted long enough to exit by completion. */
-export function phaseMayComplete(state: FeedingState, stateAgeSec: number): boolean {
-  return stateAgeSec >= PHASE_MIN_S[state];
+export function phaseMayComplete(
+  state: FeedingState,
+  stateAgeSec: number,
+  mins: Record<FeedingState, number> = PHASE_MIN_S,
+): boolean {
+  return stateAgeSec >= mins[state];
 }

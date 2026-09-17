@@ -7,7 +7,9 @@ import { BONE_PALETTE, BONE_COLORS } from './palette.ts';
 import type { Pose } from './types.ts';
 import { attachSplitWings, splitMembraneWings, type WingRig } from './wings.ts';
 import {
+  ensureBristleUv,
   ensurePlanarUv,
+  ensureShaftUv,
   ensureSphericalUv,
   setAbdomenAttributes,
   thinEveryOtherTriangle,
@@ -132,6 +134,8 @@ export function buildFlybodyRig(
     );
     geometry.computeVertexNormals();
     if (part.material === 'red') ensureSphericalUv(geometry);
+    else if (part.material === 'bristle-brown') ensureBristleUv(geometry);
+    else if (part.group === 'front_left' || part.group === 'front_right') ensureShaftUv(geometry);
     else if (part.material !== 'membrane') ensurePlanarUv(geometry);
     if (part.material === 'bristle-brown') thinEveryOtherTriangle(geometry);
 

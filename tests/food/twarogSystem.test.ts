@@ -220,6 +220,7 @@ describe('twarog system', () => {
     expect(far.strength).toBe(0);
     const pumping = contactToGustRates(on, true);
     const idle = contactToGustRates(on, false);
+    expect(pumping.labellarHz).toBeGreaterThan(idle.labellarHz);
     expect(pumping.labellarHz).toBeGreaterThan(1);
     expect(pumping.pharyngealHz).toBeGreaterThan(1);
     expect(idle.pharyngealHz).toBe(0);

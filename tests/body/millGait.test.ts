@@ -1,22 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import { millGaitAdvance } from '../../src/body/gait.ts';
-import { millBeltScroll } from '../../src/body/treadmill.ts';
+import { millBeltScroll, millBeltChevron, millBeltLengthMm, millConsoleLabel, millConsoleLocalPose, millBaseHeightMm, millRailGripWorld, millStandXz, MILL_BELT_SPAN, MILL_HEADING } from '../../src/body/treadmill.ts';
 import { scoopBowlLocal } from '../../src/body/scoop.ts';
-import { FLY_WALK_MM_S, MILL_MM } from '../../src/scene/scale.ts';
+import { MILL_WALK_MM_S } from '../../src/scene/scale.ts';
 
 describe('mill belt + gait', () => {
   it('advances gait distance from belt speed with a stationary root', () => {
     const dt = 1 / 30;
     let d = 0;
-    for (let i = 0; i < 30; i++) d = millGaitAdvance(d, FLY_WALK_MM_S, dt);
-    expect(d).toBeCloseTo(FLY_WALK_MM_S, 5);
+    for (let i = 0; i < 30; i++) d = millGaitAdvance(d, MILL_WALK_MM_S, dt);
+    expect(d).toBeCloseTo(MILL_WALK_MM_S, 5);
   });
 
   it('scrolls belt UV by speed / belt length', () => {
     const dt = 0.5;
-    const belt = MILL_MM.length * 0.78;
+    const belt = millBeltLengthMm();
     const next = millBeltScroll(0, dt);
-    expect(next).toBeCloseTo((FLY_WALK_MM_S / belt) * dt);
+    expect(next).toBeCloseTo((MILL_WALK_MM_S / belt) * dt);
+    expect(MILL_BELT_SPAN).toBeLessThan(0.7);
+    expect(millConsoleLabel(MILL_WALK_MM_S * dt)).toBe(`${Math.round(MILL_WALK_MM_S * dt)} mm`);
+  });
+
+  it('paints chunky high-contrast chevrons, not sub-millimetre noise', () => {
+    expect(millBeltChevron(0.05, 0.5)).not.toBe(millBeltChevron(0.22, 0.5));
+    let flips = 0;
+    let last = millBeltChevron(0, 0.5);
+    for (let i = 1; i <= 30; i++) {
+      const on = millBeltChevron(i / 30, 0.5);
+      if (on !== last) flips += 1;
+      last = on;
+    }
+    expect(flips).toBeGreaterThanOrEqual(4);
+    expect(flips).toBeLessThanOrEqual(8);
+  });
+
+  it('puts the U-rail on +X with left/right grips', () => {
+    const stand = millStandXz();
+    const grip = millRailGripWorld();
+    expect(MILL_HEADING).toBeCloseTo(Math.PI / 2);
+    expect(grip.left.x).toBeGreaterThan(stand.x);
+    expect(grip.right.x).toBe(grip.left.x);
+    expect(grip.left.z).toBeGreaterThan(grip.right.z);
+  });
+
+  it('lays the mm readout flat on the mill pad, camera-facing', () => {
+    const pose = millConsoleLocalPose();
+    const baseH = millBaseHeightMm();
+    expect(pose.rotX).toBeCloseTo(-Math.PI / 2);
+    expect(pose.y - baseH).toBeGreaterThan(0);
+    expect(pose.y - baseH).toBeLessThan(2);
+    expect(pose.x).toBeLessThan(0);
+    expect(Math.abs(pose.z)).toBeLessThan(1);
+    expect(pose.width).toBeGreaterThan(pose.depth);
   });
 });
 

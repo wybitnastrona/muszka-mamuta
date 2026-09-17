@@ -56,6 +56,8 @@ export type MassLedger = {
 
 /** Baseline trehalose drain (1/s). ~0.43 units in 90 min. */
 export const K_TREHALOSE_MET = 8e-5;
+/** Authored mill drain vs rest. Not connectome data. */
+export const MILL_EFFORT = 3.5;
 
 /** Slow fat drain (1/s). */
 export const K_FAT_MET = 2e-5;
@@ -287,15 +289,16 @@ export class Hemolymph {
   }
 
   /** Advance the ODEs. `dtSec` defaults to one 60 fps frame. */
-  step(dtSec = FRAME_MS / 1000): DefecationEvent[] {
+  step(dtSec = FRAME_MS / 1000, opts: { effort?: number } = {}): DefecationEvent[] {
     const dt = Math.max(0, dtSec);
     if (dt === 0) return [];
     this.t += dt;
     const s = this.s;
     const events: DefecationEvent[] = [];
+    const effort = Math.max(1, opts.effort ?? 1);
 
-    s.trehalose = clamp01(s.trehalose - K_TREHALOSE_MET * dt);
-    s.fat = clamp01(s.fat - K_FAT_MET * dt);
+    s.trehalose = clamp01(s.trehalose - K_TREHALOSE_MET * effort * dt);
+    s.fat = clamp01(s.fat - K_FAT_MET * effort * dt);
     s.water = clamp01(s.water - K_WATER_LOSS * dt);
 
     const transfer = Math.min(s.cropVolume, CROP_EMPTY_RATE * dt, 1 - s.gutLoad);

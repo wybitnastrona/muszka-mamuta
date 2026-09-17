@@ -43,8 +43,12 @@ yield_fat(profile) = 0.55 × aa
 
 **Behaviour.** Low trehalose from creatine → satiety rises slowly → she
 returns to the scoop. Vanilla fixture still reaches satiety sooner (high
-`sweet`). The KFD tub is in the live scene: label wrap from product photos;
-Ø/H are authored fly-scale (see `TUB_MM` in `src/scene/scale.ts`).
+`sweet`). The KFD tub is in the live scene: a cut black label band on `#151515`
+plastic (not a photo of the whole jar); powder is an authored 3D mound.
+Tub height is the measured 142 mm product body; Ø ~110 mm follows packshot
+aspect. Wrap is artwork on `#151515`. Mill gait, hex→biped land, and eating
+from the dropped scoop are authored. Mill effort
+(`MILL_EFFORT`) only multiplies the trehalose/fat ODE drain.
 
 ## State (all clamped to [0, 1])
 

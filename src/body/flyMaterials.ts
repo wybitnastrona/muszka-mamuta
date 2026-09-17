@@ -190,13 +190,13 @@ export function createFlyMaterials(quality: RenderQuality = DESKTOP_QUALITY): Fl
     }),
     'bristle-brown': new THREE.MeshPhysicalMaterial({
       color: '#281c10',
-      roughness: 0.72,
+      roughness: 0.78,
       metalness: 0,
       transparent: true,
       alphaMap: bristleAlpha,
-      alphaTest: 0.28,
-      depthWrite: false,
-      side: THREE.DoubleSide,
+      alphaTest: 0.48,
+      depthWrite: true,
+      side: THREE.FrontSide,
     }),
   };
 
@@ -233,6 +233,34 @@ export function ensurePlanarUv(geometry: THREE.BufferGeometry, scale = 48): void
   for (let i = 0; i < pos.count; i++) {
     uv[i * 2] = pos.getX(i) * scale;
     uv[i * 2 + 1] = pos.getZ(i) * scale;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** Shaft UV for hanging legs: U around the limb, V along Y so cuticle is not an XZ smear. */
+export function ensureShaftUv(geometry: THREE.BufferGeometry, scale = 22): void {
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    uv[i * 2] = Math.atan2(x, z) / Math.PI;
+    uv[i * 2 + 1] = y * scale;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+/** Bristle cards: U around the thorax, V along the hair so alpha shafts stay thin. */
+export function ensureBristleUv(geometry: THREE.BufferGeometry, scale = 28): void {
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    uv[i * 2] = (Math.atan2(x, z) / Math.PI) * 6;
+    uv[i * 2 + 1] = y * scale + z * scale * 0.35;
   }
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }

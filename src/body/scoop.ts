@@ -22,7 +22,7 @@ export type ScoopHandle = {
     table: { x: number; y: number; z: number; yaw: number };
     dropped: { x: number; y: number; z: number; yaw: number };
     gripWorld: THREE.Matrix4 | null;
-    heading: number;
+    heading?: number;
   }): void;
   dispose(): void;
 };
@@ -116,7 +116,7 @@ export function createScoop(): ScoopHandle {
   return {
     group,
     powder,
-    update({ mode, fill, dipU = 0, table, dropped, gripWorld, heading }) {
+    update({ mode, fill, dipU = 0, table, dropped, gripWorld }) {
       powder.visible = fill > 0.04;
       powder.scale.set(1, Math.max(0.08, fill), 1);
       if (mode === 'held' && gripWorld) {
@@ -138,7 +138,8 @@ export function createScoop(): ScoopHandle {
       }
       const pose = mode === 'dropped' ? dropped : table;
       group.position.set(pose.x, pose.y, pose.z);
-      group.rotation.set(-1.15, pose.yaw + heading, 0.2);
+      // Well and dropped: lie on the powder / table, not a planted stick.
+      group.rotation.set(mode === 'well' ? -1.22 : -1.18, pose.yaw, 0.08);
       group.visible = true;
     },
     dispose() {

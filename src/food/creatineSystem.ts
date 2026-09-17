@@ -4,7 +4,7 @@
  * MaleCNS has no creatine / Ir76b annotations (verified 0 hits).
  */
 import { CREATINE_KFD, type FoodProfile } from './foodProfile.ts';
-import { makePowderChunks } from './powderPile.ts';
+import { makePowderChunks, pileHeightAt } from './powderPile.ts';
 import {
   contactToGustRates,
   TwarogSystem,
@@ -15,13 +15,23 @@ import {
   type Vec3,
   type XzAabb,
 } from './twarogSystem.ts';
-import { SCOOP_CAPACITY_G, SCOOP_EMPTY_S, TUB_MM, mm, tableTopY } from '../scene/scale.ts';
+import {
+  PILE_MM,
+  SCOOP_CAPACITY_G,
+  SCOOP_EMPTY_S,
+  TUB_MM,
+  flyVisualLengthMm,
+  mm,
+  tableTopY,
+  tubInnerRadiusMm,
+} from '../scene/scale.ts';
+import { scoopEatStand } from '../scene/layout.ts';
 
-export type ScoopMode = 'table' | 'held' | 'dropped';
+export type ScoopMode = 'well' | 'held' | 'dropped';
 
 export class CreatineSystem extends TwarogSystem {
   scoopFill = 0;
-  scoopMode: ScoopMode = 'table';
+  scoopMode: ScoopMode = 'well';
   readonly profile: FoodProfile;
   private scoopMassGrams = 0;
   private lastDipIndex = 0;
@@ -38,7 +48,7 @@ export class CreatineSystem extends TwarogSystem {
   static create(opts: { seed?: number; store?: KvStore | null; profile?: FoodProfile } = {}): CreatineSystem {
     const spec = makePowderChunks({ seed: opts.seed });
     const tubR = mm(TUB_MM.diameter) / 2;
-    return new CreatineSystem(spec.chunks, spec.biteFront, {
+    const sys = new CreatineSystem(spec.chunks, spec.biteFront, {
       seed: opts.seed,
       store: opts.store,
       hx: tubR,
@@ -46,6 +56,8 @@ export class CreatineSystem extends TwarogSystem {
       hz: tubR,
       profile: opts.profile,
     });
+    sys.fillWell();
+    return sys;
   }
 
   /** Collision / approach hull is the tub, not the shrinking powder AABB. */
@@ -54,8 +66,18 @@ export class CreatineSystem extends TwarogSystem {
     return { cx: origin.x, cz: origin.z, hx: r, hz: r };
   }
 
-  /** The fly stands on the table, never in the well. */
-  override supportHeightAt(_x: number, _z: number, _foodOrigin: Vec3): number {
+  /** In the well the fly stands on the powder mound, not the table. */
+  override supportHeightAt(x: number, z: number, foodOrigin: Vec3): number {
+    const dx = x - foodOrigin.x;
+    const dz = z - foodOrigin.z;
+    if (Math.hypot(dx, dz) < tubInnerRadiusMm()) {
+      return tableTopY() + mm(TUB_MM.wall) + pileHeightAt(
+        dx,
+        dz,
+        mm(PILE_MM.radius),
+        mm(PILE_MM.height),
+      );
+    }
     return tableTopY();
   }
 
@@ -68,13 +90,26 @@ export class CreatineSystem extends TwarogSystem {
   }
 
   resetScoop(): void {
-    this.scoopMode = 'table';
+    this.scoopMode = 'well';
     this.scoopFill = 0;
     this.scoopMassGrams = 0;
   }
 
+  /** Pre-fill the scoop on the powder surface. Stays in the well until pick(). */
+  fillWell(grams = SCOOP_CAPACITY_G): number {
+    const taken = this.takeIntoScoop(grams);
+    this.scoopMode = 'well';
+    return taken;
+  }
+
   /** Move surface powder into the scoop (mass leaves the pile). */
   dip(grams = SCOOP_CAPACITY_G): number {
+    const taken = this.takeIntoScoop(grams);
+    this.scoopMode = 'held';
+    return taken;
+  }
+
+  private takeIntoScoop(grams: number): number {
     const ranked = this.chunks
       .filter((c) => !c.eaten)
       .sort((a, b) => b.topY - a.topY || a.biteDistance - b.biteDistance);
@@ -87,18 +122,22 @@ export class CreatineSystem extends TwarogSystem {
     }
     this.scoopMassGrams = taken;
     this.scoopFill = taken > 0 ? 1 : 0;
-    this.scoopMode = 'held';
     return taken;
   }
 
   override reset(): void {
     super.reset();
     this.resetScoop();
+    this.fillWell();
   }
 
   override step(input: TwarogStepInput): TwarogStepResult {
     const holding = this.scoopMode === 'held';
-    const tastingBowl = holding && this.scoopFill > 0;
+    const stand = scoopEatStand();
+    const nearBowl = Math.hypot(input.flyXZ.x - stand.x, input.flyXZ.z - stand.z)
+      < flyVisualLengthMm() * 1.8;
+    const labellumDown = input.tasting || input.pumping;
+    const tastingBowl = this.scoopMode === 'dropped' && this.scoopFill > 0 && nearBowl && labellumDown;
     const siphonEvents: TwarogStepResult['events'] = [];
     if (tastingBowl && input.pumping) {
       const before = this.scoopFill;
@@ -118,7 +157,7 @@ export class CreatineSystem extends TwarogSystem {
     const labellum = tastingBowl ? this.biteFront : input.labellum;
     const out = super.step({
       ...input,
-      pumping: holding ? false : input.pumping,
+      pumping: tastingBowl || holding ? false : input.pumping,
       labellum,
       tasting: input.tasting || tastingBowl,
       profile: input.profile ?? this.profile,

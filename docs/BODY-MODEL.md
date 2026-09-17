@@ -234,45 +234,63 @@ here: repeated PUMP at one spot bores a column to the board (pre-existing).
 | `ground` | tub AABB (`foodStandPadMm`) + mill OBB | standing height | +Y cone |
 | `flight` | tub AABB + table (mill is **not** a flight solid so she can land on the belt) + 200 ms saccade lookahead | support…220 mm | +Y cone |
 | `onFood` | centre stays out of the interior | `supportHeightAt` each frame | +Y cone |
-| `mill` | root locked to belt centre | mill `deckY` + stand offset | +Y cone (biped gag: authored pitch 0.48 rad) |
+| `mill` | root locked near the +X rail (`millStandXz`) | mill `deckY` + stand offset | authored pitch ≈ −78° (biped gag) |
 
 ## Scene loop
 
 `src/body/sceneLoop.ts` sits **above** the feeding FSM. Soft duration caps;
-each state exits on its own completion. The default **reel** loop is scoop →
-powder → mill. Flight is punctuation onto the mill. `?loop=full` restores the
-debug ORBIT / EXIT_FRAME path (flight code is not deleted).
+each state exits on its own completion. The default **reel** loop flies into the
+open tub, lands on the powder mound, grabs a pre-filled scoop, puts it down,
+eats from the lying bowl (MN9-gated), then lands hexapod on the mill, stands
+up, and walks slowly. `?loop=full` restores the debug ORBIT / EXIT_FRAME path
+(flight code is not deleted). Spline states ghost the tub AABB so she can
+enter the well; `supportHeightAt` in the well is the powder surface.
 
 **Reel (default):**
 
 ```
-WALK_SCOOP → PICK_SCOOP → APPROACH_TUB → DIP_SCOOP →
-EAT_SCOOP (Feeding FSM TASTE→EXTEND→PUMP→RETRACT; MN9 gates EXTEND;
-food = powder in the scoop bowl) → DROP_SCOOP → GROOM_short →
-TAKEOFF_MILL → LAND_MILL → WALK_MILL (hexapod in place, belt scrolls) →
-WALK_BIPED (authored hind-leg gag) → GROOM_full →
-NAP? (satiety > 0.8 after a feeding bout) → WAKE → WALK_SCOOP …
+FLY_INTO_TUB (lands on the 1/3-height mound) → PICK_SCOOP → FLY_OUT_WITH_SCOOP →
+DROP_SCOOP → EAT_SCOOP (Feeding FSM TASTE→EXTEND→PUMP→RETRACT; MN9 gates EXTEND;
+food = powder in the *dropped* scoop bowl; held scoop does not siphon) →
+TAKEOFF_MILL → LAND_MILL (six legs on the belt, pitch 0) →
+WALK_BIPED_ON_MILL (20–30 s; authored rail reach, slow hind millGait, xz lock) →
+AUTONOMOUS (hemolymph roam: hunger → scoop+EAT, satiety → groom/rest;
+authored, never writes ActivityFrame)
 ```
 
-Open KFD tub (`src/food/creatineTub.ts`) at `kitchenLayout().tub`: photo label wrap on an authored cylinder. Powder fill lives in the well (`PILE_MM` inside `tubInnerRadiusMm()`). The lid sits beside the tub. Ø/H are reel-scale (not the 500 g jar). The kitchen env map is unchanged (`env_512.jpg`).
+Open KFD tub (`src/food/creatineTub.ts`) at `kitchenLayout().tub`: wrap is a
+**cut label band** from the studio packshot plus side photos, composited onto
+black plastic `#151515` (4096×1024, front at u=0.5 / local −Z). Tub yaw is
+−π/2 so that face looks at the mill (+X) — not a photogrammetry of the jar.
+Powder in the well is an authored 3D mound (`pileHeightAt`, crumb albedo),
+one third of the 142 mm measured open-body height; Ø ~110 mm follows packshot
+aspect. The scoop lies on the mound, pre-filled. Eat / drop stand is
+`scoopEatStand()` (south of the Ø110 axis) so body and scoop miss the cylinder.
+The lid is **not** in the live scene. MaleCNS is unchanged (gustatory → MN9). The kitchen env map is unchanged
+(`env_512.jpg`).
 
-`NAP` only if satiety > 0.8 after a feeding bout (Murphy 2016). HUD caption
-during NAP: **Trawi**. The biped walk is **not** Drosophila literature — mid/hind
-bones are procedural (`src/body/bipedGait.ts`).
+`NAP` only if satiety > 0.8 after a feeding bout (Murphy 2016) on the full loop. HUD caption
+during NAP: **Trawi**. The biped mill walk is **not** Drosophila literature — mid/hind
+bones are procedural (`src/body/bipedGait.ts`); foreleg rail reach is posed Eulers,
+not IK. Mill effort multiplies hemolymph trehalose/fat drain (authored ODE).
 
 **Full (`?loop=full`):**
 
 ```
-ORBIT → LAND_TOP → WALK_SCOOP → … → WALK_BIPED → GROOM_full →
+ORBIT → LAND_TOP → FLY_INTO_TUB → … → WALK_BIPED_ON_MILL → GROOM_full →
 NAP? → WAKE → TAKEOFF_EXIT → EXIT_FRAME → reset portion → ORBIT …
 ```
 
 ## Mill gait
 
 `src/body/gait.ts` `millGaitAdvance`: on the belt, `gaitDistance += beltSpeed * dt`
-even when the root ΔXZ is 0. Default belt speed is `FLY_WALK_MM_S` (14 mm/s).
-Feet vs belt, not vs table. Hexapod remains M-tripod; `WALK_BIPED` is a
-separate authored gag.
+even when the root ΔXZ is 0. Mill belt speed is `MILL_WALK_MM_S` (4.5 mm/s;
+table roam stays `FLY_WALK_MM_S` = 14). Feet vs belt, not vs table.
+`LAND_MILL` plants six legs; `WALK_BIPED_ON_MILL` is the authored rail gag
+(heading π/2 along the belt). The mill console is a horizontal readout on the
+motor-end mill pad (same height as the chassis top) and shows session millimetres from
+that gait, not from root ΔXZ. The belt is shorter than the roller span so the
+drums stay visible.
 
 ## Grooming and sleep
 
