@@ -146,7 +146,8 @@ describe('supportHeightAt table / board / block', () => {
     expect(pointInXzAabb(onBoard, sys.worldAabb(origin))).toBe(false);
     expect(sys.supportHeightAt(onBoard.x, onBoard.z, origin)).toBe(boardTopY());
 
-    const top = sys.chunks.reduce((a, c) => (c.topY > a.topY ? c : a));
+    // Tallest *uneaten* cell: the opening-bite crater cells are gone at serve time.
+    const top = sys.chunks.filter((c) => !c.eaten).reduce((a, c) => (c.topY > a.topY ? c : a));
     const wx = origin.x + top.centroid.x;
     const wz = origin.z + top.centroid.z;
     const blockY = sys.supportHeightAt(wx, wz, origin);
