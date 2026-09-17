@@ -18,11 +18,14 @@ import {
   clampLandTarget,
   loomingHit,
   obbAabbHull,
+  orbitRadiusFloor,
   resolveSolids,
   yawAwayFromBox,
   type Aabb3,
+  type Normal3,
   type Obb3,
 } from './collision.ts';
+import { CURD_MM, bodyCollisionPadMm } from '../scene/scale.ts';
 
 export const SACCADE_TURN_S = 0.05;
 export const SACCADE_STRAIGHT_MIN_S = 0.15;
@@ -31,8 +34,14 @@ export const BANK_DEG_MIN = 20;
 export const BANK_DEG_MAX = 30;
 export const WOBBLE_HZ = 1.5;
 export const WOBBLE_MM = 3;
+/**
+ * Authored orbit band. The effective minimum is raised per world by
+ * `orbitRadiusFloor` (box diagonal + body pad + clearance); see collision.ts.
+ */
 export const ORBIT_RADIUS_MIN = 60;
 export const ORBIT_RADIUS_MAX = 120;
+/** Extra XZ clearance between the fly centre and any solid's corner while orbiting. */
+export const ORBIT_CLEARANCE_MM = 8;
 export const ORBIT_SACCADE_MIN_S = 0.2;
 export const ORBIT_SACCADE_MAX_S = 0.5;
 export const EYE_FOV_DEG = 150;
@@ -46,7 +55,8 @@ export const TAKEOFF2_TUMBLE_S = 0.3;
 export const TAKEOFF2_TURNS = 2;
 export const CRUISE_MM_S = 90;
 export const LAND_TAU_S = 0.45;
-export const FOOD_HALF_SIZE_MM = 40;
+/** Largest XZ half-extent of the twaróg block (100 × 80 mm → 50). Used for angular size. */
+export const FOOD_HALF_SIZE_MM = Math.max(CURD_MM.length, CURD_MM.width) / 2;
 export { LOOKAHEAD_S, FLIGHT_CEILING_MM };
 
 export type Vec3 = { x: number; y: number; z: number };
@@ -180,6 +190,10 @@ export class FlightController {
   private obbs: Obb3[] = [];
   private floorY = 0;
   private ceilingY = FLIGHT_CEILING_MM;
+  /** Normal of the face we were last pushed out along; hysteresis for edge chatter. */
+  private lastNormal: Normal3 | null = null;
+  /** Solid hits this frame's update resolved (0 when the path is clear). */
+  hitCount = 0;
 
   setWorld(opts: {
     obstacles?: Aabb3[];
@@ -229,10 +243,11 @@ export class FlightController {
     this.target = { ...opts.target };
     this.circuitsNeeded = opts.circuits;
     this.circuits = 0;
-    this.radius = opts.radius ?? rngRange(this.rng, ORBIT_RADIUS_MIN, ORBIT_RADIUS_MAX);
-    this.startRadius = this.radius;
     this.altitude = opts.altitude ?? 28;
     this.startAlt = this.altitude;
+    const floor = this.orbitFloor();
+    this.radius = Math.max(floor, opts.radius ?? rngRange(this.rng, ORBIT_RADIUS_MIN, ORBIT_RADIUS_MAX));
+    this.startRadius = this.radius;
     this.descend = !!opts.descend;
     this.orbitAngle = Math.atan2(this.position.x - this.target.x, this.position.z - this.target.z);
     this.heading = wrapPi(this.orbitAngle + Math.PI / 2);
@@ -340,7 +355,7 @@ export class FlightController {
     const tOrbit = this.orbitAngle / (2 * Math.PI);
     if (this.descend) {
       const u = clamp01(tOrbit / Math.max(0.001, this.circuitsNeeded));
-      this.radius = lerp(this.startRadius, ORBIT_RADIUS_MIN, u);
+      this.radius = lerp(this.startRadius, Math.max(ORBIT_RADIUS_MIN, this.orbitFloor()), u);
       this.altitude = lerp(this.startAlt, 14, u);
     }
     const seg = this.segs[this.segIndex];
@@ -571,10 +586,38 @@ export class FlightController {
     return floor;
   }
 
+  /**
+   * Smallest orbit radius that clears every solid whose footprint holds the
+   * orbit target (the twaróg when orbiting the food). Solids elsewhere are
+   * handled by `steerAroundSolids`, not by widening the circle.
+   */
+  orbitFloor(): number {
+    const pad = bodyCollisionPadMm();
+    let floor = 0;
+    // The table and the board hold the food in XZ too, but orbiting outside
+    // a 400 mm board is not what "orbit the twaróg" means: only the solid the
+    // target actually sits inside (3D, small tolerance) constrains the circle.
+    const constrains = (b: Aabb3) =>
+      Math.abs(this.target.x - b.cx) <= b.hx + 1
+      && Math.abs(this.target.z - b.cz) <= b.hz + 1
+      && Math.abs(this.target.y - b.cy) <= b.hy + 1;
+    for (const box of this.obstacles) {
+      if (constrains(box)) floor = Math.max(floor, orbitRadiusFloor(box, pad, ORBIT_CLEARANCE_MM));
+    }
+    for (const obb of this.obbs) {
+      const hull = obbAabbHull(obb);
+      if (constrains(hull)) floor = Math.max(floor, orbitRadiusFloor(hull, pad, ORBIT_CLEARANCE_MM));
+    }
+    return floor;
+  }
+
   private applySolidConstraints(): void {
-    const out = resolveSolids(this.position, this.velocity, this.obstacles, this.obbs);
+    const out = resolveSolids(this.position, this.velocity, this.obstacles, this.obbs, 0, this.lastNormal);
     this.position = out.position;
     this.velocity = out.velocity;
+    this.hitCount = out.hit ? this.hitCount + 1 : 0;
+    if (out.normal) this.lastNormal = out.normal;
+    else if (!out.hit) this.lastNormal = null;
     this.position.y = clamp(this.position.y, this.supportFloor(), this.ceilingY);
   }
 }

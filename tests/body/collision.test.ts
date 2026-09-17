@@ -4,8 +4,10 @@ import {
   aabbTopY,
   bodyUpAxis,
   clampLandTarget,
+  orbitRadiusFloor,
   pointInAabb3,
   resolveAabb3,
+  resolveSolids,
   slerpTowardUpCone,
   tiltFromNormal,
   type Aabb3,
@@ -30,6 +32,40 @@ describe('3D exclusion', () => {
     expect(out.hit).toBe(true);
     expect(Math.hypot(out.velocity.x, out.velocity.y, out.velocity.z)).toBeGreaterThan(4);
     expect(out.velocity.x * out.nx + out.velocity.y * out.ny + out.velocity.z * out.nz).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it('keeps the previous face near an edge (hysteresis) unless another is far closer', () => {
+    // 1.0 mm from +X face, 0.9 mm from +Z face: nearest is +Z.
+    const p = { x: 39, y: 15, z: 49.1 };
+    const v = { x: 0, y: 0, z: 0 };
+    const nearest = resolveAabb3(p, v, food);
+    expect(nearest.nz).toBe(1);
+    const sticky = resolveAabb3(p, v, food, 0, { nx: 1, ny: 0, nz: 0 });
+    expect(sticky.nx).toBe(1);
+    // 3 mm from +X but 0.5 mm from +Z: the preferred face loses.
+    const far = resolveAabb3({ x: 37, y: 15, z: 49.5 }, v, food, 0, { nx: 1, ny: 0, nz: 0 });
+    expect(far.nz).toBe(1);
+  });
+
+  it('never flips faces frame to frame while gliding along an edge', () => {
+    let prefer: { nx: number; ny: number; nz: number } | null = null;
+    let flips = 0;
+    // Glide along the +X/+Z edge, staying marginally inside both faces
+    // (distances 0.7–0.9 mm, i.e. within the 25% hysteresis band).
+    for (let i = 0; i < 120; i++) {
+      const jitter = Math.sin(i * 0.9) * 0.1;
+      const p = { x: 39.2 + jitter, y: 15, z: 49.2 - jitter };
+      const out = resolveSolids(p, { x: 0, y: 0, z: -30 }, [food], [], 0, prefer);
+      expect(out.hit).toBe(true);
+      if (prefer && out.normal && (out.normal.nx !== prefer.nx || out.normal.nz !== prefer.nz)) flips++;
+      prefer = out.normal;
+    }
+    expect(flips).toBeLessThanOrEqual(2);
+  });
+
+  it('orbit floor clears the box diagonal plus body pad and clearance', () => {
+    expect(orbitRadiusFloor(food, 5, 8)).toBeCloseTo(Math.hypot(40, 50) + 13, 6);
+    expect(orbitRadiusFloor(food, 0, 0)).toBeGreaterThan(60);
   });
 });
 

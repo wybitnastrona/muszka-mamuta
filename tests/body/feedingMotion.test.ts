@@ -107,6 +107,7 @@ describe('debug query and cameras', () => {
     expect(parseDebugMode('debug=pump')).toBe('pump');
     expect(parseDebugMode('debug=label')).toBe('label');
     expect(parseDebugMode('debug=gate')).toBe('gate');
+    expect(parseDebugMode('debug=flight')).toBe('flight');
     expect(parseDebugMode('?debug=match')).toBe('off');
     expect(parseDebugMode('?debug=grade')).toBe('off');
     expect(parseDebugMode('')).toBe('off');

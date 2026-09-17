@@ -22,7 +22,8 @@ export function parseDebugMode(search = typeof window === 'undefined' ? '' : win
     raw === 'extend' ||
     raw === 'pump' ||
     raw === 'label' ||
-    raw === 'gate'
+    raw === 'gate' ||
+    raw === 'flight'
   ) {
     return raw;
   }

@@ -100,4 +100,4 @@ export type FeedingEvent =
   | { type: 'consume'; massGrams: number; chunkId: number; t: number; centroid?: { x: number; y: number; z: number } }
   | { type: 'portion'; count: number; t: number };
 
-export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump' | 'label' | 'gate';
+export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump' | 'label' | 'gate' | 'flight';

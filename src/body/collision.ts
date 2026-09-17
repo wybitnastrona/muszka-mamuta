@@ -35,6 +35,16 @@ export function pointInAabb3(p: Vec3, b: Aabb3, pad = 0): boolean {
 
 type Face = { nx: number; ny: number; nz: number; dist: number };
 
+export type Normal3 = { nx: number; ny: number; nz: number };
+
+/**
+ * Face-choice hysteresis. Near an edge two faces are almost equidistant and
+ * the nearest one flips every frame, which reads as sliding along the edge.
+ * A face matching the previous frame's normal wins unless another face is
+ * more than 25% closer.
+ */
+export const FACE_HYSTERESIS = 0.75;
+
 function insideFaces(p: Vec3, b: Aabb3, pad: number): Face[] {
   const hx = b.hx + pad;
   const hy = b.hy + pad;
@@ -61,14 +71,19 @@ export function resolveAabb3(
   v: Vec3,
   b: Aabb3,
   pad = 0,
+  prefer: Normal3 | null = null,
 ): { position: Vec3; velocity: Vec3; hit: boolean; nx: number; ny: number; nz: number } {
   if (!pointInAabb3(p, b, pad)) {
     return { position: { ...p }, velocity: { ...v }, hit: false, nx: 0, ny: 0, nz: 0 };
   }
   const faces = insideFaces(p, b, pad).filter((f) => f.ny >= 0);
+  const score = (f: Face) => {
+    const same = prefer && f.nx === prefer.nx && f.ny === prefer.ny && f.nz === prefer.nz;
+    return same ? f.dist * FACE_HYSTERESIS : f.dist;
+  };
   let best = faces[0]!;
   for (const f of faces) {
-    if (f.dist < best.dist) best = f;
+    if (score(f) < score(best)) best = f;
   }
   const position = {
     x: p.x + best.nx * (best.dist + EPS),
@@ -126,11 +141,23 @@ export function resolveObb3(
   v: Vec3,
   obb: Obb3,
   pad = 0,
+  prefer: Normal3 | null = null,
 ): { position: Vec3; velocity: Vec3; hit: boolean; nx: number; ny: number; nz: number } {
   const box: Aabb3 = { cx: 0, cy: 0, cz: 0, hx: obb.hx, hy: obb.hy, hz: obb.hz };
   const localP = toLocalObb(p, obb);
   const localV = toLocalDir(v, obb.yaw);
-  const out = resolveAabb3(localP, localV, box, pad);
+  let localPrefer: Normal3 | null = null;
+  if (prefer) {
+    const l = toLocalDir({ x: prefer.nx, y: prefer.ny, z: prefer.nz }, obb.yaw);
+    // Snap to the dominant local axis so the equality test in resolveAabb3 can match.
+    const ax = Math.abs(l.x);
+    const ay = Math.abs(l.y);
+    const az = Math.abs(l.z);
+    if (ax >= ay && ax >= az) localPrefer = { nx: Math.sign(l.x), ny: 0, nz: 0 };
+    else if (ay >= az) localPrefer = { nx: 0, ny: Math.sign(l.y), nz: 0 };
+    else localPrefer = { nx: 0, ny: 0, nz: Math.sign(l.z) };
+  }
+  const out = resolveAabb3(localP, localV, box, pad, localPrefer);
   const n = fromLocalObbDir({ x: out.nx, y: out.ny, z: out.nz }, obb);
   return {
     position: fromLocalObb(out.position, obb),
@@ -148,33 +175,46 @@ export function resolveSolids(
   aabbs: readonly Aabb3[],
   obbs: readonly Obb3[] = [],
   pad = 0,
-): { position: Vec3; velocity: Vec3; hit: boolean } {
+  prefer: Normal3 | null = null,
+): { position: Vec3; velocity: Vec3; hit: boolean; normal: Normal3 | null } {
   let position = { ...p };
   let velocity = { ...v };
   let hit = false;
+  let normal: Normal3 | null = null;
   for (let i = 0; i < 4; i++) {
     let moved = false;
     for (const box of aabbs) {
-      const out = resolveAabb3(position, velocity, box, pad);
+      const out = resolveAabb3(position, velocity, box, pad, prefer);
       position = out.position;
       velocity = out.velocity;
       if (out.hit) {
         hit = true;
         moved = true;
+        normal = { nx: out.nx, ny: out.ny, nz: out.nz };
       }
     }
     for (const obb of obbs) {
-      const out = resolveObb3(position, velocity, obb, pad);
+      const out = resolveObb3(position, velocity, obb, pad, prefer);
       position = out.position;
       velocity = out.velocity;
       if (out.hit) {
         hit = true;
         moved = true;
+        normal = { nx: out.nx, ny: out.ny, nz: out.nz };
       }
     }
     if (!moved) break;
   }
-  return { position, velocity, hit };
+  return { position, velocity, hit, normal };
+}
+
+/**
+ * Smallest orbit radius that keeps the fly centre clear of a box's corners.
+ * The old constant (60 mm) sat inside the twaróg's 64 mm XZ diagonal, so the
+ * orbit was resolved onto a side face every frame — "flying along the edge".
+ */
+export function orbitRadiusFloor(box: Aabb3, pad: number, clearance: number): number {
+  return Math.hypot(box.hx, box.hz) + Math.max(0, pad) + Math.max(0, clearance);
 }
 
 /** Axis-aligned hull of a yawed box — used for 200 ms flight lookahead. */

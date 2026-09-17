@@ -128,6 +128,24 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     gateEl.className = 'fly-debug-gate';
     (element.parentElement ?? element).appendChild(gateEl);
   }
+  // `?debug=flight`: solid boxes plus the 200 ms lookahead segment. Camera
+  // logic runs as in 'off' so the reel path can be watched with helpers on.
+  const cameraLive = debug === 'off' || debug === 'flight';
+  const flightDebug = new THREE.Group();
+  flightDebug.name = 'flightDebug';
+  flightDebug.visible = debug === 'flight';
+  const flightBoxes: THREE.Box3Helper[] = [];
+  const flightObbs: THREE.LineSegments[] = [];
+  const lookaheadGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const lookahead = new THREE.Line(lookaheadGeom, new THREE.LineBasicMaterial({ color: 0xffd166 }));
+  let flightEl: HTMLPreElement | null = null;
+  if (debug === 'flight') {
+    flightDebug.add(lookahead);
+    world.add(flightDebug);
+    flightEl = document.createElement('pre');
+    flightEl.className = 'fly-debug-gate';
+    (element.parentElement ?? element).appendChild(flightEl);
+  }
   const spoon = kitchen.spoon;
   const gagShadow = kitchen.gagShadow;
   const antennaFlick = new AntennaFlick();
@@ -141,6 +159,53 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   gagCrumb.visible = false;
   world.add(gagCrumb);
   const rootEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+  const obbOutline = (hx: number, hy: number, hz: number): THREE.LineSegments => {
+    const geom = new THREE.EdgesGeometry(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2));
+    return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color: 0x6ee7b7 }));
+  };
+
+  const updateFlightDebug = (d: SceneDirector, mode: 'ground' | 'flight' | 'onFood') => {
+    const s = d.debugSolids();
+    while (flightBoxes.length < s.aabbs.length) {
+      const h = new THREE.Box3Helper(new THREE.Box3(), 0xf87171);
+      flightBoxes.push(h);
+      flightDebug.add(h);
+    }
+    s.aabbs.forEach((b, i) => {
+      flightBoxes[i]!.box.set(
+        new THREE.Vector3(b.cx - b.hx, b.cy - b.hy, b.cz - b.hz),
+        new THREE.Vector3(b.cx + b.hx, b.cy + b.hy, b.cz + b.hz),
+      );
+    });
+    while (flightObbs.length < s.obbs.length) {
+      const o = s.obbs[flightObbs.length]!;
+      const l = obbOutline(o.hx, o.hy, o.hz);
+      flightObbs.push(l);
+      flightDebug.add(l);
+    }
+    s.obbs.forEach((o, i) => {
+      flightObbs[i]!.position.set(o.cx, o.cy, o.cz);
+      // toLocalObb is the inverse of a three.js +Y rotation by `yaw` (pack.group.rotation.y = yaw).
+      flightObbs[i]!.rotation.y = o.yaw;
+    });
+    const pos = lookaheadGeom.getAttribute('position') as THREE.BufferAttribute;
+    pos.setXYZ(0, s.lookahead.from.x, s.lookahead.from.y, s.lookahead.from.z);
+    pos.setXYZ(1, s.lookahead.to.x, s.lookahead.to.y, s.lookahead.to.z);
+    pos.needsUpdate = true;
+    if (flightEl) {
+      const food = s.aabbs[0]!;
+      const dx = Math.max(0, Math.abs(s.lookahead.from.x - food.cx) - food.hx);
+      const dz = Math.max(0, Math.abs(s.lookahead.from.z - food.cz) - food.hz);
+      flightEl.textContent = [
+        `mode          ${mode}`,
+        `loop          ${d.loop.state}`,
+        `flight        ${d.flight.kind}`,
+        `xz gap→food   ${Math.hypot(dx, dz).toFixed(1)} mm`,
+        `solid hits    ${s.flightHits}`,
+      ].join('\n');
+    }
+  };
 
   const toFood = (worldPt: THREE.Vector3) => {
     tmp.copy(worldPt);
@@ -468,6 +533,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           });
         }
         twarogView.update(dt, director.food);
+        if (flightEl) updateFlightDebug(director, out.mode);
         if (out.loopWrapped && rec) void rec.stop();
       }
       world.updateMatrixWorld(true);
@@ -476,15 +542,15 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
         frameWeights();
       } else if (debug === 'label' && packLabel) {
         if (appliedPreset !== want) applyPreset(want);
-      } else if (want === 'Reel' && debug === 'off') {
+      } else if (want === 'Reel' && cameraLive) {
         if (appliedPreset !== want) applyPreset(want);
         applyReelCamera(sceneTime);
-      } else if (want === 'Zbliżenie' && debug === 'off') {
+      } else if (want === 'Zbliżenie' && cameraLive) {
         if (appliedPreset !== want) applyPreset(want);
         updateCloseup(Math.max(dt, 1 / 60));
       } else if (want !== appliedPreset) applyPreset(want);
       updateStudioFog(view.scene, camera, boardCentre);
-      if (debug === 'off') updateDof(want);
+      if (cameraLive) updateDof(want);
     }
     view.draw();
     if (rec) rec.capture(renderer.domElement);

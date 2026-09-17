@@ -32,6 +32,7 @@ import {
 import { FlightController } from './flight.ts';
 import {
   FLIGHT_CEILING_MM,
+  LOOKAHEAD_S,
   resolveSolids,
   slerpTowardUpCone,
   type Aabb3,
@@ -834,6 +835,29 @@ export class SceneDirector {
     };
   }
 
+  /** Solids and the 200 ms lookahead segment, for the `?debug=flight` overlay. */
+  debugSolids(): {
+    aabbs: Aabb3[];
+    obbs: Obb3[];
+    lookahead: { from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } };
+    flightHits: number;
+  } {
+    const from = { x: this.position.x, y: this.position.y, z: this.position.z };
+    return {
+      aabbs: [this.foodAabb3(), this.tableAabb3()],
+      obbs: [this.pouchObb3(), this.boardObb3()],
+      lookahead: {
+        from,
+        to: {
+          x: from.x + this.velocity.x * LOOKAHEAD_S,
+          y: from.y + this.velocity.y * LOOKAHEAD_S,
+          z: from.z + this.velocity.z * LOOKAHEAD_S,
+        },
+      },
+      flightHits: this.flight.hitCount,
+    };
+  }
+
   private syncFlightWorld(): void {
     this.flight.setWorld({
       obstacles: [this.foodAabb3(), this.tableAabb3()],
@@ -907,19 +931,24 @@ export class SceneDirector {
       this.position.z = packPos.z;
     }
 
-    const skipBoard = this.stepping && this.stepToY > this.stepFromY;
-    const aabbs = this.mode === 'onFood' ? [this.tableAabb3()] : [this.foodAabb3(), this.tableAabb3()];
-    const obbs = skipBoard
-      ? [this.pouchObb3()]
-      : [this.pouchObb3(), this.boardObb3()];
-    const resolved = resolveSolids(
-      { x: this.position.x, y: this.position.y, z: this.position.z },
-      { x: this.velocity.x, y: this.velocity.y, z: this.velocity.z },
-      aabbs,
-      obbs,
-    );
-    this.position.set(resolved.position.x, resolved.position.y, resolved.position.z);
-    this.velocity.set(resolved.velocity.x, resolved.velocity.y, resolved.velocity.z);
+    // In flight the FlightController already resolved solids (with face
+    // hysteresis) inside `update()`; resolving again here with a different
+    // face choice produced edge chatter. Ground / onFood still resolve here.
+    if (this.mode !== 'flight') {
+      const skipBoard = this.stepping && this.stepToY > this.stepFromY;
+      const aabbs = this.mode === 'onFood' ? [this.tableAabb3()] : [this.foodAabb3(), this.tableAabb3()];
+      const obbs = skipBoard
+        ? [this.pouchObb3()]
+        : [this.pouchObb3(), this.boardObb3()];
+      const resolved = resolveSolids(
+        { x: this.position.x, y: this.position.y, z: this.position.z },
+        { x: this.velocity.x, y: this.velocity.y, z: this.velocity.z },
+        aabbs,
+        obbs,
+      );
+      this.position.set(resolved.position.x, resolved.position.y, resolved.position.z);
+      this.velocity.set(resolved.velocity.x, resolved.velocity.y, resolved.velocity.z);
+    }
 
     if (this.mode === 'flight') {
       const floor = this.food.supportHeightAt(this.position.x, this.position.z, this.foodOrigin);

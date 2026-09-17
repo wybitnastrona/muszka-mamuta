@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FOOD_HALF_SIZE_MM,
   FlightController,
   LAND_FORELEG_DEG,
+  ORBIT_RADIUS_MIN,
   SACCADE_TURN_S,
   TAKEOFF_HOP_MM,
   TAKEOFF_RAISE_S,
@@ -9,7 +11,8 @@ import {
   angularSizeDeg,
   buildSaccadePlan,
 } from '../../src/body/flight.ts';
-import { aabbTopY, pointInAabb3, type Aabb3 } from '../../src/body/collision.ts';
+import { aabbTopY, orbitRadiusFloor, pointInAabb3, type Aabb3 } from '../../src/body/collision.ts';
+import { bodyCollisionPadMm } from '../../src/scene/scale.ts';
 import { Xoshiro128ss } from '../../src/brain/rng.ts';
 
 const dt = 1 / 60;
@@ -116,6 +119,36 @@ describe('flight vs solids', () => {
         if (frame.done) break;
       }
     }
+  });
+
+  it('orbits outside the block diagonal instead of scraping the edge', () => {
+    // Regression: ORBIT_RADIUS_MIN (60) sits inside the 64 mm XZ diagonal of
+    // the 80 × 100 block, so a descending orbit was resolved onto a side face
+    // every frame and the fly "flew along the edge".
+    const f = new FlightController();
+    f.setWorld({ obstacles: [FOOD_BOX], floorY: 2, ceilingY: 220 });
+    f.place({ x: 0, y: 28, z: 60 }, Math.PI / 2);
+    f.startOrbit({ target: { x: 0, y: 15, z: 0 }, circuits: 3, seed: 7, radius: ORBIT_RADIUS_MIN, descend: true });
+    const floor = f.orbitFloor();
+    expect(floor).toBeGreaterThan(Math.hypot(FOOD_BOX.hx, FOOD_BOX.hz));
+    expect(floor).toBeGreaterThanOrEqual(orbitRadiusFloor(FOOD_BOX, bodyCollisionPadMm(), 0));
+    let hits = 0;
+    let steps = 0;
+    for (let i = 0; i < 2400; i++) {
+      const frame = f.update(dt);
+      steps++;
+      const r = Math.hypot(frame.position.x, frame.position.z);
+      expect(r, `radius @${i}`).toBeGreaterThanOrEqual(floor - 1e-6);
+      expect(pointInAabb3(frame.position, FOOD_BOX, bodyCollisionPadMm() - 0.5), `pad @${i}`).toBe(false);
+      if (f.hitCount > 0) hits++;
+      if (frame.done) break;
+    }
+    expect(steps).toBeGreaterThan(60);
+    expect(hits).toBe(0);
+  });
+
+  it('derives the food half-size from the real block', () => {
+    expect(FOOD_HALF_SIZE_MM).toBe(50);
   });
 
   it('clamps landing targets to at or above local support', () => {
