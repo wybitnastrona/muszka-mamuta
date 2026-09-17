@@ -1,0 +1,1434 @@
+{
+  "seed": 1,
+  "stimHz": 100,
+  "durationMs": 500,
+  "restWindowMs": 2000,
+  "backgroundRateHz": 0.25,
+  "limitation": "UNUSED audit. Rejected dopamine readout — see docs/DATA-PIPELINE.md § Rejected: dopamine readout (keep the negative result). MaleCNS does not assign mushroom-body compartments. These PAM cells are the ones in the extracted subgraph; we do not claim they are PAM-β'2.",
+  "path": {
+    "hops": 2,
+    "productSign": 1,
+    "formatted": "2 hops, productSign=+1: 13491 PhG4 +→ 13537 SLP234 +→ 28434 PAM10",
+    "nodes": [
+      {
+        "bodyId": 13491,
+        "type": "PhG4",
+        "role": "gust_drive",
+        "edgeSign": null
+      },
+      {
+        "bodyId": 13537,
+        "type": "SLP234",
+        "role": "interneuron",
+        "edgeSign": 1
+      },
+      {
+        "bodyId": 28434,
+        "type": "PAM10",
+        "role": "dan_pam",
+        "edgeSign": 1
+      }
+    ],
+    "walksAtShortestDepth": 998
+  },
+  "population": {
+    "baselinePamHz": 0.05263157894736842,
+    "baselinePpl1Hz": 30.65625,
+    "baselineMbonHz": 11.977272727272727,
+    "restWindowMs": 2000,
+    "labellarPamHz": 0,
+    "labellarPamRiseHz": -0.05263157894736842,
+    "labellarPpl1Hz": 122.375,
+    "labellarPpl1RiseHz": 91.71875,
+    "labellarMbonHz": 44.666666666666664,
+    "labellarMbonRiseHz": 32.68939393939394,
+    "gustDrivePamHz": 0,
+    "gustDrivePamRiseHz": -0.05263157894736842,
+    "gustDrivePpl1Hz": 121.75,
+    "gustDrivePpl1RiseHz": 91.09375,
+    "gustDriveMbonHz": 45.121212121212125,
+    "gustDriveMbonRiseHz": 33.1439393939394,
+    "gustSuppressPamHz": 0.3157894736842105,
+    "gustSuppressPamRiseHz": 0.2631578947368421,
+    "gustSuppressPpl1Hz": 84.75,
+    "gustSuppressPpl1RiseHz": 54.09375,
+    "gustSuppressMbonHz": 31.939393939393938,
+    "gustSuppressMbonRiseHz": 19.96212121212121,
+    "pharyngealPamHz": 0,
+    "pharyngealPamRiseHz": -0.05263157894736842,
+    "pharyngealPpl1Hz": 121.75,
+    "pharyngealPpl1RiseHz": 91.09375,
+    "pharyngealMbonHz": 43.93939393939394,
+    "pharyngealMbonRiseHz": 31.96212121212121,
+    "allGustPamHz": 0,
+    "allGustPamRiseHz": -0.05263157894736842,
+    "allGustPpl1Hz": 127.125,
+    "allGustPpl1RiseHz": 96.46875,
+    "allGustMbonHz": 46.75757575757576,
+    "allGustMbonRiseHz": 34.78030303030303,
+    "firstPamSpikeLatencyMs": null,
+    "firstPamSpikeLatencyMsPharyngeal": null,
+    "firstPamSpikeLatencyMsAllGust": null,
+    "firstPamSpikeLatencyMsPathSeed": 206.5,
+    "pathSeedBodyId": 13491,
+    "firstPamSpikeLatencyMsTopSeed": 339.5,
+    "topSeedBodyId": 122806
+  },
+  "seeds": [
+    {
+      "bodyId": 122806,
+      "deltaPamHz": 0.7894736842105263,
+      "rank": 1
+    },
+    {
+      "bodyId": 192172,
+      "deltaPamHz": 0.5789473684210527,
+      "rank": 2
+    },
+    {
+      "bodyId": 557092,
+      "deltaPamHz": 0.5789473684210527,
+      "rank": 3
+    },
+    {
+      "bodyId": 15695,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 4
+    },
+    {
+      "bodyId": 85806,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 5
+    },
+    {
+      "bodyId": 129802,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 6
+    },
+    {
+      "bodyId": 130693,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 7
+    },
+    {
+      "bodyId": 261450,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 8
+    },
+    {
+      "bodyId": 516217,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 9
+    },
+    {
+      "bodyId": 104287023,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 10
+    },
+    {
+      "bodyId": 208587231,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 11
+    },
+    {
+      "bodyId": 388968038,
+      "deltaPamHz": 0.3684210526315789,
+      "rank": 12
+    },
+    {
+      "bodyId": 21105,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 13
+    },
+    {
+      "bodyId": 40206,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 14
+    },
+    {
+      "bodyId": 142827,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 15
+    },
+    {
+      "bodyId": 146880,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 16
+    },
+    {
+      "bodyId": 159466,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 17
+    },
+    {
+      "bodyId": 163239,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 18
+    },
+    {
+      "bodyId": 166816,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 19
+    },
+    {
+      "bodyId": 170947,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 20
+    },
+    {
+      "bodyId": 181374,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 21
+    },
+    {
+      "bodyId": 202063,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 22
+    },
+    {
+      "bodyId": 312102,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 23
+    },
+    {
+      "bodyId": 516218,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 24
+    },
+    {
+      "bodyId": 901926,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 25
+    },
+    {
+      "bodyId": 646393090,
+      "deltaPamHz": 0.2631578947368421,
+      "rank": 26
+    },
+    {
+      "bodyId": 13491,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 27
+    },
+    {
+      "bodyId": 71254,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 28
+    },
+    {
+      "bodyId": 72047,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 29
+    },
+    {
+      "bodyId": 77868,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 30
+    },
+    {
+      "bodyId": 86931,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 31
+    },
+    {
+      "bodyId": 92440,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 32
+    },
+    {
+      "bodyId": 101087,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 33
+    },
+    {
+      "bodyId": 139178,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 34
+    },
+    {
+      "bodyId": 152432,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 35
+    },
+    {
+      "bodyId": 159772,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 36
+    },
+    {
+      "bodyId": 159854,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 37
+    },
+    {
+      "bodyId": 163469,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 38
+    },
+    {
+      "bodyId": 187776,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 39
+    },
+    {
+      "bodyId": 210344,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 40
+    },
+    {
+      "bodyId": 305187,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 41
+    },
+    {
+      "bodyId": 374701,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 42
+    },
+    {
+      "bodyId": 512552,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 43
+    },
+    {
+      "bodyId": 517257,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 44
+    },
+    {
+      "bodyId": 518542,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 45
+    },
+    {
+      "bodyId": 908743,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 46
+    },
+    {
+      "bodyId": 120770012,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 47
+    },
+    {
+      "bodyId": 213650853,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 48
+    },
+    {
+      "bodyId": 324178811,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 49
+    },
+    {
+      "bodyId": 553738738,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 50
+    },
+    {
+      "bodyId": 602736959,
+      "deltaPamHz": 0.15789473684210525,
+      "rank": 51
+    },
+    {
+      "bodyId": 33339,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 52
+    },
+    {
+      "bodyId": 44816,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 53
+    },
+    {
+      "bodyId": 54104,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 54
+    },
+    {
+      "bodyId": 81741,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 55
+    },
+    {
+      "bodyId": 115666,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 56
+    },
+    {
+      "bodyId": 136276,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 57
+    },
+    {
+      "bodyId": 160475,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 58
+    },
+    {
+      "bodyId": 179773,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 59
+    },
+    {
+      "bodyId": 215556,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 60
+    },
+    {
+      "bodyId": 256844,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 61
+    },
+    {
+      "bodyId": 512486,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 62
+    },
+    {
+      "bodyId": 512914,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 63
+    },
+    {
+      "bodyId": 515650,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 64
+    },
+    {
+      "bodyId": 517256,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 65
+    },
+    {
+      "bodyId": 522753,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 66
+    },
+    {
+      "bodyId": 522841,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 67
+    },
+    {
+      "bodyId": 557646,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 68
+    },
+    {
+      "bodyId": 916953,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 69
+    },
+    {
+      "bodyId": 923713,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 70
+    },
+    {
+      "bodyId": 155143464,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 71
+    },
+    {
+      "bodyId": 304136793,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 72
+    },
+    {
+      "bodyId": 885642755,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 73
+    },
+    {
+      "bodyId": 912111327,
+      "deltaPamHz": 0.05263157894736842,
+      "rank": 74
+    },
+    {
+      "bodyId": 22603,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 75
+    },
+    {
+      "bodyId": 23209,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 76
+    },
+    {
+      "bodyId": 42028,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 77
+    },
+    {
+      "bodyId": 50059,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 78
+    },
+    {
+      "bodyId": 55883,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 79
+    },
+    {
+      "bodyId": 71330,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 80
+    },
+    {
+      "bodyId": 72059,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 81
+    },
+    {
+      "bodyId": 75730,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 82
+    },
+    {
+      "bodyId": 78240,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 83
+    },
+    {
+      "bodyId": 81228,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 84
+    },
+    {
+      "bodyId": 93290,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 85
+    },
+    {
+      "bodyId": 107241,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 86
+    },
+    {
+      "bodyId": 109574,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 87
+    },
+    {
+      "bodyId": 111660,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 88
+    },
+    {
+      "bodyId": 114239,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 89
+    },
+    {
+      "bodyId": 120303,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 90
+    },
+    {
+      "bodyId": 125111,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 91
+    },
+    {
+      "bodyId": 125405,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 92
+    },
+    {
+      "bodyId": 128051,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 93
+    },
+    {
+      "bodyId": 128129,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 94
+    },
+    {
+      "bodyId": 129171,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 95
+    },
+    {
+      "bodyId": 132583,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 96
+    },
+    {
+      "bodyId": 136183,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 97
+    },
+    {
+      "bodyId": 137497,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 98
+    },
+    {
+      "bodyId": 140015,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 99
+    },
+    {
+      "bodyId": 140619,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 100
+    },
+    {
+      "bodyId": 140851,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 101
+    },
+    {
+      "bodyId": 141663,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 102
+    },
+    {
+      "bodyId": 144334,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 103
+    },
+    {
+      "bodyId": 146047,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 104
+    },
+    {
+      "bodyId": 146756,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 105
+    },
+    {
+      "bodyId": 149384,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 106
+    },
+    {
+      "bodyId": 151220,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 107
+    },
+    {
+      "bodyId": 152400,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 108
+    },
+    {
+      "bodyId": 154359,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 109
+    },
+    {
+      "bodyId": 154544,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 110
+    },
+    {
+      "bodyId": 156079,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 111
+    },
+    {
+      "bodyId": 156512,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 112
+    },
+    {
+      "bodyId": 157030,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 113
+    },
+    {
+      "bodyId": 157131,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 114
+    },
+    {
+      "bodyId": 157398,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 115
+    },
+    {
+      "bodyId": 158200,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 116
+    },
+    {
+      "bodyId": 158537,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 117
+    },
+    {
+      "bodyId": 160114,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 118
+    },
+    {
+      "bodyId": 160435,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 119
+    },
+    {
+      "bodyId": 160450,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 120
+    },
+    {
+      "bodyId": 161040,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 121
+    },
+    {
+      "bodyId": 161485,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 122
+    },
+    {
+      "bodyId": 162773,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 123
+    },
+    {
+      "bodyId": 163001,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 124
+    },
+    {
+      "bodyId": 163395,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 125
+    },
+    {
+      "bodyId": 163597,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 126
+    },
+    {
+      "bodyId": 164437,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 127
+    },
+    {
+      "bodyId": 166190,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 128
+    },
+    {
+      "bodyId": 166316,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 129
+    },
+    {
+      "bodyId": 167313,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 130
+    },
+    {
+      "bodyId": 167663,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 131
+    },
+    {
+      "bodyId": 168492,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 132
+    },
+    {
+      "bodyId": 169896,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 133
+    },
+    {
+      "bodyId": 170350,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 134
+    },
+    {
+      "bodyId": 170643,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 135
+    },
+    {
+      "bodyId": 171047,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 136
+    },
+    {
+      "bodyId": 173010,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 137
+    },
+    {
+      "bodyId": 173462,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 138
+    },
+    {
+      "bodyId": 175078,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 139
+    },
+    {
+      "bodyId": 175572,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 140
+    },
+    {
+      "bodyId": 176139,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 141
+    },
+    {
+      "bodyId": 178033,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 142
+    },
+    {
+      "bodyId": 178321,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 143
+    },
+    {
+      "bodyId": 178913,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 144
+    },
+    {
+      "bodyId": 180314,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 145
+    },
+    {
+      "bodyId": 180415,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 146
+    },
+    {
+      "bodyId": 182830,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 147
+    },
+    {
+      "bodyId": 183009,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 148
+    },
+    {
+      "bodyId": 183061,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 149
+    },
+    {
+      "bodyId": 183084,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 150
+    },
+    {
+      "bodyId": 187492,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 151
+    },
+    {
+      "bodyId": 190769,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 152
+    },
+    {
+      "bodyId": 194138,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 153
+    },
+    {
+      "bodyId": 194906,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 154
+    },
+    {
+      "bodyId": 199196,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 155
+    },
+    {
+      "bodyId": 199308,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 156
+    },
+    {
+      "bodyId": 200001,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 157
+    },
+    {
+      "bodyId": 201075,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 158
+    },
+    {
+      "bodyId": 202888,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 159
+    },
+    {
+      "bodyId": 203234,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 160
+    },
+    {
+      "bodyId": 204726,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 161
+    },
+    {
+      "bodyId": 208885,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 162
+    },
+    {
+      "bodyId": 209155,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 163
+    },
+    {
+      "bodyId": 209688,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 164
+    },
+    {
+      "bodyId": 223836,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 165
+    },
+    {
+      "bodyId": 232730,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 166
+    },
+    {
+      "bodyId": 236475,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 167
+    },
+    {
+      "bodyId": 246432,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 168
+    },
+    {
+      "bodyId": 253648,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 169
+    },
+    {
+      "bodyId": 261048,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 170
+    },
+    {
+      "bodyId": 262567,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 171
+    },
+    {
+      "bodyId": 270082,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 172
+    },
+    {
+      "bodyId": 272263,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 173
+    },
+    {
+      "bodyId": 284701,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 174
+    },
+    {
+      "bodyId": 303314,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 175
+    },
+    {
+      "bodyId": 317616,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 176
+    },
+    {
+      "bodyId": 362381,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 177
+    },
+    {
+      "bodyId": 375038,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 178
+    },
+    {
+      "bodyId": 426555,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 179
+    },
+    {
+      "bodyId": 451940,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 180
+    },
+    {
+      "bodyId": 511882,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 181
+    },
+    {
+      "bodyId": 511883,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 182
+    },
+    {
+      "bodyId": 512551,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 183
+    },
+    {
+      "bodyId": 512913,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 184
+    },
+    {
+      "bodyId": 513646,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 185
+    },
+    {
+      "bodyId": 513647,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 186
+    },
+    {
+      "bodyId": 514188,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 187
+    },
+    {
+      "bodyId": 514546,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 188
+    },
+    {
+      "bodyId": 514547,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 189
+    },
+    {
+      "bodyId": 516216,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 190
+    },
+    {
+      "bodyId": 516644,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 191
+    },
+    {
+      "bodyId": 517255,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 192
+    },
+    {
+      "bodyId": 517889,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 193
+    },
+    {
+      "bodyId": 517916,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 194
+    },
+    {
+      "bodyId": 518112,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 195
+    },
+    {
+      "bodyId": 520887,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 196
+    },
+    {
+      "bodyId": 522746,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 197
+    },
+    {
+      "bodyId": 522752,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 198
+    },
+    {
+      "bodyId": 522754,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 199
+    },
+    {
+      "bodyId": 522755,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 200
+    },
+    {
+      "bodyId": 522756,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 201
+    },
+    {
+      "bodyId": 522757,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 202
+    },
+    {
+      "bodyId": 522761,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 203
+    },
+    {
+      "bodyId": 522762,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 204
+    },
+    {
+      "bodyId": 529229,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 205
+    },
+    {
+      "bodyId": 531237,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 206
+    },
+    {
+      "bodyId": 533618,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 207
+    },
+    {
+      "bodyId": 534361,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 208
+    },
+    {
+      "bodyId": 534896,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 209
+    },
+    {
+      "bodyId": 538117,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 210
+    },
+    {
+      "bodyId": 549024,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 211
+    },
+    {
+      "bodyId": 550065,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 212
+    },
+    {
+      "bodyId": 556797,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 213
+    },
+    {
+      "bodyId": 557937,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 214
+    },
+    {
+      "bodyId": 561653,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 215
+    },
+    {
+      "bodyId": 902216,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 216
+    },
+    {
+      "bodyId": 908747,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 217
+    },
+    {
+      "bodyId": 912379,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 218
+    },
+    {
+      "bodyId": 917499,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 219
+    },
+    {
+      "bodyId": 917934,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 220
+    },
+    {
+      "bodyId": 918869,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 221
+    },
+    {
+      "bodyId": 919429,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 222
+    },
+    {
+      "bodyId": 933317,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 223
+    },
+    {
+      "bodyId": 942168,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 224
+    },
+    {
+      "bodyId": 943302,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 225
+    },
+    {
+      "bodyId": 957530,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 226
+    },
+    {
+      "bodyId": 104018476,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 227
+    },
+    {
+      "bodyId": 129424482,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 228
+    },
+    {
+      "bodyId": 139536760,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 229
+    },
+    {
+      "bodyId": 140334446,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 230
+    },
+    {
+      "bodyId": 144295263,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 231
+    },
+    {
+      "bodyId": 147619274,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 232
+    },
+    {
+      "bodyId": 158893964,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 233
+    },
+    {
+      "bodyId": 174444965,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 234
+    },
+    {
+      "bodyId": 214700177,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 235
+    },
+    {
+      "bodyId": 245892505,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 236
+    },
+    {
+      "bodyId": 274780241,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 237
+    },
+    {
+      "bodyId": 338530985,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 238
+    },
+    {
+      "bodyId": 349137284,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 239
+    },
+    {
+      "bodyId": 372711713,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 240
+    },
+    {
+      "bodyId": 380771816,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 241
+    },
+    {
+      "bodyId": 388541892,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 242
+    },
+    {
+      "bodyId": 418840426,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 243
+    },
+    {
+      "bodyId": 421193662,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 244
+    },
+    {
+      "bodyId": 422510463,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 245
+    },
+    {
+      "bodyId": 427340616,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 246
+    },
+    {
+      "bodyId": 433166791,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 247
+    },
+    {
+      "bodyId": 456631823,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 248
+    },
+    {
+      "bodyId": 456838775,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 249
+    },
+    {
+      "bodyId": 466363045,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 250
+    },
+    {
+      "bodyId": 475202322,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 251
+    },
+    {
+      "bodyId": 491986845,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 252
+    },
+    {
+      "bodyId": 551057545,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 253
+    },
+    {
+      "bodyId": 581710868,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 254
+    },
+    {
+      "bodyId": 633272971,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 255
+    },
+    {
+      "bodyId": 641453735,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 256
+    },
+    {
+      "bodyId": 684077918,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 257
+    },
+    {
+      "bodyId": 766547228,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 258
+    },
+    {
+      "bodyId": 772366874,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 259
+    },
+    {
+      "bodyId": 777730219,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 260
+    },
+    {
+      "bodyId": 786482749,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 261
+    },
+    {
+      "bodyId": 792429427,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 262
+    },
+    {
+      "bodyId": 816904261,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 263
+    },
+    {
+      "bodyId": 821826349,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 264
+    },
+    {
+      "bodyId": 824721257,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 265
+    },
+    {
+      "bodyId": 850920533,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 266
+    },
+    {
+      "bodyId": 884238775,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 267
+    },
+    {
+      "bodyId": 911389008,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 268
+    },
+    {
+      "bodyId": 919015263,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 269
+    },
+    {
+      "bodyId": 934523007,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 270
+    },
+    {
+      "bodyId": 1026733570,
+      "deltaPamHz": -0.05263157894736842,
+      "rank": 271
+    }
+  ]
+}

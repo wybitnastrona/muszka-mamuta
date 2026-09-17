@@ -15,6 +15,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.mjs && vitest run",
     "test:perf": "PERF=1 vitest run tests/brain/lif.test.ts",
     "measure:drive": "node --experimental-strip-types --no-warnings scripts/measure_drive.ts",
+    "tag:reward": "node --experimental-strip-types --no-warnings scripts/tag_reward.ts",
+    "measure:reward": "node --experimental-strip-types --no-warnings scripts/measure_reward.ts",
     "calibrate:background": "node --experimental-strip-types --no-warnings scripts/calibrate_background.ts",
     "validate:circuit": "node --experimental-strip-types --no-warnings scripts/validate_per.ts",
     "compress:graph": "node --experimental-strip-types --no-warnings scripts/compress_graph.ts",

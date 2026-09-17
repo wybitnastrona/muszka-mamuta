@@ -52,27 +52,29 @@ export function FlyScene({
   const onChemoRef = useRef(onChemo); onChemoRef.current = onChemo;
   const onPortionRef = useRef(onPortion); onPortionRef.current = onPortion;
 
-  useEffect(() => mountFlyScene({
-    element: host.current!,
-    debug,
-    inputRef,
-    presetRef,
-    commandRef,
-    seedRef,
-    setError,
-    setClipLabel,
-    setStateLabel,
-    setToast,
-    setPortions,
-    setCaption,
-    onEventsRef,
-    onHudRef,
-    onChemoRef,
-    onPortionRef,
-    summaryRef,
-    hemoRef,
-    recorderApiRef,
-  }), [debug, commandRef, seedRef, summaryRef, hemoRef, recorderApiRef]);
+  useEffect(() => {
+    return mountFlyScene({
+      element: host.current!,
+      debug,
+      inputRef,
+      presetRef,
+      commandRef,
+      seedRef,
+      setError,
+      setClipLabel,
+      setStateLabel,
+      setToast,
+      setPortions,
+      setCaption,
+      onEventsRef,
+      onHudRef,
+      onChemoRef,
+      onPortionRef,
+      summaryRef,
+      hemoRef,
+      recorderApiRef,
+    });
+  }, [debug, commandRef, seedRef, summaryRef, hemoRef, recorderApiRef]);
 
   useEffect(() => { presetRef.current = preset; }, [preset]);
 

@@ -32,7 +32,8 @@ const HUD_HZ_MS = 100;
 function emptySummary(): PopulationSummary {
   return {
     mn9Rate: 0, gustDriveRate: 0, gustNeutralRate: 0, gustSuppressRate: 0,
-    mnOtherRate: 0, dnRate: 0, gustRate: 0, mn9SpikeTimesMs: [], gustSpikeTimesMs: [],
+    mnOtherRate: 0, dnRate: 0, pamRate: 0, ppl1Rate: 0, mbonRate: 0, gustRate: 0,
+    mn9SpikeTimesMs: [], gustSpikeTimesMs: [], pamSpikeTimesMs: [],
   };
 }
 
@@ -155,7 +156,11 @@ export function App() {
       liveFrameRef.current = frame;
       summaryRef.current = nextSummary;
       timeRef.current = frame.time;
-      raster.current.push(frame.time, nextSummary.mn9SpikeTimesMs, nextSummary.gustSpikeTimesMs);
+      raster.current.push(
+        frame.time,
+        nextSummary.mn9SpikeTimesMs,
+        nextSummary.gustSpikeTimesMs,
+      );
     };
     try {
       await rt.connect();
@@ -324,7 +329,7 @@ export function App() {
             <div className="panel-bottom">
               {t(lang, 'drag')} · {atlas?.visibleIds.size.toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-US') ?? '…'} {t(lang, 'somata')}
               {' '}<a href={asset('data/brain-atlas/NOTICE.md')}>{t(lang, 'dataNotice')}</a>
-              {live && neuronN ? ` · ${neuronN.toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-US')} LIF` : ''}
+              {live && neuronN ? ` · ${t(lang, 'live')} · ${neuronN.toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-US')} LIF` : ''}
               {live ? ` · ${BRAIN_SOURCE.name}` : ''}
             </div>
           </section>

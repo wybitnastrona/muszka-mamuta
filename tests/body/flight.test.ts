@@ -9,6 +9,7 @@ import {
   angularSizeDeg,
   buildSaccadePlan,
 } from '../../src/body/flight.ts';
+import { aabbTopY, pointInAabb3, type Aabb3 } from '../../src/body/collision.ts';
 import { Xoshiro128ss } from '../../src/brain/rng.ts';
 
 const dt = 1 / 60;
@@ -89,5 +90,47 @@ describe('takeoff (Card & Dickinson 2008)', () => {
     expect(foldedHop).toBe(true);
     expect(tumbled).toBe(true);
     void TAKEOFF2_TUMBLE_S;
+  });
+});
+
+const FOOD_BOX: Aabb3 = { cx: 0, cy: 15, cz: 0, hx: 40, hy: 15, hz: 50 };
+
+describe('flight vs solids', () => {
+  it('never intersects the block AABB on 200 random paths', () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const rng = new Xoshiro128ss(seed + 11);
+      const f = new FlightController();
+      f.setWorld({ obstacles: [FOOD_BOX], floorY: 2, ceilingY: 220 });
+      const r = 70 + rng.nextFloat() * 50;
+      const a = rng.nextFloat() * Math.PI * 2;
+      const y = 18 + rng.nextFloat() * 20;
+      f.place({ x: Math.sin(a) * r, y, z: Math.cos(a) * r }, a + Math.PI / 2);
+      const kind = seed % 4;
+      if (kind === 0) f.startOrbit({ target: { x: 0, y: 15, z: 0 }, circuits: 1, seed, radius: r });
+      else if (kind === 1) f.startLand({ target: { x: 0, y: 2, z: 0 }, supportY: 2, seed });
+      else if (kind === 2) f.startExit(a + Math.PI / 2);
+      else f.startTakeoff1();
+      for (let i = 0; i < 500; i++) {
+        const frame = f.update(dt);
+        expect(pointInAabb3(frame.position, FOOD_BOX, -0.05), `seed ${seed} @${i}`).toBe(false);
+        if (frame.done) break;
+      }
+    }
+  });
+
+  it('clamps landing targets to at or above local support', () => {
+    const f = new FlightController();
+    f.setWorld({ obstacles: [FOOD_BOX], floorY: 2 });
+    f.place({ x: 80, y: 28, z: 0 }, Math.PI);
+    f.startLand({ target: { x: 0, y: 2, z: 0 }, supportY: 2, seed: 3 });
+    for (let i = 0; i < 1200; i++) {
+      const frame = f.update(dt);
+      expect(frame.position.y).toBeGreaterThanOrEqual(1.4);
+      if (Math.abs(frame.position.x) <= FOOD_BOX.hx && Math.abs(frame.position.z) <= FOOD_BOX.hz) {
+        expect(frame.position.y).toBeGreaterThanOrEqual(aabbTopY(FOOD_BOX) - 0.7);
+      }
+      expect(pointInAabb3(frame.position, FOOD_BOX, -0.05)).toBe(false);
+      if (frame.done) break;
+    }
   });
 });

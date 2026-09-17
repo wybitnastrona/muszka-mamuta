@@ -13,6 +13,10 @@ export const BONE_COLORS: Record<BoneName, readonly [number, number, number]> = 
   labellum_R: [0.95, 0.16, 0.22],
   foreleg_L_tarsus: [0.18, 0.86, 0.32],
   foreleg_R_tarsus: [0.48, 0.95, 0.38],
+  midleg_L: [0.12, 0.58, 0.98],
+  midleg_R: [0.38, 0.82, 1],
+  hindleg_L: [0.72, 0.95, 0.14],
+  hindleg_R: [0.92, 0.62, 0.08],
 };
 
 export const BONE_PALETTE = BONE_NAMES.map((name) => BONE_COLORS[name]);

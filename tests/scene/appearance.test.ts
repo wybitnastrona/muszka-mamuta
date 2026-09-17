@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createFlyMaterials } from '../../src/body/flyMaterials.ts';
 import { createKitchen, kitchenDrawCount, poseSpoon } from '../../src/body/kitchen.ts';
-import { frameForPreset, reelFrame, usesShallowDof } from '../../src/body/cameras.ts';
+import { frameForPreset, kitchenFrame, letterboxSize, reelFrame, usesShallowDof } from '../../src/body/cameras.ts';
 import { CAMERA_PRESETS } from '../../src/body/types.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
 import {
@@ -70,8 +70,8 @@ describe('kitchen slab', () => {
 });
 
 describe('Reel camera', () => {
-  it('is 35 mm-equivalent, 15° above the table, with fly and food in frame', () => {
-    expect(CAMERA_PRESETS[4]).toBe('Reel');
+  it('is a 9:16 studio frame at 35 mm / 15°, with DOF on the fly', () => {
+    expect(CAMERA_PRESETS).toEqual(['Widok kuchni', 'Z boku', 'Zbliżenie', 'Przegląd', 'Reel']);
     const frame = reelFrame();
     expect(frame.fov).toBeCloseTo(REEL_FOV_DEG);
     const dx = frame.position[0] - frame.lookAt[0];
@@ -80,11 +80,20 @@ describe('Reel camera', () => {
     const elev = (Math.atan2(dy, Math.hypot(dx, dz)) * 180) / Math.PI;
     expect(Math.abs(elev - REEL_ELEV_DEG)).toBeLessThan(0.6);
     const layout = kitchenLayout();
-    expect(frame.lookAt[0]).toBeCloseTo((layout.fly.x + layout.curd.x) * 0.5);
-    expect(frameForPreset('Reel', 10)).toEqual(frame);
+    expect(frame.lookAt[0]).toBeCloseTo((layout.fly.x + layout.curd.x) * 0.45);
+    expect(frameForPreset('Widok kuchni', 10)).toEqual(kitchenFrame(10));
+    expect(frameForPreset('Reel', 10)).toEqual(reelFrame(10));
+    const dist = Math.hypot(dx, dy, dz);
+    expect(dist).toBeGreaterThan(500);
+    expect(dist).toBeLessThan(900);
     expect(usesShallowDof('Zbliżenie')).toBe(true);
     expect(usesShallowDof('Reel')).toBe(true);
     expect(usesShallowDof('Widok kuchni')).toBe(false);
+    expect(usesShallowDof('Przegląd')).toBe(false);
+    const box = letterboxSize(1920, 1080);
+    expect(box.width / box.height).toBeCloseTo(9 / 16, 5);
+    expect(box.height).toBe(1080);
+    expect(letterboxSize(1080, 1920)).toEqual({ width: 1080, height: 1920, x: 0, y: 0 });
   });
 });
 

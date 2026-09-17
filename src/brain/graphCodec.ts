@@ -22,19 +22,50 @@ export type CsrArrays = {
   weights: Float32Array;
 };
 
-const MAGIC_BYTES = new TextEncoder().encode(GRAPH_MAGIC);
+/** ASCII `MMG1`. Literal bytes so worker/main do not depend on TextEncoder. */
+const MAGIC_BYTES = Uint8Array.of(0x4d, 0x4d, 0x47, 0x31);
+
+export type GraphBytes = ArrayBuffer | ArrayBufferView;
 
 function view(buffer: ArrayBuffer): DataView {
   return new DataView(buffer);
 }
 
-export function isCompressedGraph(buffer: ArrayBuffer): boolean {
-  if (buffer.byteLength < 4) return false;
-  const bytes = new Uint8Array(buffer, 0, 4);
-  return bytes[0] === MAGIC_BYTES[0]
+/** Payload bytes. Honours TypedArray/DataView byteOffset (transfer/Node Buffer pools). */
+export function asU8(data: GraphBytes): Uint8Array {
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  return new Uint8Array(data);
+}
+
+export function uncompressedGraphBytes(n: number, nEdges: number): number {
+  return (n + 1) * 4 + nEdges * 4 + nEdges * 4;
+}
+
+export function isCompressedGraph(data: GraphBytes): boolean {
+  const bytes = asU8(data);
+  return bytes.length >= 4
+    && bytes[0] === MAGIC_BYTES[0]
     && bytes[1] === MAGIC_BYTES[1]
     && bytes[2] === MAGIC_BYTES[2]
     && bytes[3] === MAGIC_BYTES[3];
+}
+
+/**
+ * Shared CSR loader (worker + Node). MMG1 magic first; exact uncompressed
+ * length is the only path that uses the raw CSR layout.
+ */
+export function parseGraphPayload(data: GraphBytes, n: number, nEdges: number): CsrArrays {
+  const bytes = asU8(data);
+  if (isCompressedGraph(bytes)) return decodeCompressedGraph(bytes, n, nEdges);
+  const expected = uncompressedGraphBytes(n, nEdges);
+  if (bytes.byteLength === expected) return parseUncompressedGraph(bytes, n, nEdges);
+  const mag = bytes.length >= 4 ? `[${bytes[0]}, ${bytes[1]}, ${bytes[2]}, ${bytes[3]}]` : 'short';
+  throw new Error(
+    `graph.bin is not MMG1 (magic ${mag}, ${bytes.byteLength} bytes) and not uncompressed CSR `
+      + `(${expected} bytes for n=${n}, edges=${nEdges})`,
+  );
 }
 
 /** IEEE-754 binary16 bits from a float32, round-to-nearest-even. */
@@ -166,25 +197,36 @@ export function encodeCompressedGraph(csr: CsrArrays): ArrayBuffer {
   return out;
 }
 
-export function decodeCompressedGraph(buffer: ArrayBuffer, n: number, nEdges: number): CsrArrays {
-  if (!isCompressedGraph(buffer)) throw new Error('graph.bin is not MMG1 compressed');
-  if (buffer.byteLength < 12 + (n + 1) * 4) {
-    throw new Error(`graph.bin too short for MMG1 header (${buffer.byteLength})`);
+function dataViewOf(bytes: Uint8Array): DataView {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+function int32Copy(bytes: Uint8Array, byteOffset: number, count: number): Int32Array {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset + byteOffset, count * 4);
+  const out = new Int32Array(count);
+  for (let i = 0; i < count; i++) out[i] = dv.getInt32(i * 4, true);
+  return out;
+}
+
+export function decodeCompressedGraph(data: GraphBytes, n: number, nEdges: number): CsrArrays {
+  const bytes = asU8(data);
+  if (!isCompressedGraph(bytes)) throw new Error('graph.bin is not MMG1 compressed');
+  if (bytes.byteLength < 12 + (n + 1) * 4) {
+    throw new Error(`graph.bin too short for MMG1 header (${bytes.byteLength})`);
   }
-  const dv = view(buffer);
+  const dv = dataViewOf(bytes);
   const nHeader = dv.getUint32(4, true);
   const eHeader = dv.getUint32(8, true);
   if (nHeader !== n || eHeader !== nEdges) {
     throw new Error(`MMG1 header n=${nHeader} e=${eHeader} != meta n=${n} e=${nEdges}`);
   }
   const indptrBytes = (n + 1) * 4;
-  const indptrOff = 12;
-  const packedOff = indptrOff + indptrBytes;
-  const indptr = new Int32Array(buffer.slice(indptrOff, packedOff));
+  const packedOff = 12 + indptrBytes;
+  const indptr = int32Copy(bytes, 12, n + 1);
   if (indptr[0] !== 0 || indptr[n] !== nEdges) {
     throw new Error(`CSR indptr ends at ${indptr[n]}, expected ${nEdges}`);
   }
-  const packed = new Uint8Array(buffer, packedOff);
+  const packed = bytes.subarray(packedOff);
   const indices = new Int32Array(nEdges);
   const cursor = { i: 0 };
   for (let i = 0; i < n; i++) {
@@ -200,7 +242,7 @@ export function decodeCompressedGraph(buffer: ArrayBuffer, n: number, nEdges: nu
   if (remain !== nEdges * 2) {
     throw new Error(`MMG1 weight blob ${remain} bytes, expected ${nEdges * 2} (varint consumed ${cursor.i})`);
   }
-  const wdv = new DataView(buffer, packedOff + cursor.i);
+  const wdv = new DataView(bytes.buffer, bytes.byteOffset + packedOff + cursor.i, nEdges * 2);
   const weights = new Float32Array(nEdges);
   for (let i = 0; i < nEdges; i++) {
     weights[i] = float16BitsToFloat32(wdv.getUint16(i * 2, true));
@@ -208,20 +250,20 @@ export function decodeCompressedGraph(buffer: ArrayBuffer, n: number, nEdges: nu
   return { indptr, indices, weights };
 }
 
-export function parseUncompressedGraph(buffer: ArrayBuffer, n: number, nEdges: number): CsrArrays {
-  const expected = (n + 1) * 4 + nEdges * 4 + nEdges * 4;
-  if (buffer.byteLength !== expected) {
-    throw new Error(`graph.bin length ${buffer.byteLength} != ${expected} (n=${n}, edges=${nEdges})`);
+export function parseUncompressedGraph(data: GraphBytes, n: number, nEdges: number): CsrArrays {
+  const bytes = asU8(data);
+  const expected = uncompressedGraphBytes(n, nEdges);
+  if (bytes.byteLength !== expected) {
+    throw new Error(`graph.bin length ${bytes.byteLength} != ${expected} (n=${n}, edges=${nEdges})`);
   }
   const indptrBytes = (n + 1) * 4;
   const indexBytes = nEdges * 4;
-  const indptr = new Int32Array(buffer.slice(0, indptrBytes));
-  const indices = new Int32Array(buffer.slice(indptrBytes, indptrBytes + indexBytes));
-  const weights = new Float32Array(
-    buffer.slice(indptrBytes + indexBytes, indptrBytes + indexBytes + nEdges * 4),
-  );
+  const copy = bytes.slice();
+  const indptr = new Int32Array(copy.buffer, 0, n + 1);
+  const indices = new Int32Array(copy.buffer, indptrBytes, nEdges);
+  const weights = new Float32Array(copy.buffer, indptrBytes + indexBytes, nEdges);
   if (indptr[0] !== 0 || indptr[n] !== nEdges) {
     throw new Error(`CSR indptr ends at ${indptr[n]}, expected ${nEdges}`);
   }
-  return { indptr, indices, weights };
+  return { indptr: indptr.slice(), indices: indices.slice(), weights: weights.slice() };
 }

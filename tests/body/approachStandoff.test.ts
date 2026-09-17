@@ -12,12 +12,16 @@ import {
 } from '../../src/food/twarogSystem.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
 import {
+  FLY_RENDER_SCALE,
   FLY_WALK_MM_S,
   POUCH_MM,
   bodyCollisionPadMm,
+  contactRadiusAt,
   contactRadiusMm,
+  extendedLabellumReachAt,
   extendedLabellumReachMm,
   mm,
+  standoffAt,
   standoffMm,
 } from '../../src/scene/scale.ts';
 
@@ -103,5 +107,32 @@ describe('APPROACH surface standoff', () => {
       });
     }
     expect(sm.state).toBe('APPROACH');
+  });
+
+  it('reaches a surface chunk in TASTE at 0.5×, 1× and 2× FLY_RENDER_SCALE', () => {
+    const layout = kitchenLayout();
+    const food = { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z };
+    const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
+    for (const mul of [0.5, 1, 2] as const) {
+      const scale = FLY_RENDER_SCALE * mul;
+      const stand = standoffAt(scale);
+      const reach = extendedLabellumReachAt(scale);
+      const parked = { x: food.x, y: 2, z: food.z - sys.hz - stand };
+      const heading = 0;
+      const approach = sys.approachTarget(parked, food, stand);
+      expect(approach.arrived || approach.distance <= 1e-6).toBe(true);
+      const labellum = {
+        x: parked.x + Math.sin(heading) * reach - food.x,
+        y: -sys.hy * 0.45,
+        z: parked.z + Math.cos(heading) * reach - food.z,
+      };
+      const tipOnHit = Math.hypot(
+        parked.x + Math.sin(heading) * reach - approach.hit.x,
+        parked.z + Math.cos(heading) * reach - approach.hit.z,
+      );
+      expect(tipOnHit).toBeLessThan(1);
+      const radius = contactRadiusAt(scale) + 2 * sys.chunkHalfExtentMm();
+      expect(sys.nearestUneaten(labellum, radius), `scale ${scale}`).not.toBeNull();
+    }
   });
 });

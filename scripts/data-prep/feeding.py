@@ -24,8 +24,48 @@ WEIGHT_FILE = "connectome-weights-male-cns-v1.0-minconf-0.5.feather"
 DATASET_VERSION = "male-cns:v1.0"
 MAX_DEPTH = 4
 MAX_NEURONS = 20_000
+CORE_CAP = 20_000
+# Extra 10k (I = G∩P) is abandoned: Kenyon extras self-ignite without working
+# APL; excluding ^KC/^MBON left 297 extra PAM-type cells that ride the same
+# loop. The 19 verified PAM stay ~silent. Restore 2d084d9 (20k feeding gate).
+PAM_EXTRA_SLOTS = 0
+# Gustatory→PAM intersection uses a longer forward depth than the feeding gate.
+GUST_TO_PAM_DEPTH = 6
+GUST_TO_PAM_DEPTH_FALLBACK = 5
+# If |I| exceeds this, retry forward BFS at fallback depth before ranking.
+INTERSECTION_RANK_MAX = 80_000
 CONTROL_SYNAPSE_MIN = 5
+# compress_graph.ts TARGET_BYTES. Trim unsigned weight=1 edges if compressed ≥ this.
+TARGET_COMPRESSED_BYTES = 20 * 1024 * 1024
+# Measured 2-hop path (measure_reward). Do not drop these edges when trimming weight=1.
+KNOWN_GUST_PAM_PATH = (13491, 13537, 28434)
 MN9_BODY_IDS = frozenset({10331, 16949})
+# The 19 PAM cells actually present in the gustatory→MN9 subgraph.
+# Looked up in MaleCNS annotations (type starts with PAM). Not guessed.
+# MaleCNS has 316 PAM-type cells; we BFS only from these 19.
+PAM_BODY_IDS = frozenset(
+    {
+        28434,
+        29565,
+        32865,
+        36624,
+        37845,
+        48113,
+        60930,
+        66934,
+        125080,
+        143120,
+        170450,
+        178945,
+        200973,
+        520403,
+        520616,
+        525787,
+        544257,
+        544359,
+        547260,
+    }
+)
 PROBOSCIS_SUBCLASSES = frozenset(
     {"labellar bristle", "taste peg", "pharyngeal sensillum"}
 )
@@ -37,6 +77,11 @@ FILTER_DEFINITIONS = {
     ),
     "mn9": 'type == "MN9"',
     "proboscis_motor": 'superclass == "cb_motor"',
+    "pam_reward": (
+        'type starts with "PAM"; bodyIds exactly the 19 PAM cells that were '
+        "present in the gustatory→MN9 extracted subgraph (not all 316 MaleCNS PAM)"
+    ),
+    "apl": 'type == "APL" (MaleCNS annotation; giant MB inhibitory neuron)',
 }
 
 NT_INHIBITORY = frozenset({"gaba", "glutamate"})
@@ -130,6 +175,65 @@ def resolve_seeds(annotations: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "mn9": mn9,
         "proboscis_motor": motor,
     }
+
+
+def resolve_pam(annotations: pd.DataFrame) -> pd.DataFrame:
+    """Confirm the 19 subgraph PAM bodyIds in MaleCNS annotations.
+
+    Stops if any ID is missing or its type does not start with PAM.
+    Does not expand the start set to the other ~297 MaleCNS PAM cells.
+    """
+    body = annotations["bodyId"].astype("int64")
+    pam = annotations[body.isin(list(PAM_BODY_IDS))].copy()
+    found = frozenset(int(x) for x in pam["bodyId"].tolist())
+    missing = PAM_BODY_IDS - found
+    if missing:
+        raise AssertionError(
+            f"PAM bodyIds missing from annotations: {sorted(missing)}. Stopping."
+        )
+    for body_id, cell_type_raw in zip(pam["bodyId"].tolist(), pam["type"].tolist()):
+        cell_type = None if pd.isna(cell_type_raw) else str(cell_type_raw)
+        if cell_type is None or not cell_type.startswith("PAM"):
+            raise AssertionError(
+                f"bodyId {int(body_id)} expected type PAM*, got {cell_type!r}. Stopping."
+            )
+    return pam.sort_values("bodyId")
+
+
+def resolve_apl(annotations: pd.DataFrame) -> pd.DataFrame:
+    """APL cells from MaleCNS `type == "APL"`. Empty frame if none exist.
+
+    Does not invent IDs. Callers must treat an empty result as "APL is not
+    in this dataset" and fall back to excluding ^KC from extra slots.
+    """
+    raw = annotations["type"]
+    is_apl = raw.astype("string").str.fullmatch("APL", case=False, na=False)
+    apl = annotations[is_apl].copy()
+    for body_id, cell_type_raw in zip(apl["bodyId"].tolist(), apl["type"].tolist()):
+        cell_type = None if pd.isna(cell_type_raw) else str(cell_type_raw)
+        if cell_type != "APL":
+            raise AssertionError(
+                f"bodyId {int(body_id)} matched APL lookup but type is {cell_type!r}. Stopping."
+            )
+    return apl.sort_values("bodyId")
+
+
+def annotation_prefix_body_ids(annotations: pd.DataFrame, prefix: str) -> np.ndarray:
+    """bodyIds whose MaleCNS type starts with `prefix` (e.g. KC, MBON)."""
+    raw = annotations["type"].astype("string")
+    hit = raw.str.match(f"^{prefix}", na=False)
+    return annotations.loc[hit, "bodyId"].to_numpy(dtype=np.int64)
+
+
+def mask_body_ids(node_ids: np.ndarray, body_ids: np.ndarray) -> np.ndarray:
+    """Boolean mask over `node_ids` for the given bodyIds."""
+    mask = np.zeros(len(node_ids), dtype=bool)
+    if len(body_ids) == 0:
+        return mask
+    idx = np.searchsorted(node_ids, body_ids)
+    ok = (idx < len(node_ids)) & (node_ids[np.minimum(idx, len(node_ids) - 1)] == body_ids)
+    mask[idx[ok]] = True
+    return mask
 
 
 def json_records(frame: pd.DataFrame, columns: Sequence[str]) -> list[dict[str, Any]]:
@@ -328,13 +432,20 @@ def bfs_reach(
     indices: np.ndarray,
     max_depth: int,
     n_nodes: int,
+    allowed: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Return a boolean mask of nodes reached in <= max_depth hops."""
+    """Return a boolean mask of nodes reached in <= max_depth hops.
+
+    If `allowed` is set, walks stay inside that mask (starts outside it
+    are skipped).
+    """
     reached = np.zeros(n_nodes, dtype=bool)
-    depth = np.full(n_nodes, -1, dtype=np.int16)
+    depth = np.full(n_nodes, -1, dtype=np.int32)
     q: deque[int] = deque()
     for s in starts:
         if s < 0 or s >= n_nodes or reached[s]:
+            continue
+        if allowed is not None and not bool(allowed[s]):
             continue
         reached[s] = True
         depth[s] = 0
@@ -346,11 +457,215 @@ def bfs_reach(
         start, end = int(indptr[u]), int(indptr[u + 1])
         for v in indices[start:end]:
             v = int(v)
-            if not reached[v]:
-                reached[v] = True
-                depth[v] = depth[u] + 1
-                q.append(v)
+            if reached[v]:
+                continue
+            if allowed is not None and not bool(allowed[v]):
+                continue
+            reached[v] = True
+            depth[v] = depth[u] + 1
+            q.append(v)
     return reached
+
+
+def nodes_on_paths(
+    starts: Iterable[int],
+    goals: Iterable[int],
+    fwd_indptr: np.ndarray,
+    fwd_indices: np.ndarray,
+    rev_indptr: np.ndarray,
+    rev_indices: np.ndarray,
+    allowed: np.ndarray,
+    n_nodes: int,
+) -> tuple[np.ndarray, int | None]:
+    """Neurons on any start→goal walk inside `allowed`, plus shortest hops.
+
+    Unlimited depth within the allowed set. Hops is the first time a BFS
+    from `starts` hits any goal.
+    """
+    start_list = [int(s) for s in starts]
+    goal_list = [int(g) for g in goals]
+    goal_mask = np.zeros(n_nodes, dtype=bool)
+    for g in goal_list:
+        if 0 <= g < n_nodes:
+            goal_mask[g] = True
+    unlimited = max(1, int(allowed.sum()) if allowed.any() else 1)
+    from_start = bfs_reach(
+        start_list, fwd_indptr, fwd_indices, unlimited, n_nodes, allowed
+    )
+    to_goal = bfs_reach(
+        goal_list, rev_indptr, rev_indices, unlimited, n_nodes, allowed
+    )
+    on_path = from_start & to_goal & allowed
+    hops: int | None = None
+    reached = np.zeros(n_nodes, dtype=bool)
+    depth = np.full(n_nodes, -1, dtype=np.int32)
+    q: deque[int] = deque()
+    for s in start_list:
+        if s < 0 or s >= n_nodes or not bool(allowed[s]) or reached[s]:
+            continue
+        reached[s] = True
+        depth[s] = 0
+        q.append(s)
+        if goal_mask[s]:
+            hops = 0
+            break
+    while q and hops is None:
+        u = q.popleft()
+        start, end = int(fwd_indptr[u]), int(fwd_indptr[u + 1])
+        for v in fwd_indices[start:end]:
+            v = int(v)
+            if reached[v] or not bool(allowed[v]):
+                continue
+            reached[v] = True
+            depth[v] = depth[u] + 1
+            if goal_mask[v]:
+                hops = int(depth[v])
+                break
+            q.append(v)
+        if hops is not None:
+            break
+    return on_path, hops
+
+
+def max_log_product_to_targets(
+    targets: Iterable[int],
+    pre: np.ndarray,
+    post: np.ndarray,
+    weight: np.ndarray,
+    max_depth: int,
+    n_nodes: int,
+    allowed: np.ndarray | None = None,
+) -> np.ndarray:
+    """log(max unsigned-weight product) of a hop-limited walk to a target.
+
+    COO edges are pre→post. Each Bellman–Ford sweep updates the presynaptic
+    node from the postsynaptic score (walks toward PAM). Restricted to
+    `allowed` when given — rank only inside I, not the whole 151M-edge graph.
+    """
+    log_score = np.full(n_nodes, -np.inf, dtype=np.float64)
+    for t in targets:
+        t = int(t)
+        if t < 0 or t >= n_nodes:
+            continue
+        if allowed is not None and not bool(allowed[t]):
+            continue
+        log_score[t] = 0.0
+    if len(pre) == 0 or max_depth <= 0:
+        return log_score
+    if allowed is not None:
+        inside = allowed[pre] & allowed[post]
+        pre_e = pre[inside]
+        post_e = post[inside]
+        w = weight[inside]
+    else:
+        pre_e = pre
+        post_e = post
+        w = weight
+    mag = np.abs(w.astype(np.float64, copy=False))
+    mag = np.maximum(mag, 1e-12)
+    logw = np.log(mag)
+    for _ in range(max_depth):
+        finite = np.isfinite(log_score[post_e])
+        if not bool(finite.any()):
+            break
+        cand = log_score[post_e[finite]] + logw[finite]
+        nxt = log_score.copy()
+        np.maximum.at(nxt, pre_e[finite], cand)
+        log_score = nxt
+    return log_score
+
+
+def pick_top_scored(
+    mask: np.ndarray,
+    scores: np.ndarray,
+    k: int,
+) -> np.ndarray:
+    """Boolean mask of the k highest scores inside `mask`. Ties: lower index."""
+    idx = np.flatnonzero(mask)
+    if k <= 0 or len(idx) == 0:
+        return np.zeros(len(mask), dtype=bool)
+    if len(idx) <= k:
+        out = np.zeros(len(mask), dtype=bool)
+        out[idx] = True
+        return out
+    sc = scores[idx]
+    order = np.lexsort((idx, -sc))
+    chosen = idx[order[:k]]
+    out = np.zeros(len(mask), dtype=bool)
+    out[chosen] = True
+    return out
+
+
+def gustatory_pam_intersection(
+    gust_idx: np.ndarray,
+    pam_idx: np.ndarray,
+    fwd_indptr: np.ndarray,
+    fwd_indices: np.ndarray,
+    rev_indptr: np.ndarray,
+    rev_indices: np.ndarray,
+    n_nodes: int,
+    forward_depth: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """I = forward(gust, depth) ∩ backward(PAM, MAX_DEPTH). Returns I, G, P, |I|."""
+    g = bfs_reach(gust_idx.tolist(), fwd_indptr, fwd_indices, forward_depth, n_nodes)
+    p = bfs_reach(pam_idx.tolist(), rev_indptr, rev_indices, MAX_DEPTH, n_nodes)
+    p[pam_idx] = True
+    inter = g & p
+    return inter, g, p, int(inter.sum())
+
+
+def select_intersection_extras(
+    intersection: np.ndarray,
+    core_keep: np.ndarray,
+    scores: np.ndarray,
+    extra_slots: int = PAM_EXTRA_SLOTS,
+    exclude: np.ndarray | None = None,
+) -> tuple[np.ndarray, int]:
+    """Top `extra_slots` of I minus the feeding-gate core, by path strength.
+
+    `exclude` drops candidates (Kenyon cells when APL is absent).
+    """
+    candidates = intersection & ~core_keep
+    if exclude is not None:
+        candidates = candidates & ~exclude
+    n_cand = int(candidates.sum())
+    extras = pick_top_scored(candidates, scores, extra_slots)
+    return extras, n_cand
+
+
+def protect_weight_one_edges(
+    src: np.ndarray,
+    dst: np.ndarray,
+    graph_ids: np.ndarray,
+    on_path: np.ndarray,
+    known_path: Sequence[int] = KNOWN_GUST_PAM_PATH,
+) -> np.ndarray:
+    """Protect gustatory→PAM walk edges, including the measured PhG4→SLP234→PAM10 path.
+
+    Weight-1 trim must not cut those edges: they can be thin and are the reason
+    the extra 10k slots exist.
+    """
+    if len(src) == 0:
+        return np.zeros(0, dtype=bool)
+    protect = on_path[src] & on_path[dst]
+    index = {int(b): i for i, b in enumerate(graph_ids)}
+    local = [index[int(b)] for b in known_path if int(b) in index]
+    for a, b in zip(local, local[1:]):
+        protect = protect | ((src == a) & (dst == b))
+    return protect
+
+
+def drop_weight_one_edges(
+    src: np.ndarray,
+    dst: np.ndarray,
+    mag: np.ndarray,
+    protect: np.ndarray,
+) -> np.ndarray:
+    """Keep edges unless unsigned weight is 1 and the edge is not protected."""
+    if len(src) == 0:
+        return np.zeros(0, dtype=bool)
+    w1 = np.isclose(mag.astype(np.float64), 1.0)
+    return ~w1 | protect
 
 
 def add_presynaptic_control(

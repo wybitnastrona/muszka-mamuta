@@ -51,3 +51,11 @@ of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style o
     The feeding drive comes from class=="gustatory" AND subclass in {"labellar bristle", "taste peg",
     "pharyngeal sensillum"} (~271 neurons). MN9 is exactly bodyId 10331 and 16949. Never reintroduce
     receptor-gene names anywhere in this project.
+
+    12. Only the feeding gate (proboscis gustatory channel → MN9, MaleCNS) is brain-driven. Flight,
+    walking, grooming, sleep and comedy beats are authored motion layered ABOVE the feeding FSM;
+    they may read metabolism state but never write into ActivityFrame or the brain worker. Every
+    authored behaviour cites its behavioural-literature basis in docs/BODY-MODEL.md.
+13. Flybody materials in group `body`: body, black, red (compound eyes), ocelli, bristle-brown,
+    lower, brown, membrane (wings). Groups front_left / front_right are separate leg meshes with
+    coxa pivots. There is no `wings` material and no mid/hind leg pivots. Use these names.

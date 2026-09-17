@@ -74,6 +74,14 @@ export class FeedingStateMachine {
     this.biteThisCycle = false;
   }
 
+  /** Spawn / re-seat already in TASTE range of a chunk. Does not skip the TASTE hold. */
+  beginTaste(heading = this.heading): void {
+    this.reset(heading);
+    this.state = 'TASTE';
+    this.stateAge = 0;
+    this.mn9HoldMs = 0;
+  }
+
   step(input: FeedingInput): FeedingOutput {
     const dt = Math.max(0, input.dt);
     this.time += dt;

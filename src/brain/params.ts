@@ -31,6 +31,11 @@ export type RoleTag =
   | 'mn9'
   | 'mn_other'
   | 'dn'
+  | 'dan_pam'
+  | 'dan_ppl1'
+  | 'dan_other'
+  | 'mbon'
+  | 'kc'
   | 'interneuron';
 
 /** Canonical live-model roles. Anatomical gust_* tags are accepted when reading older meta. */
@@ -43,6 +48,11 @@ export const ROLE_TAGS: readonly RoleTag[] = [
   'mn9',
   'mn_other',
   'dn',
+  'dan_pam',
+  'dan_ppl1',
+  'dan_other',
+  'mbon',
+  'kc',
   'interneuron',
 ];
 

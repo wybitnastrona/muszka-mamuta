@@ -139,6 +139,7 @@ describe('hemolymph (authored, not connectome)', () => {
     expect(mh.gustGain).toBeGreaterThan(mf.gustGain);
     expect(mh.mn9ThresholdShift).toBeLessThan(mf.mn9ThresholdShift);
     expect(GUST_GAIN_ROLES).toEqual([...MEASURED_GUST_ROLES, ...ANATOMICAL_GUST_ROLES]);
+    expect(GUST_GAIN_ROLES.includes('dan_pam')).toBe(false);
     expect(MODULATION_PUSH_MS).toBe(250);
   });
 

@@ -2,20 +2,30 @@
  * Authored wing visuals. Flybody has no `wings` material: the blades are the
  * `membrane` part of group `body`. We split that mesh into wing_L / wing_R
  * by connected-component centroid X (+X is anatomical left) and pivot each
- * at the vertex closest to the thorax. Mid/hind legs stay unrigged in the
- * standing pose during flight (real Drosophila trail those legs).
+ * at the vertex closest to the thorax. Mid/hind legs are procedural bones
+ * on the body mesh; in flight they trail in rest pose (Card & Dickinson 2008).
  *
  * Wingbeat is ~200 Hz — blades are NOT posed per beat. Airborne look is a
- * translucent additive blur fan (~140°) plus a small per-frame flicker.
+ * translucent additive blur fan (~140°) plus a low-frequency blade flicker
+ * (below 60 fps Nyquist) so the arc reads without strobing.
+ * Ground: folded ~8° apart over the abdomen, occasional 25° idle flicks.
  * Nothing here writes into ActivityFrame or the brain worker.
  */
 import * as THREE from 'three';
-import { clamp01 } from './math.ts';
+import { clamp01, DEG, hashNoise, lerp } from './math.ts';
 
 export const WINGBEAT_HZ = 200;
 export const BLUR_SWEEP_DEG = 140;
 export const BLUR_LAND_FADE_S = 0.12;
-export const WING_FLICKER_DEG = 3;
+/** Blade oscillation inside the blur fan; 9 Hz so 60 fps does not alias 200 Hz. */
+export const WING_FLICKER_HZ = 9;
+export const WING_FLICKER_DEG = 22;
+export const WING_REST_SEPARATION_DEG = 8;
+export const IDLE_FLICK_MIN_S = 4;
+export const IDLE_FLICK_MAX_S = 9;
+export const IDLE_FLICK_DUR_S = 0.18;
+export const IDLE_FLICK_DEG = 25;
+export const SONG_ENVELOPE_HZ = 5;
 
 export type WingBuffers = {
   positions: Float32Array;
@@ -34,6 +44,8 @@ export type WingVisual = {
   songDeg: number;
   flicker: number;
   blurAlpha: number;
+  /** Extra open-from-rest degrees (idle flick). */
+  flickDeg?: number;
 };
 
 function uniqueVertices(positions: Float32Array, indices: readonly number[]): {
@@ -234,17 +246,56 @@ export function attachSplitWings(
   return { L, R };
 }
 
+/** Rest: folded over the abdomen, slightly overlapping, 8° apart. Raised: out to the sides. */
+const REST_PITCH = 1.18;
+const REST_YAW = -0.05;
+const REST_ROLL = (WING_REST_SEPARATION_DEG / 2) * DEG;
+const RAISED_PITCH = 0.06;
+const RAISED_YAW = 0;
+const RAISED_ROLL = 1.05;
+const REST_TO_RAISED_DEG = Math.hypot(
+  (REST_PITCH - RAISED_PITCH) * (180 / Math.PI),
+  (REST_ROLL - RAISED_ROLL) * (180 / Math.PI),
+);
+
+export function raiseForDeltaDeg(deltaDeg: number): number {
+  return clamp01(deltaDeg / Math.max(1, REST_TO_RAISED_DEG));
+}
+
+function idleGap(i: number, seed: number): number {
+  const u = hashNoise(i, seed) * 0.5 + 0.5;
+  return IDLE_FLICK_MIN_S + u * (IDLE_FLICK_MAX_S - IDLE_FLICK_MIN_S);
+}
+
+/** Seeded 4–9 s single-wing flicks, 25° over 180 ms. */
+export function wingIdleFlick(t: number, seed: number): { flickL: number; flickR: number } {
+  if (t < 0) return { flickL: 0, flickR: 0 };
+  let t0 = idleGap(0, seed);
+  let i = 0;
+  while (t0 + IDLE_FLICK_DUR_S < t && i < 4000) {
+    i += 1;
+    t0 += idleGap(i, seed);
+  }
+  const age = t - t0;
+  if (age < 0 || age > IDLE_FLICK_DUR_S) return { flickL: 0, flickR: 0 };
+  const env = Math.sin((age / IDLE_FLICK_DUR_S) * Math.PI) * IDLE_FLICK_DEG;
+  const left = hashNoise(i + 17, seed) >= 0;
+  return left ? { flickL: env, flickR: 0 } : { flickL: 0, flickR: env };
+}
+
 /** Fold 0 = stacked on the abdomen; 1 = raised / flight-ready. */
 export function applyWingVisual(side: WingSide, visual: WingVisual): void {
-  const folded = 1 - clamp01(visual.raise);
+  const flick = visual.flickDeg ?? 0;
+  const u = clamp01(visual.raise + raiseForDeltaDeg(flick));
   const sign = side.side === 'L' ? 1 : -1;
+  const flickerRad = visual.flicker * DEG;
   side.hinge.rotation.set(
-    folded * 1.15 + visual.flicker * 0.02,
-    (visual.songDeg * Math.PI / 180) * sign + visual.flicker * 0.015 * sign,
-    folded * 0.55 * sign,
+    lerp(REST_PITCH, RAISED_PITCH, u) + flickerRad * 0.45,
+    lerp(REST_YAW, RAISED_YAW, u) * sign + (visual.songDeg * DEG) * sign + flickerRad * 0.2 * sign,
+    lerp(REST_ROLL, RAISED_ROLL, u) * sign,
   );
   const mat = side.blur.material as THREE.MeshBasicMaterial;
   const alpha = clamp01(visual.blurAlpha);
-  mat.opacity = alpha * 0.42;
+  mat.opacity = alpha * 0.5;
   side.blur.visible = alpha > 0.02;
 }

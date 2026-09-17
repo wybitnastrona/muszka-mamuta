@@ -10,6 +10,7 @@ import {
 } from '../../src/body/skinWeights.ts';
 import { smoothstep } from '../../src/body/math.ts';
 import { BONE_NAMES, MOUTHPART_BONES } from '../../src/body/types.ts';
+import { deriveMidHindPivots } from '../../src/body/legPivots.ts';
 
 const meta = JSON.parse(
   readFileSync(new URL('../../public/data/flybody/model.json', import.meta.url), 'utf8'),
@@ -43,6 +44,26 @@ describe('Flybody hierarchy', () => {
     expect(right?.legGroup).toBe('front_right');
     expect(left?.position).toEqual(meta.pivots.front_left);
     expect(right?.position).toEqual(meta.pivots.front_right);
+  });
+
+  it('places mid/hind coxae at the derived proximal vertices', () => {
+    const part = meta.parts.find((p) => p.group === 'body' && p.material === 'body')!;
+    const bin = readFileSync(new URL('../../public/data/flybody/model.bin', import.meta.url));
+    const positions = new Float32Array(
+      bin.buffer,
+      bin.byteOffset + part.positionByteOffset,
+      part.positionCount * 3,
+    );
+    const derived = deriveMidHindPivots(positions);
+    for (const name of ['midleg_L', 'midleg_R', 'hindleg_L', 'hindleg_R'] as const) {
+      const bone = ANCHORS.bones.find((b) => b.name === name)!;
+      expect(bone.parent).toBe('root');
+      expect(bone.maxRadius).toBeGreaterThan(0);
+      expect(bone.weightGate).toBeDefined();
+      expect(bone.position[0]).toBeCloseTo(derived[name].position[0], 3);
+      expect(bone.position[1]).toBeCloseTo(derived[name].position[1], 3);
+      expect(bone.position[2]).toBeCloseTo(derived[name].position[2], 3);
+    }
   });
 
   it('gives every bone a maxRadius and mouthparts an eyes/ocelli exclusion', () => {
@@ -111,6 +132,15 @@ describe('distance weights', () => {
     }
     const body = computeSkinWeights(positions, ANCHORS.bones, { material: 'body' });
     expect(boneWeightOnVertex(body.skinIndex, body.skinWeight, 0, indexOf('rostrum'))).toBeGreaterThan(0.5);
+  });
+
+  it('gives a hanging midleg vertex to midleg_L and a thorax vertex to root', () => {
+    const mid = computeSkinWeights(new Float32Array([0.10, -0.08, 0.01]), ANCHORS.bones, { material: 'body' });
+    expect(BONE_NAMES[dominantBone(mid.skinIndex, mid.skinWeight, 0)]).toBe('midleg_L');
+    const thorax = computeSkinWeights(new Float32Array([0, 0, 0]), ANCHORS.bones, { material: 'body' });
+    expect(BONE_NAMES[dominantBone(thorax.skinIndex, thorax.skinWeight, 0)]).toBe('root');
+    expect(boneWeightOnVertex(thorax.skinIndex, thorax.skinWeight, 0, indexOf('midleg_L'))).toBe(0);
+    expect(boneWeightOnVertex(thorax.skinIndex, thorax.skinWeight, 0, indexOf('hindleg_L'))).toBe(0);
   });
 
   it('clamps overlapping raw weights so the vertex total is not above 1', () => {

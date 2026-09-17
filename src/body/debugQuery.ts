@@ -1,4 +1,5 @@
 import type { DebugMode, FeedingState } from './types.ts';
+import type { LoopVariant } from './sceneLoop.ts';
 
 export type GateOverlay = {
   state: FeedingState;
@@ -26,6 +27,12 @@ export function parseDebugMode(search = typeof window === 'undefined' ? '' : win
     return raw;
   }
   return 'off';
+}
+
+/** Default reel loop. `?loop=full` restores ORBIT / EXIT_FRAME for debugging. */
+export function parseLoopVariant(search = typeof window === 'undefined' ? '' : window.location.search): LoopVariant {
+  const raw = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('loop');
+  return raw === 'full' ? 'full' : 'reel';
 }
 
 export function formatGateOverlay(s: GateOverlay): string {

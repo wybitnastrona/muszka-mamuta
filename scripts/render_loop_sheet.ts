@@ -216,6 +216,7 @@ function makeDirector() {
       heading: 0.35,
       seed: 1,
       scriptedLoop: true,
+      loopVariant: 'full',
     }),
   };
 }

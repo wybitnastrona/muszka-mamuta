@@ -1,7 +1,7 @@
 import {
-  decodeCompressedGraph,
-  isCompressedGraph,
-  parseUncompressedGraph,
+  asU8,
+  parseGraphPayload,
+  type GraphBytes,
 } from './graphCodec.ts';
 import type { RoleTag } from './params.ts';
 import { ROLE_TAGS } from './params.ts';
@@ -12,6 +12,7 @@ export {
   GRAPH_MAGIC,
   encodeCompressedGraph,
   isCompressedGraph,
+  parseGraphPayload,
 } from './graphCodec.ts';
 
 export type CircuitGraph = {
@@ -48,15 +49,23 @@ function record(value: unknown): value is Record<string, unknown> {
 
 /**
  * CSR graph.bin: uncompressed (audit) or MMG1 compressed (float16 + delta-varint).
- * The worker calls this on init; LIF sees float32 weights after decode.
+ * Worker and Node both call this; format is detected from magic bytes `MMG1`.
  */
-export function parseGraphBin(buffer: ArrayBuffer, n: number, nEdges: number): {
+export function parseGraphBin(buffer: GraphBytes, n: number, nEdges: number): {
   indptr: Int32Array;
   indices: Int32Array;
   weights: Float32Array;
 } {
-  if (isCompressedGraph(buffer)) return decodeCompressedGraph(buffer, n, nEdges);
-  return parseUncompressedGraph(buffer, n, nEdges);
+  return parseGraphPayload(buffer, n, nEdges);
+}
+
+/** Exact loader used by `lif-worker.ts` on `init`. */
+export function loadCircuitFromInitBuffers(
+  metaBytes: GraphBytes,
+  graph: GraphBytes,
+): CircuitGraph {
+  const json = new TextDecoder().decode(asU8(metaBytes));
+  return parseCircuit(JSON.parse(json) as unknown, graph);
 }
 
 export function parseCircuitMeta(meta: unknown): {
@@ -111,7 +120,7 @@ export function parseCircuitMeta(meta: unknown): {
   return { n, nEdges, bodyId, role, pathSign, type, subclass, ntUncertain };
 }
 
-export function parseCircuit(meta: unknown, bin: ArrayBuffer): CircuitGraph {
+export function parseCircuit(meta: unknown, bin: GraphBytes): CircuitGraph {
   const parsed = parseCircuitMeta(meta);
   const csr = parseGraphBin(bin, parsed.n, parsed.nEdges);
   return {

@@ -11,7 +11,18 @@
  */
 import { Xoshiro128ss } from '../brain/rng.ts';
 import { clamp, clamp01, headingError, lerp, perlin1, wrapPi } from './math.ts';
-import { BLUR_LAND_FADE_S, WING_FLICKER_DEG } from './wings.ts';
+import { BLUR_LAND_FADE_S, WING_FLICKER_DEG, WING_FLICKER_HZ } from './wings.ts';
+import {
+  FLIGHT_CEILING_MM,
+  LOOKAHEAD_S,
+  clampLandTarget,
+  loomingHit,
+  obbAabbHull,
+  resolveSolids,
+  yawAwayFromBox,
+  type Aabb3,
+  type Obb3,
+} from './collision.ts';
 
 export const SACCADE_TURN_S = 0.05;
 export const SACCADE_STRAIGHT_MIN_S = 0.15;
@@ -36,6 +47,7 @@ export const TAKEOFF2_TURNS = 2;
 export const CRUISE_MM_S = 90;
 export const LAND_TAU_S = 0.45;
 export const FOOD_HALF_SIZE_MM = 40;
+export { LOOKAHEAD_S, FLIGHT_CEILING_MM };
 
 export type Vec3 = { x: number; y: number; z: number };
 
@@ -164,6 +176,22 @@ export class FlightController {
   private startPos: Vec3 = { x: 0, y: 0, z: 0 };
   private landSpeed = CRUISE_MM_S;
   private blurOut = 0;
+  private obstacles: Aabb3[] = [];
+  private obbs: Obb3[] = [];
+  private floorY = 0;
+  private ceilingY = FLIGHT_CEILING_MM;
+
+  setWorld(opts: {
+    obstacles?: Aabb3[];
+    obbs?: Obb3[];
+    floorY?: number;
+    ceilingY?: number;
+  }): void {
+    if (opts.obstacles) this.obstacles = opts.obstacles;
+    if (opts.obbs) this.obbs = opts.obbs;
+    if (opts.floorY !== undefined) this.floorY = opts.floorY;
+    if (opts.ceilingY !== undefined) this.ceilingY = opts.ceilingY;
+  }
 
   snapshot(): FlightFrame {
     return {
@@ -223,8 +251,9 @@ export class FlightController {
     this.done = false;
     this.time = 0;
     this.rng = new Xoshiro128ss(opts.seed ?? 1);
-    this.target = { ...opts.target };
-    this.supportY = opts.supportY;
+    const clamped = clampLandTarget(opts.target, opts.supportY, this.obstacles);
+    this.target = clamped;
+    this.supportY = Math.max(opts.supportY, clamped.y);
     this.landPhase = 'face';
     this.forelegExtend = 0;
     this.wingRaise = 1;
@@ -260,8 +289,8 @@ export class FlightController {
     this.tumbleT = 0;
     this.hopY0 = this.position.y;
     this.hopPeakMm = 0;
-    this.target = { ...recover };
-    this.recoverHeading = Math.atan2(recover.x - this.position.x, recover.z - this.position.z);
+    this.target = clampLandTarget(recover, recover.y, this.obstacles);
+    this.recoverHeading = Math.atan2(this.target.x - this.position.x, this.target.z - this.position.z);
     this.wingRaise = 0;
     this.blurAlpha = 0;
     this.forelegExtend = 0;
@@ -283,7 +312,7 @@ export class FlightController {
   update(dt: number): FlightFrame {
     const step = Math.max(0, dt);
     this.time += step;
-    this.flicker = perlin1(this.time * 48, 11) * WING_FLICKER_DEG;
+    this.flicker = Math.sin(this.time * Math.PI * 2 * WING_FLICKER_HZ) * WING_FLICKER_DEG;
     switch (this.kind) {
       case 'orbit': this.stepOrbit(step); break;
       case 'land': this.stepLand(step); break;
@@ -292,6 +321,8 @@ export class FlightController {
       case 'exit': this.stepExit(step); break;
       default: break;
     }
+    this.steerAroundSolids();
+    this.applySolidConstraints();
     return this.snapshot();
   }
 
@@ -482,5 +513,68 @@ export class FlightController {
     this.wingRaise = 1;
     this.blurAlpha = 1;
     if (this.time >= 1.1) this.done = true;
+  }
+
+  private landingOn(box: Aabb3): boolean {
+    if (this.kind !== 'land' && this.kind !== 'takeoff2') return false;
+    return this.target.y + 0.5 >= box.cy + box.hy
+      && Math.abs(this.target.x - box.cx) <= box.hx + 4
+      && Math.abs(this.target.z - box.cz) <= box.hz + 4;
+  }
+
+  private steerAroundSolids(): void {
+    if (this.kind === 'idle' || this.kind === 'takeoff1') return;
+    const speed = Math.hypot(this.velocity.x, this.velocity.z) || CRUISE_MM_S;
+    const hx = Math.sin(this.heading);
+    const hz = Math.cos(this.heading);
+    const ahead = {
+      x: this.position.x + (Math.abs(this.velocity.x) > 1 ? this.velocity.x : hx * speed) * LOOKAHEAD_S,
+      y: this.position.y + this.velocity.y * LOOKAHEAD_S,
+      z: this.position.z + (Math.abs(this.velocity.z) > 1 ? this.velocity.z : hz * speed) * LOOKAHEAD_S,
+    };
+    const boxes = this.obstacles.filter((b) => !this.landingOn(b));
+    const obbs = this.obbs.filter((o) => !this.landingOn(obbAabbHull(o)));
+    const hit = loomingHit(this.position, ahead, boxes, obbs);
+    if (!hit) return;
+    this.heading = wrapPi(yawAwayFromBox(this.position, hit, this.heading));
+    if (this.kind === 'orbit') {
+      this.radius += 12;
+      this.startRadius = Math.max(this.startRadius, this.radius);
+    }
+  }
+
+  private supportFloor(): number {
+    let floor = this.floorY;
+    for (const box of this.obstacles) {
+      if (
+        Math.abs(this.position.x - box.cx) <= box.hx
+        && Math.abs(this.position.z - box.cz) <= box.hz
+      ) {
+        floor = Math.max(floor, box.cy + box.hy);
+      }
+    }
+    for (const obb of this.obbs) {
+      const hull = obbAabbHull(obb);
+      if (
+        Math.abs(this.position.x - hull.cx) <= hull.hx
+        && Math.abs(this.position.z - hull.cz) <= hull.hz
+      ) {
+        const local = {
+          x: (this.position.x - obb.cx) * Math.cos(obb.yaw) - (this.position.z - obb.cz) * Math.sin(obb.yaw),
+          z: (this.position.x - obb.cx) * Math.sin(obb.yaw) + (this.position.z - obb.cz) * Math.cos(obb.yaw),
+        };
+        if (Math.abs(local.x) <= obb.hx && Math.abs(local.z) <= obb.hz) {
+          floor = Math.max(floor, obb.cy + obb.hy);
+        }
+      }
+    }
+    return floor;
+  }
+
+  private applySolidConstraints(): void {
+    const out = resolveSolids(this.position, this.velocity, this.obstacles, this.obbs);
+    this.position = out.position;
+    this.velocity = out.velocity;
+    this.position.y = clamp(this.position.y, this.supportFloor(), this.ceilingY);
   }
 }

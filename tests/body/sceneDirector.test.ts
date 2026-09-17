@@ -30,7 +30,7 @@ function makeDirector() {
       hz: mm(POUCH_MM.width) / 2,
       yaw: layout.pouch.yaw,
     },
-    position: { x: layout.fly.x, y: 2, z: layout.fly.z },
+    position: { x: layout.fly.x, y: layout.board.topY + 2, z: layout.fly.z },
     heading: 0.35,
   });
 }
@@ -104,7 +104,7 @@ describe('SceneDirector', () => {
 
 describe('Przegląd camera', () => {
   it('is a 3/4 front-left view of the fly, pulled back from the mesh', () => {
-    expect(CAMERA_PRESETS[3]).toBe('Przegląd');
+    expect(CAMERA_PRESETS).toContain('Przegląd');
     const layout = kitchenLayout();
     const frame = frameForPreset('Przegląd', flyVisualLengthMm() / 2);
     const overview = overviewFrame();

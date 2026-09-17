@@ -41,7 +41,7 @@ export const EMPTY_SCENE_HUD: SceneHudSnapshot = {
   state: 'SEARCH',
   clip: 'odorTrack',
   caption: '',
-  macro: 'ORBIT',
+  macro: 'EAT_TOP',
   gag: null,
   portions: 0,
   bites: 0,
@@ -143,11 +143,11 @@ function SpikeRaster({
           ctx.lineTo(x, cssH);
           ctx.stroke();
         }
-        const mid = cssH * 0.5;
+        const band = cssH / 2;
         ctx.strokeStyle = '#28323e';
         ctx.beginPath();
-        ctx.moveTo(0, mid);
-        ctx.lineTo(cssW, mid);
+        ctx.moveTo(0, band);
+        ctx.lineTo(cssW, band);
         ctx.stroke();
         const t0 = hist.nowMs - RASTER_WINDOW_MS;
         const paint = (times: readonly number[], y0: number, y1: number, color: string) => {
@@ -161,8 +161,8 @@ function SpikeRaster({
             if (seen[x]) ctx.fillRect(x, y0, 1, y1 - y0);
           }
         };
-        paint(hist.mn9, 2, mid - 2, '#d7f4ff');
-        paint(hist.gust, mid + 2, cssH - 2, '#e8c07a');
+        paint(hist.mn9, 2, band - 1, '#d7f4ff');
+        paint(hist.gust, band + 1, cssH - 2, '#e8c07a');
         if (countRef.current) {
           countRef.current.textContent = formatSpikeCount(hist.countIn(RASTER_COUNT_MS), lang);
         }
@@ -174,10 +174,10 @@ function SpikeRaster({
   }, [raster, lang]);
 
   return (
-    <div className="hud-raster" aria-label={lang === 'pl' ? 'Raster iglic MN9 i gustatorycznych' : 'MN9 and gustatory spike raster'}>
+    <div className="hud-raster" aria-label={lang === 'pl' ? 'Raster iglic MN9 i SMAK' : 'MN9 and taste spike raster'}>
       <div className="hud-raster-labels" aria-hidden="true">
         <span>MN9</span>
-        <span>{lang === 'pl' ? 'GUSTAT.' : 'GUST.'}</span>
+        <span>{lang === 'pl' ? 'SMAK' : 'TASTE'}</span>
       </div>
       <canvas ref={canvasRef} className="hud-raster-canvas" />
       <span ref={countRef} className="hud-num hud-raster-count">{formatSpikeCount(0, lang)}</span>
@@ -330,6 +330,7 @@ export function Hud({
         <h2>{t(lang, 'methods')}</h2>
         <p><strong>{t(lang, 'methodsMeasuredLabel')}</strong> {t(lang, 'methodsMeasured')}</p>
         <p><strong>{t(lang, 'methodsAuthoredLabel')}</strong> {t(lang, 'methodsAuthored')}</p>
+        <p>{t(lang, 'methodsDopamine')}</p>
         <p>{t(lang, 'methodsBody')}</p>
         <p><strong>{t(lang, 'methodsLimitsLabel')}</strong> {t(lang, 'methodsLimits')}</p>
         <p><strong>{t(lang, 'methodsCreditLabel')}</strong> {t(lang, 'methodsCredit')}{' '}

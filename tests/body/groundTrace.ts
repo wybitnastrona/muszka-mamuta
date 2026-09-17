@@ -72,7 +72,7 @@ export function runGroundTrace(opts: GroundTraceOpts): GroundTraceFrame[] {
   const mixer = new MotionMixer();
   mixer.play('odorTrack', { fade: 0 });
   const pouch = pouchObb();
-  let pos = { x: layout.fly.x, y: 2, z: layout.fly.z };
+  let pos = { x: layout.fly.x, y: layout.board.topY + 2, z: layout.fly.z };
   let refillClip: 'retract' | 'groom' | null = null;
   let refillHold = 0;
   let hudState: FeedingState = 'SEARCH';

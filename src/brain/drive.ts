@@ -63,20 +63,29 @@ export function driveDistribution(deltas: number[]): {
   };
 }
 
-export function meanMn9Hz(
+export function meanRoleHz(
   spikeCount: Uint32Array,
   roles: RoleTag[],
   timeSec: number,
+  role: RoleTag,
 ): { n: number; spikes: number; hz: number; ms: number } {
   let n = 0;
   let spikes = 0;
   for (let i = 0; i < roles.length; i++) {
-    if (roles[i] !== 'mn9') continue;
+    if (roles[i] !== role) continue;
     n++;
     spikes += spikeCount[i];
   }
   const ms = timeSec * 1000;
   return { n, spikes, hz: n === 0 || ms === 0 ? 0 : spikes / n / (ms / 1000), ms };
+}
+
+export function meanMn9Hz(
+  spikeCount: Uint32Array,
+  roles: RoleTag[],
+  timeSec: number,
+): { n: number; spikes: number; hz: number; ms: number } {
+  return meanRoleHz(spikeCount, roles, timeSec, 'mn9');
 }
 
 /** Whole-channel labellar drive is sublinear vs the strongest single seed. */

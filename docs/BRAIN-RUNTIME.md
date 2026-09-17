@@ -2,10 +2,12 @@
 
 Live adapter: a leaky integrate-and-fire network on the MaleCNS feeding-circuit
 CSR, running in a **TypeScript Web Worker** (`src/brain/lif-worker.ts`). The worker steps only neurons that are not at rest (sparse roster). The
-`PERF=1` test requires 20k × 167 steps in < 12 ms; that budget is met for
-sparse activity. A fully active 20k-cell sweep would need Option B (WASM).
+`PERF=1` test requires 30k × 167 steps in < 12 ms (synthetic net, not the
+shipped 20k feeding-circuit CSR); that budget is met for
+sparse activity. A fully active 30k-cell sweep on the dense CSR would need
+Option B (WASM).
 
-The worker is the only place that steps the 20k-neuron loop. The main thread
+The worker is the only place that steps the feeding-circuit loop. The main thread
 converts each worker frame into the template `ActivityFrame` and never writes
 membrane state.
 
@@ -15,7 +17,9 @@ membrane state.
 | --- | --- |
 | Signed synapse counts in `graph.bin` | dt, τ_m, V_rest, V_th, V_reset, t_ref, W_syn, τ_syn |
 | `deltaMn9Hz` tercile roles in `drive.json` | Poisson pulse protocol, 50 ms rate window, calibrated `BACKGROUND_RATE_HZ` (0.25) |
-| Subclass (labellar / peg / pharyngeal) | Hunger as `setGain` on the **whole** gustatory channel (every 250 ms from hemolymph) |
+| PAM / PPL1 / MBON identity in `graph.meta.json` (`type`) | unused — see DATA-PIPELINE rejected dopamine readout |
+| Per-seed `deltaPamHz` in `reward.json` | Hunger as `setGain` on the **whole** gustatory channel (every 250 ms from hemolymph) |
+| Subclass (labellar / peg / pharyngeal) | |
 
 See [METABOLISM.md](METABOLISM.md) for the authored hemolymph ODEs. MaleCNS has
 **no** sweet/bitter receptor annotations. Hunger scales all gustatory seeds
@@ -54,7 +58,7 @@ Worker URL: `src/brain/lif-worker.ts` (Vite module worker).
 
 | `type` | Payload | Notes |
 | --- | --- | --- |
-| `init` | `graph: ArrayBuffer`, `metaBytes: ArrayBuffer`, `seed: number` | Transfer both buffers. Worker `JSON.parse`s meta and decodes MMG1 CSR. Main thread does not clone `graph.meta.json`. |
+| `init` | `graph: ArrayBuffer`, `metaBytes: ArrayBuffer`, `seed: number` | Transfer both buffers. Worker calls `loadCircuitFromInitBuffers` (same as Node): magic `MMG1` → float16/varint decode; otherwise uncompressed CSR. |
 | `start` | | Pace ~one 16.7 ms sim frame per wall-clock frame. |
 | `stop` | | Freeze state; does not dispose the graph. |
 | `reset` | `seed?: number` | Clear V, g, drive, spike window; optional new seed. |
@@ -76,8 +80,13 @@ Worker URL: `src/brain/lif-worker.ts` (Vite module worker).
 `PopulationSummary` rates are **Hz** in the current 50 ms window:
 
 ```
-{ mn9Rate, gustDriveRate, gustNeutralRate, gustSuppressRate, mnOtherRate, dnRate }
+{ mn9Rate, gustDriveRate, gustNeutralRate, gustSuppressRate, mnOtherRate, dnRate,
+  pamRate, ppl1Rate, mbonRate, gustRate, mn9SpikeTimesMs, gustSpikeTimesMs, pamSpikeTimesMs }
 ```
+
+`pamRate` / `ppl1Rate` / `mbonRate` use the same 50 ms window as `mn9Rate`.
+They are **not** shown in the HUD: those populations run away after the
+tonic is cut in this carve (docs/DATA-PIPELINE.md).
 
 RNG is **xoshiro128\*\*** seeded from the UI integer (SplitMix32 expansion).
 The same seed must replay the same spike train (see Vitest).
@@ -95,9 +104,11 @@ through `parseReplay` (circuit IDs need not be in the soma-atlas visible set).
 
 ```sh
 npm test                 # replay node:test + Vitest LIF
-PERF=1 npm run test:perf # 20k × 167 steps < 12 ms
+PERF=1 npm run test:perf # 30k × 167 steps < 12 ms
 npm run calibrate:background # BACKGROUND_RATE_HZ so MN9 rest is 2–5 Hz
 npm run measure:drive        # per-seed MN9 deltas → drive.json + role terciles
+npm run tag:reward           # type-prefix reward roles
+npm run measure:reward       # PAM path + rates → reward.json
 npm run validate:circuit     # labellar vs rest; gust_drive vs gust_suppress; sublinear
 ```
 

@@ -148,4 +148,21 @@ describe('ORIENT', () => {
       expect(leftOrientAt).toBeLessThan(HEADING_ALIGN_DEG + 1e-3);
     }
   });
+
+  it('beginTaste starts in TASTE without skipping the hold', () => {
+    const sm = new FeedingStateMachine({ heading: 0.2 });
+    sm.beginTaste(0.4);
+    expect(sm.state).toBe('TASTE');
+    expect(sm.heading).toBeCloseTo(0.4);
+    sm.step({
+      dt: 0.1,
+      mn9Rate: 18,
+      bitter: 0,
+      satiety: 0.2,
+      odorYaw: 0,
+      odorStrength: 1,
+      distanceToFood: ARRIVED,
+    });
+    expect(sm.state).toBe('TASTE');
+  });
 });

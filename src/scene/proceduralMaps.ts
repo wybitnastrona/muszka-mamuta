@@ -128,6 +128,95 @@ export function fillOakAlbedo(data: Uint8Array, size: number, seed: number): voi
   }
 }
 
+/** Long-grain oak: streaks along U (the board's long axis on side faces). */
+export function fillLongGrainOak(
+  data: Uint8Array,
+  size: number,
+  seed: number,
+  base: readonly [number, number, number] = [215, 192, 154],
+): void {
+  const n = new SimplexNoise(seed);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const grain = n.noise2(x * 1.35, y * 0.07) * 0.55 + n.noise2(x * 0.42, y * 0.19) * 0.45;
+      const warm = 1 + grain * 0.14;
+      const i = (y * size + x) * 4;
+      data[i] = Math.max(0, Math.min(255, base[0] * warm));
+      data[i + 1] = Math.max(0, Math.min(255, base[1] * warm * 0.98));
+      data[i + 2] = Math.max(0, Math.min(255, base[2] * (1 + grain * 0.08)));
+      data[i + 3] = 255;
+    }
+  }
+}
+
+/** Sobel normal map from albedo luminance (same method as the crumb bake). */
+export function luminanceToNormalMap(
+  rgba: ArrayLike<number>,
+  width: number,
+  height: number,
+  strength = 2.2,
+): Uint8Array {
+  const gray = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const r = rgba[i * 4]! / 255;
+    const g = rgba[i * 4 + 1]! / 255;
+    const b = rgba[i * 4 + 2]! / 255;
+    gray[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  const out = new Uint8Array(width * height * 4);
+  const at = (x: number, y: number) => gray[y * width + x]!;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const xm = Math.max(0, x - 1);
+      const xp = Math.min(width - 1, x + 1);
+      const ym = Math.max(0, y - 1);
+      const yp = Math.min(height - 1, y + 1);
+      const gx = (at(xp, ym) + 2 * at(xp, y) + at(xp, yp) - at(xm, ym) - 2 * at(xm, y) - at(xm, yp)) * strength;
+      const gy = (at(xm, yp) + 2 * at(x, yp) + at(xp, yp) - at(xm, ym) - 2 * at(x, ym) - at(xp, ym)) * strength;
+      const nx = -gx;
+      const ny = -gy;
+      const nz = 1;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const i = (y * width + x) * 4;
+      out[i] = Math.round((nx / len * 0.5 + 0.5) * 255);
+      out[i + 1] = Math.round((ny / len * 0.5 + 0.5) * 255);
+      out[i + 2] = Math.round((nz / len * 0.5 + 0.5) * 255);
+      out[i + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/** Per-channel median of the centre 40% (matches the crumb bake). */
+export function medianRgbFromRgba(
+  rgba: ArrayLike<number>,
+  width: number,
+  height: number,
+  crop = 0.4,
+): [number, number, number] {
+  const ch = Math.max(1, Math.floor(height * crop));
+  const cw = Math.max(1, Math.floor(width * crop));
+  const y0 = Math.floor((height - ch) / 2);
+  const x0 = Math.floor((width - cw) / 2);
+  const rs: number[] = [];
+  const gs: number[] = [];
+  const bs: number[] = [];
+  const step = Math.max(1, Math.floor(Math.sqrt(cw * ch) / 180));
+  for (let y = y0; y < y0 + ch; y += step) {
+    for (let x = x0; x < x0 + cw; x += step) {
+      const i = (y * width + x) * 4;
+      rs.push(rgba[i]!);
+      gs.push(rgba[i + 1]!);
+      bs.push(rgba[i + 2]!);
+    }
+  }
+  const mid = (arr: number[]) => {
+    arr.sort((a, b) => a - b);
+    return arr[Math.floor(arr.length / 2)] ?? 180;
+  };
+  return [mid(rs), mid(gs), mid(bs)];
+}
+
 /** Radial baked contact-AO / foot blob. Black RGB, alpha falls off with radius. */
 export function fillContactAo(data: Uint8Array, size: number): void {
   const c = (size - 1) * 0.5;

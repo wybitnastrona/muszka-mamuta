@@ -13,7 +13,7 @@ import {
   sampleClip,
 } from '../../src/body/feedingMotion.ts';
 import { eulerDegToQuat, headingError, turnToward } from '../../src/body/math.ts';
-import { parseDebugMode, formatGateOverlay } from '../../src/body/debugQuery.ts';
+import { parseDebugMode, parseLoopVariant, formatGateOverlay } from '../../src/body/debugQuery.ts';
 import { CAMERA_PRESETS } from '../../src/body/cameras.ts';
 import { ANCHORS } from '../../src/body/hierarchy.ts';
 
@@ -107,7 +107,16 @@ describe('debug query and cameras', () => {
     expect(parseDebugMode('debug=pump')).toBe('pump');
     expect(parseDebugMode('debug=label')).toBe('label');
     expect(parseDebugMode('debug=gate')).toBe('gate');
+    expect(parseDebugMode('?debug=match')).toBe('off');
+    expect(parseDebugMode('?debug=grade')).toBe('off');
     expect(parseDebugMode('')).toBe('off');
+  });
+
+  it('parses ?loop=full and defaults to reel', () => {
+    expect(parseLoopVariant('?loop=full')).toBe('full');
+    expect(parseLoopVariant('loop=full')).toBe('full');
+    expect(parseLoopVariant('?debug=weights')).toBe('reel');
+    expect(parseLoopVariant('')).toBe('reel');
   });
 
   it('formats the MN9 gate overlay with FSM and worker rates', () => {

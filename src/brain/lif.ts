@@ -29,12 +29,17 @@ export type PopulationSummary = {
   gustSuppressRate: number;
   mnOtherRate: number;
   dnRate: number;
+  pamRate: number;
+  ppl1Rate: number;
+  mbonRate: number;
   /** Mean Hz of the whole gustatory population (SMAK Hz). */
   gustRate: number;
   /** Spike times (simulation ms) in the interval since the last snapshot. MN9 only. */
   mn9SpikeTimesMs: number[];
   /** Spike times (simulation ms) for class-gustatory seeds since the last snapshot. */
   gustSpikeTimesMs: number[];
+  /** Spike times (simulation ms) for PAM (dan_pam) since the last snapshot. */
+  pamSpikeTimesMs: number[];
 };
 
 export class LifNetwork {
@@ -75,8 +80,10 @@ export class LifNetwork {
   private readonly roleIndex: Map<RoleTag, Int32Array>;
   private readonly isMn9: Uint8Array;
   private readonly isGust: Uint8Array;
+  private readonly isPam: Uint8Array;
   private readonly frameMn9: number[] = [];
   private readonly frameGust: number[] = [];
+  private readonly framePam: number[] = [];
   private readonly synDecay = Math.exp(-DT_MS / TAU_SYN_MS);
   private readonly dtOverTau = DT_MS / TAU_M_MS;
 
@@ -124,9 +131,11 @@ export class LifNetwork {
     for (const [role, list] of buckets) this.roleIndex.set(role, Int32Array.from(list));
     this.isMn9 = new Uint8Array(this.n);
     this.isGust = new Uint8Array(this.n);
+    this.isPam = new Uint8Array(this.n);
     for (let i = 0; i < this.n; i++) {
       if (this.role[i] === 'mn9') this.isMn9[i] = 1;
       if (isGustatorySeed(this.role[i])) this.isGust[i] = 1;
+      if (this.role[i] === 'dan_pam') this.isPam[i] = 1;
     }
     this.seed = seed >>> 0;
     this.rng = new Xoshiro128ss(this.seed);
@@ -161,6 +170,7 @@ export class LifNetwork {
     this.rosterN = 0;
     this.frameMn9.length = 0;
     this.frameGust.length = 0;
+    this.framePam.length = 0;
   }
 
   private applyTonic(): void {
@@ -315,6 +325,7 @@ export class LifNetwork {
       const i = this.lastSpikes[s]!;
       if (this.isMn9[i]) this.frameMn9.push(tMs);
       if (this.isGust[i]) this.frameGust.push(tMs);
+      if (this.isPam[i]) this.framePam.push(tMs);
     }
     return fired;
   }
@@ -334,6 +345,7 @@ export class LifNetwork {
     const summary = this.populationSummary();
     this.frameMn9.length = 0;
     this.frameGust.length = 0;
+    this.framePam.length = 0;
     return { time: this.timeSec, values, summary };
   }
 
@@ -374,9 +386,13 @@ export class LifNetwork {
       gustSuppressRate: this.meanRoleRate('gust_suppress'),
       mnOtherRate: this.meanRoleRate('mn_other'),
       dnRate: this.meanRoleRate('dn'),
+      pamRate: this.meanRoleRate('dan_pam'),
+      ppl1Rate: this.meanRoleRate('dan_ppl1'),
+      mbonRate: this.meanRoleRate('mbon'),
       gustRate: this.meanGustatoryRate(),
       mn9SpikeTimesMs: this.frameMn9.slice(),
       gustSpikeTimesMs: this.frameGust.slice(),
+      pamSpikeTimesMs: this.framePam.slice(),
     };
   }
 

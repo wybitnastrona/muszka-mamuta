@@ -5,7 +5,7 @@ import { CAPTION_EN } from '../hud/captions.ts';
 import type { ProceduralTwarog } from '../food/proceduralTwarog.ts';
 import type { ConsumeEvent, TwarogSystem } from '../food/twarogSystem.ts';
 import { REFILL_ANIM_S } from '../food/twarogSystem.ts';
-import { CURD_ALBEDO_HEX, CURD_MM, mm } from '../scene/scale.ts';
+import { CURD_ALBEDO_HEX, CURD_MM, boardTopY, crumbSizeMm, mm } from '../scene/scale.ts';
 import { Xoshiro128ss } from '../brain/rng.ts';
 
 const CRUMB_POOL = 64;
@@ -39,7 +39,8 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
     roughness: 0.85,
     metalness: 0,
   });
-  const crumbsMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 1.2, 1.4), crumbMat, CRUMB_POOL);
+  const crumb = crumbSizeMm();
+  const crumbsMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(crumb, crumb * 0.75, crumb * 0.875), crumbMat, CRUMB_POOL);
   crumbsMesh.name = 'twarogCrumbs';
   crumbsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   crumbsMesh.castShadow = true;
@@ -56,7 +57,7 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
     active: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, settled: false,
   }));
   let crumbCursor = 0;
-  const tableY = -group.position.y + 0.7;
+  const tableY = boardTopY() - group.position.y + 0.7;
 
   const seedTableCrumbs = () => {
     const rng = new Xoshiro128ss(11);

@@ -26,6 +26,7 @@ import {
   CURD_TOTAL_MASS_G,
   LOD_BODY_LENGTHS,
   LOD_FADE_MS,
+  boardTopY,
   contactRadiusMm as scaleContactRadiusMm,
   flyVisualLengthMm,
   labellumRestReachMm,
@@ -221,13 +222,14 @@ describe('twarog system', () => {
 
   it('supportHeightAt is the tallest uneaten chunk, else table, and drops when that chunk is eaten', () => {
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
-    const origin = { x: 0, y: mm(CURD_MM.height) / 2, z: 0 };
+    const origin = { x: 0, y: boardTopY() + mm(CURD_MM.height) / 2, z: 0 };
     const top = sys.chunks.reduce((a, c) => (c.topY > a.topY ? c : a));
     const wx = origin.x + top.centroid.x;
     const wz = origin.z + top.centroid.z;
     const before = sys.supportHeightAt(wx, wz, origin);
     expect(before).toBeCloseTo(origin.y + top.topY, 5);
     expect(sys.supportHeightAt(400, 400, origin)).toBe(0);
+    expect(sys.supportHeightAt(origin.x, origin.z, origin)).toBeGreaterThanOrEqual(origin.y);
     const covering = sys.chunks.filter((c) => !c.eaten
       && Math.hypot(wx - (origin.x + c.centroid.x), wz - (origin.z + c.centroid.z)) <= c.radiusXz);
     expect(covering.length).toBeGreaterThan(0);
@@ -235,7 +237,7 @@ describe('twarog system', () => {
     const after = sys.supportHeightAt(wx, wz, origin);
     expect(after).toBeLessThan(before);
     for (const c of sys.chunks) sys.commitChunk(c.index);
-    expect(sys.supportHeightAt(wx, wz, origin)).toBe(0);
+    expect(sys.supportHeightAt(wx, wz, origin)).toBe(boardTopY());
   });
 
   it('projectOntoVerticalFace sits on the outward XZ normal', () => {
@@ -285,16 +287,16 @@ describe('twarog system', () => {
     const layout = kitchenLayout();
     const food = layout.curd;
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
-    const fly = { x: layout.fly.x, y: 2, z: layout.fly.z };
+    const fly = { x: layout.fly.x, y: layout.board.topY + 2, z: layout.fly.z };
     const approach = sys.approachTarget(fly, food);
     sys.followBiteFront({
       x: approach.point.x - food.x,
-      y: 2 - food.y,
+      y: layout.board.topY + 2 - food.y,
       z: approach.point.z - food.z,
     });
     const restLab = {
       x: approach.point.x + Math.sin(approach.yaw) * labellumRestReachMm() - food.x,
-      y: 2 - food.y,
+      y: layout.board.topY + 2 - food.y,
       z: approach.point.z + Math.cos(approach.yaw) * labellumRestReachMm() - food.z,
     };
     const miss = sys.step(input({

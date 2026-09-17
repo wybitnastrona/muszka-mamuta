@@ -34,6 +34,7 @@ import {
 import type { FoodProfile } from './foodProfile.ts';
 import { TWAROG_MAMUTA_WANILIOWY } from './foodProfile.ts';
 import type { FracturedCurd } from './proceduralTwarog.ts';
+import { supportHeightAt as composeSupport } from '../scene/layout.ts';
 
 export const PORTION_STORAGE_KEY = 'muszka-mamuta.portions';
 export const CRUMB_MIN = 3;
@@ -110,8 +111,8 @@ export type TwarogStepInput = {
   flyXZ: XZ;
   /**
    * TASTE / EXTEND / PUMP: tarsi are authored to be on the food, but the
-   * coxa bones sit ~2 mm in front of the root and the rest labellum is
-   * 4 mm — both short of `standoffMm()` (15 mm). The extracted circuit
+   * coxa bones sit short of `standoffMm()` and the rest labellum is closer
+   * still. The extracted circuit also has no tarsal GRNs, only labellar /
    * also has no tarsal GRNs, only labellar / peg / pharyngeal seeds.
    * When true, chemo includes the nearest surface chunk so the labellar
    * channel sees food chemistry before PER.
@@ -649,8 +650,10 @@ export class TwarogSystem {
 
   /**
    * World Y of the standing surface at `(x, z)`: the top of the tallest uneaten
-   * chunk whose XZ footprint contains the point, otherwise 0 (table).
-   * Collision is still XZ for the table/pouch; this is the vertical support.
+   * chunk whose XZ footprint contains the point, else the intact hull top if
+   * the point is still in the uneaten footprint, else the cutting-board top
+   * inside its footprint, else 0 (table). Collision is still XZ for the
+   * pouch on the ground; this is the vertical support.
    */
   supportHeightAt(x: number, z: number, foodOrigin: Vec3): number {
     const lx = x - foodOrigin.x;
@@ -663,7 +666,15 @@ export class TwarogSystem {
         if (top > best) best = top;
       }
     }
-    return best === -Infinity ? 0 : best;
+    let foodY = 0;
+    if (best === -Infinity) {
+      if (this.uneatenCount === this.chunkCount && pointInXzAabb({ x, z }, this.worldAabb(foodOrigin))) {
+        foodY = foodOrigin.y + this.hy;
+      }
+    } else {
+      foodY = best;
+    }
+    return composeSupport(x, z, foodY);
   }
 
   /**
@@ -727,9 +738,9 @@ export class TwarogSystem {
     return 0.5 * Math.cbrt(Math.max(0, volMm3));
   }
 
-  /** Labellum reach for eating: contact radius plus the chunk's own half-extent. */
+  /** Labellum reach for eating: fly contact radius plus a Voronoi cell (food does not scale). */
   contactReachMm(): number {
-    return contactRadiusMm() + this.chunkHalfExtentMm();
+    return contactRadiusMm() + 2 * this.chunkHalfExtentMm();
   }
 
   /** Instantly eat one uneaten chunk. Returns grams ingested (0 if already eaten). */

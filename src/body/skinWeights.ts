@@ -1,5 +1,5 @@
 import { smoothstep } from './math.ts';
-import { EYE_MATERIAL_ALIAS, type BoneAnchor } from './types.ts';
+import { EYE_MATERIAL_ALIAS, type BoneAnchor, type WeightGate } from './types.ts';
 
 export type SkinBuffers = {
   skinIndex: Uint16Array;
@@ -26,11 +26,20 @@ function excludesMaterial(bone: BoneAnchor, material: string | undefined): boole
   return bone.excludeMaterials.some((name) => resolvePartMaterial(name) === resolved);
 }
 
+export function vertexPassesGate(x: number, y: number, z: number, gate: WeightGate): boolean {
+  if (y >= gate.yMax) return false;
+  if (Math.abs(x) <= gate.absXMin) return false;
+  if (Math.sign(x) !== gate.xSign) return false;
+  if (z < gate.zMin || z > gate.zMax) return false;
+  return true;
+}
+
 /**
  * Smoothstep falloff inside each bone's maxRadius, hard zero beyond.
  * Material exclusions (eyes / ocelli on mouthparts) skip that bone entirely.
- * Raw weights are clamped so the per-vertex total never exceeds 1; any deficit
- * is assigned to root so Three.js LBS does not implosion-scale the vertex.
+ * Raw weights are clamped so the per-vertex total never exceeds 1. Deficit
+ * goes to root except on vertices whose only influences are gated leg bones
+ * (those stay on the limb so a coxa sphere can move the hanging tarsus).
  */
 export function computeSkinWeights(
   positions: Float32Array,
@@ -52,6 +61,8 @@ export function computeSkinWeights(
     let sum = 0;
     for (let b = 0; b < bones.length; b++) {
       if (excludesMaterial(bones[b], opts.material)) continue;
+      const gate = bones[b].weightGate;
+      if (gate && !vertexPassesGate(x, y, z, gate)) continue;
       const w = boneFalloff(
         Math.hypot(x - bones[b].position[0], y - bones[b].position[1], z - bones[b].position[2]),
         bones[b].maxRadius,
@@ -73,6 +84,14 @@ export function computeSkinWeights(
       sum = 1;
     }
     if (sum < 1) {
+      let gatedOnly = true;
+      for (let i = 0; i < count; i++) {
+        if (!bones[tmpI[i]!]?.weightGate) {
+          gatedOnly = false;
+          break;
+        }
+      }
+      if (!gatedOnly) {
       const deficit = 1 - sum;
       let rootSlot = -1;
       for (let i = 0; i < count; i++) {
@@ -86,6 +105,7 @@ export function computeSkinWeights(
         tmpI[count] = 0;
         tmpW[count] = deficit;
         count++;
+      }
       }
     }
     for (let a = 1; a < count; a++) {

@@ -338,6 +338,16 @@ export function overlayEuler(pose: Pose, overlay: Partial<Record<BoneName, Euler
   return out;
 }
 
+/** Replace listed bones (gait) so feeding clips still own the mouthparts. */
+export function replaceEuler(pose: Pose, overlay: Partial<Record<BoneName, EulerDeg>>): Pose {
+  const out = {} as Pose;
+  for (const name of BONE_NAMES) {
+    const extra = overlay[name];
+    out[name] = extra ? { rotation: eulerDegToQuat(extra) } : pose[name];
+  }
+  return out;
+}
+
 export function blendPoses(a: Pose, b: Pose, alpha: number): Pose {
   const t = clamp01(alpha);
   const u = easeInOut(t);

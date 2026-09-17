@@ -85,10 +85,14 @@ function pixelContext(width: number, height: number): OffscreenCanvasRenderingCo
   throw new Error('Cannot read kitchen texture pixels');
 }
 
-export function opaqueUvFromBitmap(bitmap: ImageBitmap): UvRect {
+export function bitmapRgba(bitmap: ImageBitmap): ImageData {
   const ctx = pixelContext(bitmap.width, bitmap.height);
   ctx.drawImage(bitmap, 0, 0);
-  const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+  return ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+}
+
+export function opaqueUvFromBitmap(bitmap: ImageBitmap): UvRect {
+  const img = bitmapRgba(bitmap);
   return opaqueUvRectFromRgba(img.data, bitmap.width, bitmap.height);
 }
 

@@ -2,9 +2,9 @@
  * Authored grooming and postprandial sleep. Not connectome-driven.
  *
  *   Seeds 2014 — hierarchical grooming (eyes → antennae → proboscis →
- *     abdomen → wings); forelegs for the head, a pose-blend for the rest,
- *     with a leg-rub interlude every two parts. Chen & Seeds 2025 for the
- *     later circuit map of the same hierarchy.
+ *     abdomen → wings); forelegs for the head, hind legs for the wing
+ *     phase, a pose-blend for abdomen, with a leg-rub interlude every two
+ *     parts. Chen & Seeds 2025 for the later circuit map of the same hierarchy.
  *   Murphy 2016 — postprandial sleep after a sweet bout (satiety > 0.8).
  *
  * See docs/BODY-MODEL.md. Nothing here writes into ActivityFrame.
@@ -12,6 +12,7 @@
 import type { BoneName, EulerDeg, Pose } from './types.ts';
 import { clamp01, lerp } from './math.ts';
 import { overlayEuler } from './feedingMotion.ts';
+import { raiseForDeltaDeg } from './wings.ts';
 
 export const GROOM_SHORT_S = 3;
 export const GROOM_FULL_S = 8;
@@ -78,11 +79,15 @@ function partPose(name: (typeof FULL_PARTS)[number]['name'], u: number): Partial
         abdomen: [16 * w, 0, 8 * Math.sin(u * Math.PI * 2)],
         root: [4 * w, 0, 0],
       };
-    case 'wings':
+    case 'wings': {
+      const sweep = Math.sin(u * Math.PI * 6) * 38;
       return {
         abdomen: [6 * w, 0, 0],
         root: [2 * w, 0, 0],
+        hindleg_L: [32 * w, 10 * w, 24 * w + sweep],
+        hindleg_R: [32 * w, -10 * w, -24 * w - sweep],
       };
+    }
   }
 }
 
@@ -116,7 +121,9 @@ export function groomFullOverlay(t: number): GroomNapOverlay {
       }
     }
   }
-  return { euler, sinkMm: 0, wingRaise: t >= 6.2 ? 0.15 * Math.sin((t - 6.2) * Math.PI) : 0, caption: null, done: u >= 1 };
+  const wingU = t >= 6.2 ? clamp01((t - 6.2) / 1.8) : 0;
+  const wingRaise = t >= 6.2 ? raiseForDeltaDeg(30) * Math.sin(wingU * Math.PI) : 0;
+  return { euler, sinkMm: 0, wingRaise, caption: null, done: u >= 1 };
 }
 
 export function napDuration(satiety: number, doubled = false): number {

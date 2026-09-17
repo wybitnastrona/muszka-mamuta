@@ -10,6 +10,10 @@ export const BONE_NAMES = [
   'labellum_R',
   'foreleg_L_tarsus',
   'foreleg_R_tarsus',
+  'midleg_L',
+  'midleg_R',
+  'hindleg_L',
+  'hindleg_R',
 ] as const;
 
 export type BoneName = (typeof BONE_NAMES)[number];
@@ -28,6 +32,15 @@ export const EYE_MATERIAL_ALIAS: Record<string, string> = {
   ocelli: 'ocelli',
 };
 
+/** Vertex gate so a spherical falloff cannot reach the thorax or the other legs. */
+export type WeightGate = {
+  yMax: number;
+  absXMin: number;
+  zMin: number;
+  zMax: number;
+  xSign: 1 | -1;
+};
+
 export type BoneAnchor = {
   name: BoneName;
   parent: BoneName | null;
@@ -35,6 +48,7 @@ export type BoneAnchor = {
   maxRadius: number;
   excludeMaterials?: string[];
   legGroup?: 'front_left' | 'front_right';
+  weightGate?: WeightGate;
 };
 
 export type AnchorFile = {
@@ -83,7 +97,7 @@ export type CameraPreset = (typeof CAMERA_PRESETS)[number];
 export type FeedingEvent =
   | { type: 'transition'; from: FeedingState; to: FeedingState; t: number }
   | { type: 'bite'; cycle: number; t: number }
-  | { type: 'consume'; massGrams: number; chunkId: number; t: number }
+  | { type: 'consume'; massGrams: number; chunkId: number; t: number; centroid?: { x: number; y: number; z: number } }
   | { type: 'portion'; count: number; t: number };
 
 export type DebugMode = 'off' | 'weights' | 'motion' | 'extend' | 'pump' | 'label' | 'gate';

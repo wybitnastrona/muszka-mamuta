@@ -1,6 +1,6 @@
 /// <reference lib="WebWorker" />
 
-import { parseCircuit } from './csr.ts';
+import { loadCircuitFromInitBuffers } from './csr.ts';
 import { LifNetwork } from './lif.ts';
 import { FRAME_MS } from './params.ts';
 import type { WorkerIn, WorkerOut } from './protocol.ts';
@@ -39,8 +39,7 @@ onmessage = (event: MessageEvent<WorkerIn>) => {
       case 'init': {
         running = false;
         if (timer !== null) { clearTimeout(timer); timer = null; }
-        const meta = JSON.parse(new TextDecoder().decode(msg.metaBytes)) as unknown;
-        const circuit = parseCircuit(meta, msg.graph);
+        const circuit = loadCircuitFromInitBuffers(msg.metaBytes, msg.graph);
         net = new LifNetwork(circuit, msg.seed);
         send({ type: 'ready', nNeurons: net.n, seed: net.seed });
         break;

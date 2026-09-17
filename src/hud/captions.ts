@@ -30,6 +30,8 @@ export const LOOP_CAPTIONS_PL: Record<string, string> = {
   GROOM_FULL: 'Czyści się',
   WAKE: 'Czyści się',
   NAP: 'Trawi',
+  WALK_REPOSITION: 'Przechodzi',
+  WALK_TOP: 'Przechodzi',
 };
 
 const LOOP_CAPTIONS_EN: Record<string, string> = {
@@ -38,6 +40,7 @@ const LOOP_CAPTIONS_EN: Record<string, string> = {
   'Startuje': 'Taking off',
   'Czyści się': 'Grooming',
   'Trawi': 'Digesting',
+  'Przechodzi': 'Walking',
   'Śpiewa do krowy': 'Singing to the cow',
   'Śliska folia': 'Slippery foil',
   'Okruszek': 'A crumb',
@@ -133,5 +136,7 @@ export function formatSubCaption(bites: number, grams: number, lang: Lang): stri
 }
 
 export function formatSpikeCount(n: number, lang: Lang): string {
-  return lang === 'pl' ? `${n} iglic / 20 ms` : `${n} spikes / 20 ms`;
+  return lang === 'pl'
+    ? `${n} iglic / 20 ms · MN9 · SMAK`
+    : `${n} spikes / 20 ms · MN9 · TASTE`;
 }

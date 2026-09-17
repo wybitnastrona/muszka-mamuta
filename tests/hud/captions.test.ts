@@ -39,6 +39,7 @@ describe('HUD captions', () => {
       expect(out.headline).toBe(line);
     }
     expect(translateCaption('Czyści się', 'en')).toBe('Grooming');
+    expect(translateCaption('Przechodzi', 'en')).toBe('Walking');
   });
 
   it('formats readouts', () => {
@@ -46,7 +47,8 @@ describe('HUD captions', () => {
     expect(formatBites(0, 6, 'pl')).toBe('KĘSY 0/6');
     expect(formatGrams(12.4, 'pl')).toBe('12,4 g');
     expect(formatSubCaption(41, 12.4, 'pl')).toBe('Kęs 41 · 12,4 g zjedzone łącznie');
-    expect(formatSpikeCount(12, 'pl')).toBe('12 iglic / 20 ms');
+    expect(formatSpikeCount(12, 'pl')).toBe('12 iglic / 20 ms · MN9 · SMAK');
+    expect(formatSpikeCount(12, 'en')).toBe('12 spikes / 20 ms · MN9 · TASTE');
   });
 });
 
@@ -64,7 +66,6 @@ describe('spike history', () => {
     h.push(1.0, [990, 995], [980]);
     h.push(2.05, [2040], [2035, 2045]);
     expect(h.mn9.every((t) => t >= h.nowMs - 2000)).toBe(true);
-    expect(h.countIn(RASTER_COUNT_MS)).toBeGreaterThanOrEqual(2);
-    expect(h.countIn(RASTER_COUNT_MS)).toBeLessThanOrEqual(3);
+    expect(h.countIn(RASTER_COUNT_MS)).toBe(3);
   });
 });

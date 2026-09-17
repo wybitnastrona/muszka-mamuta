@@ -90,9 +90,10 @@ export function poseSpoon(
 ): void {
   const restX = width * 0.44;
   const restZ = -depth * 0.32;
+  const topY = kitchenLayout().board.topY;
   spoon.position.set(
     restX - shadow * width * 0.72,
-    3.4 + shadow * 26,
+    topY + 3.4 + shadow * 26,
     restZ + shadow * 18,
   );
   spoon.rotation.set(-0.1, 0.42 + shadow * 0.35, 1.12);
@@ -171,7 +172,7 @@ export function createKitchen(
   );
   plate.name = 'cheesePlate';
   plate.scale.set(1.18, 1, 1.38);
-  plate.position.set(layout.curd.x, 0.4, layout.curd.z);
+  plate.position.set(layout.curd.x, layout.board.topY + 0.4, layout.curd.z);
   plate.receiveShadow = quality.shadows;
   group.add(plate);
 
@@ -199,7 +200,7 @@ export function createKitchen(
     }),
   );
   gagShadow.rotation.x = -Math.PI / 2;
-  gagShadow.position.set(0, 0.2, 0);
+  gagShadow.position.set(0, layout.board.topY + 0.2, 0);
   gagShadow.name = 'spoonGagShadow';
   gagShadow.visible = false;
   gagShadow.renderOrder = 8;
@@ -223,7 +224,7 @@ export function createKitchen(
   contactAo.rotation.x = -Math.PI / 2;
   contactAo.name = 'thoraxContactAo';
   contactAo.renderOrder = 7;
-  contactAo.position.set(layout.fly.x, 0.12, layout.fly.z);
+  contactAo.position.set(layout.fly.x, layout.board.topY + 0.12, layout.fly.z);
   group.add(contactAo);
 
   return { group, table, plate, spoon, gagShadow, contactAo, maps };

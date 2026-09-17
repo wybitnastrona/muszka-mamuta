@@ -43,6 +43,66 @@ effect.** Every seed reaches MN9 through thousands of paths at depth 4.
 The −1 subset drove MN9 **harder** than the full labellar set. The field remains
 in metadata as `path_sign_deprecated` for audit. Do not use it in the model.
 
+## Rejected: dopamine readout (keep the negative result)
+
+We tried to drive a dopamine HUD from the 19 PAM cells that are already in
+the shipped 20k feeding-gate graph (`type` prefix `PAM`, bodyIds listed
+below). **That readout is not in the model.** `src/metabolism/dopamine.ts`
+and `public/data/feeding-circuit/reward.json` remain in the tree as audit
+only.
+
+On the **20k** graph (`2d084d9`, seed 1, 0.25 Hz tonic, 100 Hz / 500 ms):
+
+| Stimulus | PAM rate | vs rest |
+| --- | --- | --- |
+| rest (2000 ms) | **0.053 Hz** (2 spikes / 19 cells) | — |
+| all 271 gustatory | **0 Hz** | **Δ −0.053 Hz** |
+| strongest single seed | Δ **+0.789 Hz** | first spike on the short-route seed at **206 ms** |
+
+998 shortest walks exist in this depth-4 carve, but they collapse to one
+short route: **PhG4 13491 → SLP234 13537 → PAM10 28434**. PAM is in the
+graph and is graph-reachable. It is effectively silent as a sensory-driven
+population.
+
+Widening to 30k via the gustatory→PAM intersection (`|I| = 861,609`,
+forward depth 5, 10k extras) made PAM *look* responsive (**whole-channel
+Δ +132 Hz**) but pulled in **4,064 Kenyon cells** and created a
+self-sustaining excitatory loop: after the tonic was cut, PAM went
+**78 → 352 Hz** while MN9 fell to 0. Excluding `^KC`, then `^MBON`, from
+the extra 10k did not stop it. APL (`type == "APL"`, bodyIds **10540** and
+**10977**, GABA) is present in MaleCNS and was forced into the keep set,
+but could not hold the sheet (APL→extra KC: **4,633 edges / 196,200
+synapses**). Remaining extras still recruited 297 extra PAM-type cells
+that rode the same loop; the original 19 PAM barely moved.
+
+**Conclusion:** PAM activity in any subgraph we can carve here is
+inseparable from unphysiological recurrence. We do not ship a dopamine
+readout. Do not substitute MBON or PPL1 — those rates fail the same test
+(see the next section). Extra 10k slots stay at 0. No further extraction
+attempts.
+
+## Known limitation: rest-state rates besides MN9
+
+The zero-tonic test on the **shipped 20k** graph shows the same phenomenon
+in milder form. After 2000 ms of 0.25 Hz tonic on the 271 gustatory seeds,
+cutting the tonic to 0 for another 2000 ms:
+
+| Population | rest Hz | after tonic cut |
+| --- | ---: | ---: |
+| PPL1 | 30.7 | **113** |
+| MBON | 12.0 | **45.5** |
+| dan_other (PPL2/PPM) | 27.9 | **112** |
+| interneuron | 11.2 | **44.4** |
+| PAM (19) | 0.053 | 0 (does not increase) |
+| MN9 | 3.75 | **0** |
+
+The carve-out lacks the inhibition that bounds these populations in the
+intact brain, so **their rates are not interpretable**. Only MN9 and the
+gustatory seeds are used by the model. MN9 does not run away: it falls to
+0 without the sensory drive, as expected for a sensory-driven motor
+neuron. Cold start at 0 tonic is all 0 Hz (no pacemaker). Do not display
+PPL1, MBON, or PAM as a live readout.
+
 ## Findings: non-additivity, inhibition, and rest
 
 Replacement for `path_sign`: `scripts/measure_drive.ts` stimulates **one** seed
@@ -156,12 +216,44 @@ same filters and assertions.
    - anything else, including `unclear` / missing → `+1` with `nt_uncertain`
 3. Forward BFS from `PROBOSCIS_GUSTATORY`, max depth **4**.
 4. Backward BFS from `MN9 ∪ PROBOSCIS_MOTOR`, max depth **4**.
-5. Keep the **intersection**, plus the seed sets themselves.
-6. Add any neuron with **≥ 5 synapses onto that set** (preserves possible
-   inhibitory control that is not on a short sensory–motor path).
-7. Cap at **20,000** neurons: drop the weakest-connected first (incident
-   synapse count inside the candidate set). **Never drop a seed.** Dropped
-   body IDs are logged to stdout and, if any, `data/derived/feeding-circuit-dropped.json`.
+5. Keep the **intersection**, plus the seed sets themselves (gustatory, motor, and
+   the 19 PAM bodyIds that were already in that subgraph).
+6. **Gustatory→PAM extra slots (not a PAM-backward union).** A third BFS
+   *union* from the 19 PAM cells pulls in ~1.6M afferents. Ranking those by
+   degree keeps SEZ hubs: the extra 10k can be strong PAM listeners that
+   gustatory cells never reach — the same silence. Instead take
+   **I = G ∩ P**:
+   - **G:** forward from the 271 gustatory seeds, depth **6**.
+   - **P:** backward from the 19 PAM, depth **4**.
+   - Report **|I| before capping**. If |I| is empty: **stop** — the
+     gustatory-to-PAM route is not in MaleCNS at this confidence; do not pad.
+   - If |I| minus the 20k core is under 10k: take all of it.
+   - Else rank I by **path strength to PAM** (max product of unsigned synapse
+     counts, hop-limited Bellman–Ford from the 19 PAM, depth ≤ 4, restricted
+     to I) and keep the top 10k.
+   - Do **not** add ≥5-synapse control partners onto this extra set.
+   MaleCNS has 316 PAM-type cells; we BFS only from the 19 verified in the
+   feeding subgraph.
+   Extra 10k is **abandoned** — see **Rejected: dopamine readout** above.
+   Shipped graph is the 20k feeding gate from `2d084d9`.
+   Depth 6 on 151M edges can make |G| enormous. If **|P| or |I| > 80,000**,
+   the extractor uses forward depth **5** instead (the compromise if a depth-6
+   intersection would hang ranking). It does **not** run depth 6 and then 5.
+7. Add any neuron with **≥ 5 synapses onto the feeding-gate core** (not onto
+   the extra 10k). Preserves possible inhibitory control that is not on a
+   short sensory–motor path.
+8. **Two-stage neuron cap.** Cap the GRN∩MN9 core to **20,000** (original
+   feeding-gate carve, never drop a seed). Fill remaining slots from I as
+   above, never dropping that core. A single 30k pass on a 1.6M PAM-union
+   keeps the dense SEZ and drops every off-core PAM-neighborhood cell
+   (verified: 0 of 751,491 retained). Dropped-ID preview:
+   `data/derived/feeding-circuit-dropped.json`.
+9. **Size cap (20 MiB).** Cloudflare Pages is 25 MB/file;
+   `scripts/compress_graph.ts` fails at **20 MiB**. If the compressed CSR is
+   over that, drop edges whose unsigned synapse count is **1** (noise), **not
+   neurons**. Weight-1 trim **must skip edges on a gustatory→PAM walk**,
+   including the measured thin path `13491 PhG4 → 13537 SLP234 → 28434 PAM10`.
+   Cutting those edges would undo the extra 10k.
 
 Role tags for gustatory seeds are **measured** (`gust_drive` / `gust_neutral` /
 `gust_suppress` from `drive.json`). Older extracts briefly tagged
@@ -191,8 +283,42 @@ it as `path_sign_deprecated` only.
   `role` (measured gust terciles), `gust_channel` (`labellar` / `pharyngeal` on
   the 271 seeds), `path_sign_deprecated`, `nt_uncertain`, provenance.
 - `public/data/feeding-circuit/drive.json` — per-seed `deltaMn9Hz` and rank.
+- `public/data/feeding-circuit/reward.json` — unused audit of PAM path / rates (see Rejected: dopamine readout).
+
+## Reward-cell identity (audit only, unused)
+
+Role tags `dan_pam` / `dan_ppl1` / `dan_other` / `mbon` / `kc` are derived
+**only** from the MaleCNS `type` field (`npm run tag:reward`). They replace
+`interneuron` for those cells; gustatory terciles, MN9, other MN, and DNs are
+untouched. Counts in the extracted circuit (identity only — **not a HUD
+readout**; see Rejected: dopamine readout):
+
+| Group | n | Types present |
+| --- | --- | --- |
+| PAM (`dan_pam`) | 19 | PAM04, PAM05, PAM10 (15), PAM11 |
+| PPL1 (`dan_ppl1`) | 16 | PPL101–PPL108 |
+| PPL2 / PPM (`dan_other`) | 17 | PPL201–203, PPM1201–1205 |
+| MBON | 66 | MBON01–MBON35 (types actually present; not every index) |
+| KC | 8 | KCg-d, KCg-s1, KCg-s2, KCa'b'-ap2 |
+
+PAM bodyIds (from `type` prefix `PAM`, then asserted against this list):
+28434, 29565, 32865, 36624, 37845, 48113, 60930, 66934, 125080, 143120,
+170450, 178945, 200973, 520403, 520616, 525787, 544257, 544359, 547260.
+
+**Limitation:** MaleCNS does **not** assign mushroom-body compartments. We
+do **not** claim these cells are PAM-β'2 (Musso, Lehnert et al. 2021;
+Huetteroth et al. 2015 are interpretation only, not parameters). We measure
+the PAM population that is actually in this subgraph.
+
+`npm run measure:reward` is an **audit** script (same protocol as
+`measure_drive.ts`). It is not wired to the HUD. Full numbers and the
+rejected 30k extract live in **Rejected: dopamine readout** above.
+
+Compressed `graph.bin` is 12.26 MB (under the 20 MiB `compress_graph.ts`
+target).
 
 ## How to run
+
 
 Python **3.12** (see `.venv`):
 
@@ -202,6 +328,8 @@ Python **3.12** (see `.venv`):
 .venv/bin/python scripts/data-prep/extract_feeding_circuit.py
 npm run calibrate:background   # writes BACKGROUND_RATE_HZ so MN9 rest is 2–5 Hz
 npm run measure:drive          # per-seed MN9 deltas + role terciles
+npm run tag:reward             # PAM / PPL1 / PPL2-PPM / MBON / KC from type
+npm run measure:reward         # gustatory → PAM path, rates, per-seed deltaPamHz
 .venv/bin/pytest tests/data-prep -q
 npm run validate:circuit
 ```

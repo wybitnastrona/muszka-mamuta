@@ -10,6 +10,10 @@ import { Xoshiro128ss } from '../brain/rng.ts';
 import { clamp01, lerp } from './math.ts';
 import { FLY_WALK_MM_S } from '../scene/scale.ts';
 import {
+  SONG_ENVELOPE_HZ,
+  WING_FLICKER_DEG,
+} from './wings.ts';
+import {
   PACK_BACK_NUTRITION_ROWS,
   PACK_FRONT_COW_UV,
   PACK_FRONT_LANDING_UV,
@@ -80,6 +84,9 @@ export type GagFrame = {
   wingRaiseR: number;
   wingSongL: number;
   wingSongR: number;
+  wingBlurL: number;
+  wingBlurR: number;
+  wingFlicker: number;
   spoonShadow: number;
   crumbAttach: CrumbBone;
   sinkMm: number;
@@ -147,6 +154,9 @@ const EMPTY: GagFrame = {
   wingRaiseR: 0,
   wingSongL: 0,
   wingSongR: 0,
+  wingBlurL: 0,
+  wingBlurR: 0,
+  wingFlicker: 0,
   spoonShadow: 0,
   crumbAttach: null,
   sinkMm: 0,
@@ -238,12 +248,29 @@ export class GagPlayer {
       return this.base({});
     }
     const t = this.phaseT;
-    const vib = 8 * Math.sin(2 * Math.PI * 5 * t);
+    const env = Math.sin(2 * Math.PI * SONG_ENVELOPE_HZ * t);
+    const vib = 14 * env;
+    const blur = 0.42 + 0.58 * (0.5 + 0.5 * env);
     if (t < 2.5) {
-      return this.base({ wingRaiseL: 1, wingSongL: 90 + vib, wingSongR: 0 });
+      return this.base({
+        wingRaiseL: 1,
+        wingSongL: 90 + vib,
+        wingSongR: 0,
+        wingBlurL: blur,
+        wingBlurR: 0,
+        wingFlicker: WING_FLICKER_DEG * (0.55 + 0.45 * env),
+      });
     }
     if (t < 3.3) return this.base({ wingRaiseL: 0, wingRaiseR: 0 });
-    if (t < 4.8) return this.base({ wingRaiseR: 1, wingSongR: 90 + vib });
+    if (t < 4.8) {
+      return this.base({
+        wingRaiseR: 1,
+        wingSongR: 90 + vib,
+        wingBlurL: 0,
+        wingBlurR: blur,
+        wingFlicker: WING_FLICKER_DEG * (0.55 + 0.45 * env),
+      });
+    }
     if (t < 5.4) return this.base({});
     const off = { x: land.x - 18, y: land.y, z: land.z - 10 };
     const w = walkToward(this.pos, off, dt);

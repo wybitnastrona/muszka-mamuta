@@ -151,6 +151,20 @@ describe('PopulationSummary rate window', () => {
     expect(snap.summary.gustRate).toBeGreaterThan(0);
   });
 
+  it('records PAM rate and spike times on the same 50 ms window as MN9', () => {
+    const net = new LifNetwork(graph({
+      n: 2,
+      roles: ['dan_pam', 'mn9'],
+      bodyId: [28434, 10331],
+    }), 1);
+    net.setCurrent(0, 15);
+    const snap = net.stepFrame();
+    expect(snap.summary.pamRate).toBeGreaterThan(0);
+    expect(snap.summary.pamSpikeTimesMs.length).toBeGreaterThan(0);
+    expect(snap.summary.ppl1Rate).toBe(0);
+    expect(snap.summary.mbonRate).toBe(0);
+  });
+
   it('reports Hz per cell, not spikes-per-window', () => {
     const net = new LifNetwork(graph({
       n: 2,
@@ -169,8 +183,8 @@ describe('PopulationSummary rate window', () => {
 });
 
 describe.skipIf(process.env.PERF !== '1')('perf budget', () => {
-  it('steps 20k neurons × 167 dt under 12 ms', () => {
-    const n = 20_000;
+  it('steps 30k neurons × 167 dt under 12 ms', () => {
+    const n = 30_000;
     const degree = 8;
     const nEdges = n * degree;
     const indptr = new Int32Array(n + 1);
@@ -199,6 +213,7 @@ describe.skipIf(process.env.PERF !== '1')('perf budget', () => {
     const t0 = performance.now();
     net.step(FRAME_STEPS);
     const elapsed = performance.now() - t0;
+    console.log(`PERF ${n} neurons × ${FRAME_STEPS} dt: ${elapsed.toFixed(2)} ms`);
     expect(elapsed).toBeLessThan(12);
   });
 });

@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { RenderQuality } from './quality.ts';
 import { EXPOSURE, kelvinToHex } from './proceduralMaps.ts';
+import { GRID_FLOOR_FOG, studioFogDensity } from './kitchenFog.ts';
 
 export const FOG_COLOR = 0x07080c;
 export const KEY_INTENSITY = 2.85;
@@ -24,8 +25,8 @@ export function installKitchenLook(
   table: { width: number; depth: number },
   quality: RenderQuality,
 ): KitchenLights {
-  scene.background = new THREE.Color(FOG_COLOR);
-  scene.fog = new THREE.Fog(FOG_COLOR, 280, 920);
+  scene.background = new THREE.Color(GRID_FLOOR_FOG);
+  scene.fog = new THREE.FogExp2(GRID_FLOOR_FOG, studioFogDensity(660));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = EXPOSURE;
   renderer.shadowMap.enabled = quality.shadows;

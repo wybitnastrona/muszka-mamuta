@@ -1,5 +1,5 @@
 {
-  "comment": "Authored landmarks in Flybody model.json space (+Z anterior, +Y dorsal, +X anatomical left). Not measured joints. front_left / front_right groups parent to the named foreleg bones at the coxa pivots from model.json. maxRadius is in model units, derived from the body AABB (size 0.612 × 0.184 × 0.301, diag 0.706) and min distance from each bone to eyes/ocelli/thorax; mouthparts are capped below those surfaces. Flybody names the compound-eye part `red`; excludeMaterials uses the alias `eyes`.",
+  "comment": "Authored landmarks in Flybody model.json space (+Z anterior, +Y dorsal, +X anatomical left). Not measured joints. front_left / front_right groups parent to the named foreleg bones at the coxa pivots from model.json. Mid/hind coxae are the proximal-most vertex of each Z-cluster of body-mesh vertices with y < -0.02 and |x| > 0.02 (three clusters per side; anterior cluster is the existing foreleg, not re-added). maxRadius for mid/hind is the cluster extent; a weightGate (same y/|x| cut plus that cluster's Z range and side) keeps the smoothstep falloff off the thorax and the other legs. Mouthpart maxRadius is derived from the body AABB (size 0.612 × 0.184 × 0.301, diag 0.706) and min distance to eyes/ocelli/thorax. Flybody names the compound-eye part `red`; excludeMaterials uses the alias `eyes`.",
   "space": "public/data/flybody/model.json",
   "up": [0, 1, 0],
   "forward": [0, 0, 1],
@@ -77,6 +77,38 @@
       "position": [-0.0209, -0.0272, 0.0317],
       "maxRadius": 0.0,
       "legGroup": "front_right"
+    },
+    {
+      "name": "midleg_L",
+      "parent": "root",
+      "position": [0.0201, -0.0298, 0.0146],
+      "maxRadius": 0.18,
+      "excludeMaterials": ["eyes", "ocelli"],
+      "weightGate": { "yMax": -0.02, "absXMin": 0.02, "zMin": -0.0675, "zMax": 0.045, "xSign": 1 }
+    },
+    {
+      "name": "midleg_R",
+      "parent": "root",
+      "position": [-0.0201, -0.0298, 0.0146],
+      "maxRadius": 0.18,
+      "excludeMaterials": ["eyes", "ocelli"],
+      "weightGate": { "yMax": -0.02, "absXMin": 0.02, "zMin": -0.0675, "zMax": 0.045, "xSign": -1 }
+    },
+    {
+      "name": "hindleg_L",
+      "parent": "root",
+      "position": [0.0278, -0.0259, -0.0698],
+      "maxRadius": 0.18,
+      "excludeMaterials": ["eyes", "ocelli"],
+      "weightGate": { "yMax": -0.02, "absXMin": 0.02, "zMin": -0.185, "zMax": -0.0676, "xSign": 1 }
+    },
+    {
+      "name": "hindleg_R",
+      "parent": "root",
+      "position": [-0.0288, -0.0259, -0.0698],
+      "maxRadius": 0.18,
+      "excludeMaterials": ["eyes", "ocelli"],
+      "weightGate": { "yMax": -0.02, "absXMin": 0.02, "zMin": -0.185, "zMax": -0.0676, "xSign": -1 }
     }
   ]
 }

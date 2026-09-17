@@ -2,6 +2,7 @@
  * Rolling MN9 / gustatory spike buffer for the HUD raster.
  * Times are simulation milliseconds from PopulationSummary (RATE_WINDOW_MS = 50).
  * Authored display; spikes themselves are the LIF worker.
+ * PAM is not shown: docs/DATA-PIPELINE.md § Rejected: dopamine readout.
  */
 export const RASTER_WINDOW_MS = 2000;
 export const RASTER_COUNT_MS = 20;
@@ -11,7 +12,11 @@ export class SpikeHistory {
   gust: number[] = [];
   nowMs = 0;
 
-  push(timeSec: number, mn9TimesMs: readonly number[], gustTimesMs: readonly number[]): void {
+  push(
+    timeSec: number,
+    mn9TimesMs: readonly number[],
+    gustTimesMs: readonly number[],
+  ): void {
     this.nowMs = timeSec * 1000;
     if (mn9TimesMs.length) this.mn9.push(...mn9TimesMs);
     if (gustTimesMs.length) this.gust.push(...gustTimesMs);

@@ -13,27 +13,29 @@ export type CameraFrame = {
   fov: number;
 };
 
-/** High behind the fly, looking down so the pouch top (and label) reads as a flat pack. */
+export const REEL_ASPECT = 9 / 16;
+
+/** High kitchen overview of the cutting board, plate, 250 g block, pouch and fly. */
 export function kitchenFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { curd, pouch, fly } = kitchenLayout();
+  const { board } = kitchenLayout();
   return {
-    position: [fly.x - 22, 248, fly.z - 90],
-    lookAt: [(curd.x + pouch.x) * 0.4, 4, (fly.z + curd.z) * 0.15],
-    fov: 32,
+    position: [-80, 360, -560],
+    lookAt: [0, board.topY * 0.45, 0],
+    fov: 42,
   };
 }
 
 export function sideFrame(radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { fly, biteFront } = kitchenLayout();
+  const { fly, biteFront, board } = kitchenLayout();
   return {
-    position: [fly.x + Math.max(28, radius * 2.4), 12, fly.z + 8],
+    position: [fly.x + Math.max(28, radius * 2.4), board.topY + 12, fly.z + 8],
     lookAt: [biteFront.x, biteFront.y, biteFront.z],
     fov: 32,
   };
 }
 
 export function closeupOffset(radius = flyVisualLengthMm() / 2): [number, number, number] {
-  const s = Math.max(8, radius * 0.55);
+  const s = Math.max(flyVisualLengthMm() * 0.4, radius * 0.55);
   return [s * 1.15, s * 0.4, s * 0.7];
 }
 
@@ -52,27 +54,28 @@ export function labelCloseupFrame(label: THREE.Object3D): CameraFrame {
  * legs in frame, pulled back enough that the mesh is not clipped.
  */
 export function overviewFrame(radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { fly, biteFront } = kitchenLayout();
+  const { fly, biteFront, board } = kitchenLayout();
   const s = Math.max(22, radius * 1.55);
   return {
-    position: [fly.x + s * 1.05, s * 0.48, fly.z + s * 0.88],
-    lookAt: [fly.x, Math.max(3.5, biteFront.y * 0.4), fly.z + flyVisualLengthMm() * 0.22],
+    position: [fly.x + s * 1.05, board.topY + s * 0.48, fly.z + s * 0.88],
+    lookAt: [fly.x, board.topY + Math.max(3.5, (biteFront.y - board.topY) * 0.4), fly.z + flyVisualLengthMm() * 0.22],
     fov: 30,
   };
 }
 
 /**
- * 35 mm-equivalent (~38° vertical FOV), 15° above the table, fly and food
- * composed in the middle third. Handheld drift and DOF are applied in the mount.
+ * Studio reel: 9:16, 35 mm-equivalent (~38° vertical FOV), 15° above the
+ * table (low angle). Fly and board sit in the middle third. Handheld drift
+ * and head-focused DOF are applied in the mount.
  */
 export function reelFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { fly, curd } = kitchenLayout();
+  const { fly, curd, board } = kitchenLayout();
   const lookAt: [number, number, number] = [
-    (fly.x + curd.x) * 0.5,
-    8,
-    (fly.z + curd.z) * 0.5,
+    (fly.x + curd.x) * 0.45,
+    board.topY + 10,
+    (fly.z + curd.z) * 0.45,
   ];
-  const dist = 168;
+  const dist = 700;
   const elev = (REEL_ELEV_DEG * Math.PI) / 180;
   const yaw = -2.35;
   const horiz = dist * Math.cos(elev);
@@ -89,6 +92,19 @@ export function reelFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
 
 export function usesShallowDof(preset: CameraPreset): boolean {
   return preset === 'Zbliżenie' || preset === 'Reel';
+}
+
+export function letterboxSize(
+  viewW: number,
+  viewH: number,
+  aspect = REEL_ASPECT,
+): { width: number; height: number; x: number; y: number } {
+  if (viewW / Math.max(viewH, 1e-6) > aspect) {
+    const width = viewH * aspect;
+    return { width, height: viewH, x: (viewW - width) / 2, y: 0 };
+  }
+  const height = viewW / aspect;
+  return { width: viewW, height, x: 0, y: (viewH - height) / 2 };
 }
 
 export const CLOSEUP_APERTURE = 0.00048;

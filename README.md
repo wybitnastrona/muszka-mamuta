@@ -28,7 +28,7 @@ słodki/gorzki (zero trafień Gr64f / Gr5a / Gr66a).
 
 **AUTORSKIE:** parametry LIF (cytowania w `src/brain/params.ts`), model głodu
 i hemolimfy, chemia pokarmu (`TWAROG_MAMUTA_WANILIOWY`, słodycz 0,75), skala
-renderu 8×, rig proceduralny, każdy klip ruchu, lot, czyszczenie, sen, gag-i,
+renderu 4× (10 mm na ekranie), rig proceduralny, każdy klip ruchu, lot, czyszczenie, sen, gag-i,
 mapowanie MN9 Hz → czas pompy. Konektom steruje **tylko bramką żerowania**
 (kanał gustatoryczny → MN9). `ActivityFrame` jest jednokierunkowy: ciało
 i twaróg go czytają, nigdy do niego nie zapisują.
@@ -107,7 +107,7 @@ yuv420p, 30 fps, `+faststart`).
 ## Potok zasobów
 
 1. `scripts/data-prep/inspect_malecns.py` — seedy z adnotacji (nie z nazw genów).
-2. `scripts/data-prep/extract_feeding_circuit.py` — BFS, cap 20k, CSR.
+2. `scripts/data-prep/extract_feeding_circuit.py` — 20k feeding-gate carve, CSR.
    `write_csr` (nieskompresowany, audyt w `data/derived/`) oraz
    `write_csr_compressed` (publiczny `graph.bin`).
 3. `npm run compress:graph` — float16 + delty varint, jeśli przebudowujesz bin.
@@ -171,8 +171,8 @@ from measurement (`docs/DATA-PIPELINE.md`). MaleCNS has **no** sugar/bitter
 receptor annotations (no Gr64f / Gr5a / Gr66a).
 
 **AUTHORED:** LIF parameters (`src/brain/params.ts` citations), hunger and
-hemolymph, food chemistry (`TWAROG_MAMUTA_WANILIOWY`, sweet 0.75), 8× render
-scale, procedural rig, every motion clip, flight, grooming, sleep, gags,
+hemolymph, food chemistry (`TWAROG_MAMUTA_WANILIOWY`, sweet 0.75), 4× render
+scale (10 mm on screen), procedural rig, every motion clip, flight, grooming, sleep, gags,
 MN9-rate → pump mapping. The connectome drives **only the feeding gate**
 (gustatory channel → MN9). `ActivityFrame` is one-way: body and food consume
 it; they never write into it.
@@ -239,7 +239,7 @@ WebM → MP4: `scripts/webm2mp4.sh input.webm` (ffmpeg, H.264, yuv420p, 30 fps,
 ## Asset pipeline
 
 1. `scripts/data-prep/inspect_malecns.py` — seeds from annotations.
-2. `scripts/data-prep/extract_feeding_circuit.py` — BFS, 20k cap, CSR.
+2. `scripts/data-prep/extract_feeding_circuit.py` — 20k feeding-gate carve, CSR.
    Keep `write_csr` (uncompressed audit in `data/derived/`) and
    `write_csr_compressed` (public `graph.bin`).
 3. `npm run compress:graph` if you rebuild the bin.
