@@ -116,8 +116,13 @@ Path: **saccades** — straight 150–600 ms, ~90° yaw in 50 ms, 20–30° bank
 the turn, slight pitch-up when decelerating. Altitude wobble 1.5 Hz, 3 mm,
 plus low-frequency noise.
 
-**ORBIT:** 2–3 circuits over the food at 60–120 mm radius, descending, a
-saccade every 200–500 ms.
+**ORBIT:** 2–3 circuits over the food, descending, a saccade every
+200–500 ms. The authored band is 60–120 mm, but the effective minimum is
+`orbitRadiusFloor` = block XZ diagonal + body pad + 8 mm clearance (~80 mm
+for the 80 × 100 mm block at 6×). The old fixed 60 mm floor sat *inside* the
+64 mm diagonal, so a descending orbit was pushed onto a side face every frame
+and read as "flying along the edge". `?debug=flight` draws the solids, the
+200 ms lookahead and the XZ gap to the food.
 
 **LAND** follows van Breugel & Dickinson 2012: saccade to face the target;
 decelerate so distance/velocity (τ) stays roughly constant once the target’s
@@ -136,7 +141,12 @@ rotations in 300 ms, then wings open and heading recovers. Used only by the
 Table/pouch collision is 3D (`resolveAabb3` / `resolveObb3` in `src/body/collision.ts`).
 The fly's **centre** never enters the twaróg AABB, the pouch OBB or the board
 volume, in any mode — including flight. Hits push out along the nearest
-non-bottom face and slide the velocity (no zeroing). Flight also looks 200 ms
+non-bottom face and slide the velocity (no zeroing). Near an edge two faces
+are almost equidistant, so the face chosen last frame keeps a 25% preference
+(`FACE_HYSTERESIS`) — without it the choice flipped every frame and the fly
+chattered along the edge. In flight the `FlightController` is the only
+resolver; the director no longer resolves the same solids a second time with
+a different face choice. Flight also looks 200 ms
 ahead and inserts an early saccade if the planned segment would collide
 (looming; Collett & Land / Tammero & Dickinson style). Y is clamped between
 the support height under her and a 220 mm ceiling. Landing targets are
@@ -144,9 +154,20 @@ clamped to `supportHeightAt` and never placed under a solid's top face.
 
 `TwarogSystem.supportHeightAt(x, z)` returns the world Y of the tallest uneaten
 chunk under that XZ, else the hull top if the point is still in the uneaten
-footprint, else the cutting-board top (`BOARD_MM.height`) inside the board
-footprint, else 0 (table). Walking off the board edge onto the table is a
-valid transition: Y eases over 200 ms with a 3 mm hop instead of snapping.
+footprint (and outside the opening-bite crater), else the cutting-board top
+(`BOARD_MM.height`) inside the board footprint, else 0 (table). Walking off
+the board edge onto the table is a valid transition: Y eases over 200 ms with
+a 3 mm hop instead of snapping.
+
+**Opening bite (authored).** Every portion is served already bitten: the
+Voronoi cells whose centroid lies in an ellipsoid anchored on the top face at
+the +X/−Z corner (`CURD_BITE_MM`: radius 26 mm in XZ, 18 mm deep) start out
+`eaten` — 21 cells, ~26 g at seed 1. The lower layers survive, so the crater
+floor is ~18 mm above the board and `supportHeightAt` lets her stand in it.
+`nextPortion()` re-applies the bite; the far LOD is one geometry built from
+the uneaten cells (wet-interior material on the exposed walls), so the notch
+is visible from any distance. "ZOSTAŁO %" and grams eaten are normalised to
+the portion as served. Eating starts at the crater (`biteFront`).
 
 The body up-axis stays within 35° of the surface normal (world +Y on the table
 and board, the face normal on a wall), slerped back over 150 ms, except during
@@ -230,6 +251,37 @@ metabolism. Captions go through the HUD phase strip.
 Cow graphic and nutrition-table rows are hard-coded opaque-rect UVs mapped
 through the pouch label (`src/scene/labelLandmarks.ts`), not measured print
 geometry.
+
+## Props (authored, render-only)
+
+None of these are anatomy, connectome, or measurement. None of them write
+into `ActivityFrame` or the LIF worker.
+
+**Held morsel.** While PUMP consumes a chunk, a small curd morsel sits between
+the two foreleg tarsi (`DirectorOutput.heldCrumb`) and shrinks with the
+*measured* `TwarogSystem.consumeProgress` of that chunk, so what you see her
+eat is the chunk that is actually being removed from the block. The forelegs
+do not really hold food — real flies pump liquefied food through the
+proboscis — this is a visual aid for the reel.
+
+**Headstage and tether cable** (`src/body/headstage.ts`). A cap with a post
+and an LED is parented to the `head` bone, so it rides gaze stabilisation and
+grooming; a cable runs from its socket to an off-screen anchor ~340 mm above
+the table that follows her in XZ with a 0.7 s lag, so the tether sways behind
+her on the block and in flight. It is a deliberate joke about tethered /
+head-fixed *Drosophila* electrophysiology rigs. The rope is a position-based
+chain (14 points, 5% slack, ends pinned, 10 relaxation passes) and the tube
+mesh is updated in place. It is never used as a physical constraint on the
+body.
+
+**Soma pulse** (`src/hud/pulse.ts`, `BrainScene`). Active somata in the atlas
+pulse white in the shader (`uTime` plus a per-soma phase). Displayed activity
+eases toward each 10 Hz `ActivityFrame` sample (τ = 80 ms) so the pulse does
+not step. During POMPUJ the pulse gain rises to 2.2 (τ = 200 ms). The gain is
+driven by the FSM state, i.e. body → *panel*, not body → brain; it amplifies a
+real correlate (pharyngeal seeds are stimulated only while pumping) rather
+than painting activity that is not there. `prefers-reduced-motion` disables
+the pulse.
 
 ## Dopamine tone (rejected — unused)
 

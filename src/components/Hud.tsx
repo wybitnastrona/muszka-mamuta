@@ -331,6 +331,7 @@ export function Hud({
         <p><strong>{t(lang, 'methodsMeasuredLabel')}</strong> {t(lang, 'methodsMeasured')}</p>
         <p><strong>{t(lang, 'methodsAuthoredLabel')}</strong> {t(lang, 'methodsAuthored')}</p>
         <p>{t(lang, 'methodsDopamine')}</p>
+        <p>{t(lang, 'methodsProps')}</p>
         <p>{t(lang, 'methodsBody')}</p>
         <p><strong>{t(lang, 'methodsLimitsLabel')}</strong> {t(lang, 'methodsLimits')}</p>
         <p><strong>{t(lang, 'methodsCreditLabel')}</strong> {t(lang, 'methodsCredit')}{' '}

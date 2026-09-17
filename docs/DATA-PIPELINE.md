@@ -103,6 +103,13 @@ gustatory seeds are used by the model. MN9 does not run away: it falls to
 neuron. Cold start at 0 tonic is all 0 Hz (no pacemaker). Do not display
 PPL1, MBON, or PAM as a live readout.
 
+The soma-atlas panel still shows the whole `ActivityFrame` (every neuron with
+a soma), because that is what the worker computes and the legend says so.
+Its pulse (`src/hud/pulse.ts`) and the stronger pulse during POMPUJ are
+presentation only: the numbers are unchanged, the normalisation
+`rate / RATE_NORM_HZ` is unchanged, and the FSM state reaches the *panel*,
+never the worker. See docs/BODY-MODEL.md § Props.
+
 ## Findings: non-additivity, inhibition, and rest
 
 Replacement for `path_sign`: `scripts/measure_drive.ts` stimulates **one** seed
