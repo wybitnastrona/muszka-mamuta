@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parseTextureManifest } from '../../src/scene/textures.ts';
 import { CURD_CHUNK_COUNT, CURD_MM, CURD_TOTAL_MASS_G } from '../../src/scene/scale.ts';
-import { fractureCurdBlock } from '../../src/food/proceduralTwarog.ts';
+import {
+  buildLodGeometry,
+  fractureCurdBlock,
+  insideOpeningBite,
+  openingBiteAnchor,
+} from '../../src/food/proceduralTwarog.ts';
+import { meshFromPolyhedron } from '../../src/scene/meshFromPoly.ts';
 
 describe('texture manifest', () => {
   it('throws when a required file key is missing', () => {
@@ -39,5 +45,38 @@ describe('procedural twaróg fracture', () => {
       expect(Math.abs(cell.centroid.y)).toBeLessThan(hy);
       expect(Math.abs(cell.centroid.z)).toBeLessThan(hz);
     }
+  });
+
+  it('carves an opening bite open to the top with the bottom layers intact', () => {
+    const fractured = fractureCurdBlock({ seed: 1 });
+    const { openingBite, biteAnchor, hx, hy, hz } = fractured;
+    expect(biteAnchor).toEqual(openingBiteAnchor(hx, hy, hz));
+    expect(biteAnchor.y).toBe(hy);
+    // A meaningful notch: a few percent of cells, but well under a quarter.
+    expect(openingBite.length).toBeGreaterThanOrEqual(8);
+    expect(openingBite.length).toBeLessThan(CURD_CHUNK_COUNT / 4);
+    for (const i of openingBite) {
+      const c = fractured.cells[i]!.centroid;
+      expect(insideOpeningBite(c, biteAnchor)).toBe(true);
+      // Nothing in the bottom third of the block is bitten: the crater has a floor.
+      expect(c.y).toBeGreaterThan(-hy / 3);
+    }
+    const eaten = new Set(openingBite);
+    const rest = fractured.cells.filter((_, i) => !eaten.has(i));
+    expect(rest.length).toBe(CURD_CHUNK_COUNT - openingBite.length);
+  });
+
+  it('builds a single far-LOD geometry from the uneaten cells only', () => {
+    const fractured = fractureCurdBlock({ seed: 1 });
+    const geoms = fractured.cells.map((c) => meshFromPolyhedron(c.poly, fractured.hx, fractured.hy, fractured.hz, 2).geometry);
+    const all = buildLodGeometry(geoms, new Set());
+    const lod = buildLodGeometry(geoms, new Set(fractured.openingBite));
+    const total = geoms.reduce((s, g) => s + g.getAttribute('position').count, 0);
+    expect(all.getAttribute('position').count).toBe(total);
+    expect(lod.getAttribute('position').count).toBeLessThan(total);
+    expect(lod.groups.length).toBe(2);
+    expect(lod.groups[0]!.materialIndex).toBe(0);
+    expect(lod.groups[1]!.materialIndex).toBe(1);
+    expect(lod.getAttribute('normal')).toBeTruthy();
   });
 });

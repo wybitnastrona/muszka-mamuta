@@ -16,6 +16,7 @@ import { clamp01 } from '../body/math.ts';
 import { Xoshiro128ss } from '../brain/rng.ts';
 import {
   CONTACT_RADIUS_BODY_LENGTHS,
+  CURD_BITE_MM,
   CURD_CHUNK_COUNT,
   CURD_DENSITY_G_CM3,
   CURD_MM,
@@ -468,11 +469,25 @@ export class TwarogSystem {
   private readonly rng: Xoshiro128ss;
   private readonly store: KvStore | null | undefined;
   private readonly initialBiteFront: Vec3;
+  /**
+   * Opening bite: chunks that start every portion already eaten (authored
+   * crater, see CURD_BITE_MM). `biteAnchor` is its centre on the top face.
+   */
+  private readonly openingBite: ReadonlySet<number>;
+  readonly biteAnchor: Vec3 | null;
 
   constructor(
     chunks: Array<Omit<ChunkRecord, 'topY' | 'radiusXz'> & Partial<Pick<ChunkRecord, 'topY' | 'radiusXz'>>>,
     biteFront: Vec3,
-    opts: { seed?: number; store?: KvStore | null; hx?: number; hy?: number; hz?: number } = {},
+    opts: {
+      seed?: number;
+      store?: KvStore | null;
+      hx?: number;
+      hy?: number;
+      hz?: number;
+      openingBite?: readonly number[];
+      biteAnchor?: Vec3;
+    } = {},
   ) {
     const defaultR = Math.max(2, (opts.hx ?? mm(CURD_MM.width) / 2) / 8);
     this.chunks = chunks.map((c) => ({
@@ -491,8 +506,39 @@ export class TwarogSystem {
     this.rng = new Xoshiro128ss(opts.seed ?? 1);
     this.store = opts.store;
     this.portionCount = loadPortionCount(this.store);
+    this.openingBite = new Set(opts.openingBite ?? []);
+    this.biteAnchor = opts.biteAnchor ? { ...opts.biteAnchor } : null;
+    this.applyOpeningBite();
     this.rebuildGrid();
     this.remaining = this.uneatenMass();
+  }
+
+  /** Mark the opening-bite chunks eaten and point the wet spot at the crater. */
+  private applyOpeningBite(): void {
+    for (const i of this.openingBite) {
+      const c = this.chunks[i];
+      if (c) c.eaten = true;
+    }
+    if (this.biteAnchor && this.openingBite.size > 0) {
+      this.lastBiteFront = { ...this.biteAnchor };
+    }
+  }
+
+  /** True while nothing beyond the opening bite has been eaten. */
+  pristine(): boolean {
+    return this.uneatenCount === this.chunkCount - this.openingBite.size;
+  }
+
+  /** Chunk indices that start every portion eaten. */
+  get openingBiteIndices(): number[] {
+    return [...this.openingBite];
+  }
+
+  /** Grams on the table at portion start (total minus the opening bite). */
+  get portionMassGrams(): number {
+    let s = 0;
+    for (const c of this.chunks) if (!this.openingBite.has(c.index)) s += c.massGrams;
+    return s;
   }
 
   static fromFracture(
@@ -532,6 +578,8 @@ export class TwarogSystem {
       hx: fractured.hx,
       hy: fractured.hy,
       hz: fractured.hz,
+      openingBite: fractured.openingBite,
+      biteAnchor: fractured.biteAnchor,
     });
   }
 
@@ -577,6 +625,9 @@ export class TwarogSystem {
     this.appearT = 1;
     this.biteFront = { ...this.initialBiteFront };
     this.lastBiteFront = { ...this.biteFront };
+    // A fresh portion is bitten too; otherwise nextPortion() would bring
+    // back an intact block and the LOD (built minus the crater) would lie.
+    this.applyOpeningBite();
     this.rebuildGrid();
     this.remaining = this.uneatenMass();
   }
@@ -623,9 +674,9 @@ export class TwarogSystem {
     };
   }
 
-  /** Intact hull, or the remaining-chunk AABB once a bite face has receded. */
+  /** Intact hull (the opening bite does not count), or the remaining-chunk AABB once a bite face has receded. */
   foodBounds(origin: XZ): XzAabb {
-    if (this.uneatenCount === this.chunkCount) return this.worldAabb(origin);
+    if (this.pristine()) return this.worldAabb(origin);
     return this.uneatenAabb(origin);
   }
 
@@ -668,13 +719,25 @@ export class TwarogSystem {
     }
     let foodY = 0;
     if (best === -Infinity) {
-      if (this.uneatenCount === this.chunkCount && pointInXzAabb({ x, z }, this.worldAabb(foodOrigin))) {
+      // Intact-hull fallback for footprint gaps between cell circles — but
+      // never inside the opening-bite crater, which is genuinely open.
+      if (
+        this.pristine()
+        && pointInXzAabb({ x, z }, this.worldAabb(foodOrigin))
+        && !this.inOpeningBiteXz(lx, lz)
+      ) {
         foodY = foodOrigin.y + this.hy;
       }
     } else {
       foodY = best;
     }
     return composeSupport(x, z, foodY);
+  }
+
+  /** Local XZ inside the opening-bite footprint (radiusXz around the anchor). */
+  inOpeningBiteXz(lx: number, lz: number): boolean {
+    if (!this.biteAnchor || this.openingBite.size === 0) return false;
+    return Math.hypot(lx - this.biteAnchor.x, lz - this.biteAnchor.z) <= CURD_BITE_MM.radiusXz;
   }
 
   /**
@@ -711,7 +774,8 @@ export class TwarogSystem {
     const target = standoffOnRay(flyLocal, { x: 0, z: 0 }, box, 0);
     const y = -this.hy * 0.45;
     this.biteFront = { x: target.hit.x, y, z: target.hit.z };
-    if (this.uneatenCount === this.chunkCount) this.lastBiteFront = { ...this.biteFront };
+    // With an opening bite the wet spot stays on the crater until she really bites.
+    if (this.pristine() && this.openingBite.size === 0) this.lastBiteFront = { ...this.biteFront };
     for (const c of this.chunks) {
       c.biteDistance = hypot3(c.centroid, this.biteFront);
     }

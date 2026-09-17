@@ -3,6 +3,7 @@ import { Xoshiro128ss } from '../brain/rng.ts';
 import {
   CURD_ALBEDO_HEX,
   CURD_BEVEL_MM,
+  CURD_BITE_MM,
   CURD_CHUNK_COUNT,
   CURD_DENSITY_G_CM3,
   CURD_INTERIOR_LIGHTEN,
@@ -42,11 +43,30 @@ export type FracturedCell = {
 export type FracturedCurd = {
   cells: FracturedCell[];
   biteFront: V3;
+  /** Centre of the opening-bite crater on the top face (local space). */
+  biteAnchor: V3;
+  /** Indices into `cells` that start every portion already eaten (the crater). */
+  openingBite: number[];
   totalVolumeMm3: number;
   hx: number;
   hy: number;
   hz: number;
 };
+
+/** Local-space anchor of the opening bite on the top face. */
+export function openingBiteAnchor(hx: number, hy: number, hz: number): V3 {
+  return { x: hx * CURD_BITE_MM.anchorFracX, y: hy, z: hz * CURD_BITE_MM.anchorFracZ };
+}
+
+/** True when a local-space point lies inside the opening-bite ellipsoid. */
+export function insideOpeningBite(p: V3, anchor: V3): boolean {
+  const rx = CURD_BITE_MM.radiusXz;
+  const ry = CURD_BITE_MM.depth;
+  const u = (p.x - anchor.x) / rx;
+  const v = (p.y - anchor.y) / ry;
+  const w = (p.z - anchor.z) / rx;
+  return u * u + v * v + w * w <= 1;
+}
 
 export type TwarogChunk = {
   mesh: THREE.Mesh;
@@ -66,6 +86,8 @@ export type ProceduralTwarog = {
   interior: THREE.MeshStandardMaterial;
   wetInterior: THREE.MeshStandardMaterial;
   lodBlock: THREE.Mesh;
+  /** Crater-wall material of the LOD block (second material group). */
+  lodInterior: THREE.MeshStandardMaterial;
   biteUniforms: {
     uBiteFront: { value: THREE.Vector3 };
     uBiteRadius: { value: number };
@@ -124,7 +146,9 @@ export function fractureCurdBlock(opts: { seed?: number; count?: number } = {}):
   const { hx, hy, hz } = halfExtents();
   const hull = beveledBox(hx, hy, hz, mm(CURD_BEVEL_MM));
   const sites = jitteredSites(count, hx, hy, hz, opts.seed ?? 1);
-  const biteFront: V3 = { x: hx, y: -hy * 0.45, z: -hz };
+  const biteAnchor = openingBiteAnchor(hx, hy, hz);
+  // Eating starts at the crater column, mid-height on the bitten faces.
+  const biteFront: V3 = { x: biteAnchor.x, y: -hy * 0.45, z: biteAnchor.z };
   const cells: FracturedCell[] = [];
   for (const site of sites) {
     const poly = voronoiCell(site, sites, hull);
@@ -144,7 +168,50 @@ export function fractureCurdBlock(opts: { seed?: number; count?: number } = {}):
   }
   cells.sort((a, b) => a.biteDistance - b.biteDistance);
   const totalVolumeMm3 = cells.reduce((s, c) => s + c.volumeMm3, 0);
-  return { cells, biteFront, totalVolumeMm3, hx, hy, hz };
+  const openingBite: number[] = [];
+  cells.forEach((c, i) => {
+    if (insideOpeningBite(c.centroid, biteAnchor)) openingBite.push(i);
+  });
+  return { cells, biteFront, biteAnchor, openingBite, totalVolumeMm3, hx, hy, hz };
+}
+
+/**
+ * One draw-call LOD of the block with the opening bite already taken: the
+ * exterior faces of every uneaten cell plus their cut faces (exposed ones
+ * form the crater walls; buried ones sit inside the closed hull). Later bites
+ * are not reflected here — the LOD is only shown from far away.
+ */
+export function buildLodGeometry(
+  cellGeometries: readonly THREE.BufferGeometry[],
+  eaten: ReadonlySet<number>,
+): THREE.BufferGeometry {
+  const hullPos: number[] = [];
+  const hullUv: number[] = [];
+  const cutPos: number[] = [];
+  const cutUv: number[] = [];
+  cellGeometries.forEach((g, i) => {
+    if (eaten.has(i)) return;
+    const pos = g.getAttribute('position') as THREE.BufferAttribute;
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute;
+    for (const grp of g.groups) {
+      const isCut = grp.materialIndex === 1;
+      const P = isCut ? cutPos : hullPos;
+      const U = isCut ? cutUv : hullUv;
+      for (let v = grp.start; v < grp.start + grp.count; v++) {
+        P.push(pos.getX(v), pos.getY(v), pos.getZ(v));
+        U.push(uv.getX(v), uv.getY(v));
+      }
+    }
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(hullPos.concat(cutPos), 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(hullUv.concat(cutUv), 2));
+  geometry.computeVertexNormals();
+  const nHull = hullPos.length / 3;
+  const nCut = cutPos.length / 3;
+  if (nHull > 0) geometry.addGroup(0, nHull, 0);
+  if (nCut > 0) geometry.addGroup(nHull, nCut, 1);
+  return geometry;
 }
 
 function attachCurdSurfaceShader(
@@ -264,26 +331,22 @@ export function createProceduralTwarog(
   attachCurdSurfaceShader(wetInterior, biteUniforms);
   const lodMat = exterior.clone();
   attachCurdSurfaceShader(lodMat, biteUniforms);
+  const lodInterior = wetInterior.clone();
+  attachCurdSurfaceShader(lodInterior, biteUniforms);
 
   const group = new THREE.Group();
   group.name = 'twarog';
-  const hull = beveledBox(hx, hy, hz, mm(CURD_BEVEL_MM));
-  const lodGeom = meshFromPolyhedron(hull, hx, hy, hz, CURD_TILE).geometry;
-  displaceChunk(lodGeom, hx, hy, hz, noise);
-  const lodBlock = new THREE.Mesh(lodGeom, lodMat);
-  lodBlock.name = 'twarogLod';
-  lodBlock.castShadow = true;
-  lodBlock.receiveShadow = true;
-  group.add(lodBlock);
 
   const volScale = fractured.totalVolumeMm3 > 0
     ? CURD_TOTAL_MASS_G / (fractured.totalVolumeMm3 / 1000 * CURD_DENSITY_G_CM3)
     : 1;
   const chunks: TwarogChunk[] = [];
+  const cellGeometries: THREE.BufferGeometry[] = [];
   for (let i = 0; i < fractured.cells.length; i++) {
     const cell = fractured.cells[i]!;
     const { geometry } = meshFromPolyhedron(cell.poly, hx, hy, hz, CURD_TILE);
     displaceChunk(geometry, hx, hy, hz, noise);
+    cellGeometries.push(geometry);
     const mesh = new THREE.Mesh(geometry, [exterior, interior]);
     mesh.name = `twarogChunk-${i}`;
     mesh.castShadow = true;
@@ -300,6 +363,15 @@ export function createProceduralTwarog(
     });
   }
 
+  // Far LOD: the block minus the opening bite, as one geometry. The wet
+  // interior material paints the exposed crater walls.
+  const lodGeom = buildLodGeometry(cellGeometries, new Set(fractured.openingBite));
+  const lodBlock = new THREE.Mesh(lodGeom, [lodMat, lodInterior]);
+  lodBlock.name = 'twarogLod';
+  lodBlock.castShadow = true;
+  lodBlock.receiveShadow = true;
+  group.add(lodBlock);
+
   return {
     group,
     chunks,
@@ -310,6 +382,7 @@ export function createProceduralTwarog(
     interior,
     wetInterior,
     lodBlock,
+    lodInterior,
     biteUniforms,
   };
 }

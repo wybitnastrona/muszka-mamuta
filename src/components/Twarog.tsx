@@ -51,7 +51,8 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
   crumbsMesh.instanceMatrix.needsUpdate = true;
   group.add(crumbsMesh);
   const biteWorld = new THREE.Vector3();
-  const lodMat = proc.lodBlock.material as THREE.MeshStandardMaterial;
+  const lodMats = proc.lodBlock.material as THREE.MeshStandardMaterial[];
+  const lodMat = lodMats[0]!;
 
   const crumbs: Crumb[] = Array.from({ length: CRUMB_POOL }, () => ({
     active: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, settled: false,
@@ -145,6 +146,8 @@ export function createTwarogView(proc: ProceduralTwarog): TwarogView {
     proc.lodBlock.visible = blockAlpha > 0.02;
     lodMat.opacity = blockAlpha;
     lodMat.depthWrite = blockAlpha > 0.55;
+    proc.lodInterior.opacity = blockAlpha;
+    proc.lodInterior.depthWrite = blockAlpha > 0.55;
     proc.lodBlock.castShadow = blockAlpha > 0.5;
     proc.exterior.opacity = chunkAlpha;
     proc.exterior.depthWrite = chunkAlpha > 0.55;

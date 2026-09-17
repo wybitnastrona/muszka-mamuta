@@ -1199,11 +1199,13 @@ export class SceneDirector {
       crumbAttach: this.crumbAttach,
       bites: this.fsm.pumpCycles,
       bitesTarget: this.fsm.pumpTarget,
-      remainingFrac: this.food.totalMassGrams > 0
-        ? this.food.remainingMassGrams / this.food.totalMassGrams
+      // Normalised to the portion as served (opening bite already taken), so
+      // "ZOSTAŁO %" starts at 100 and grams eaten start at 0.
+      remainingFrac: this.food.portionMassGrams > 0
+        ? this.food.remainingMassGrams / this.food.portionMassGrams
         : 0,
       portionCount: this.food.portionCount,
-      gramsEaten: this.food.totalMassGrams - this.food.remainingMassGrams,
+      gramsEaten: Math.max(0, this.food.portionMassGrams - this.food.remainingMassGrams),
       loopWrapped: this.loopWrapped,
     };
   }

@@ -29,6 +29,18 @@ export const POUCH_MM = { length: 130, width: 110, height: 32 };
 export const SEAL_MM = 15;
 export const CURD_ALBEDO_HEX = '#e1d7ca';
 
+/**
+ * Opening bite carved into every fresh portion (authored, not measured): a
+ * corner notch open to the top and to two side walls, so the fly can stand
+ * in it. Anchor is on the top face as fractions of the XZ half-extents; the
+ * carve region is an ellipsoid with `radiusXz` in XZ and `depth` downward.
+ * Voronoi cells whose centroid falls inside start out eaten (21 cells,
+ * ~26 g at seed 1). With the 30 mm block and 5 cell layers the lower layers
+ * survive, so the crater floor sits ~18 mm above the board, ~12 mm below
+ * the top face — a 15 mm fly standing in it is still in view.
+ */
+export const CURD_BITE_MM = { anchorFracX: 0.55, anchorFracZ: -0.6, radiusXz: 26, depth: 18 };
+
 export const CURD_BEVEL_MM = 3;
 export const CURD_TOP_RISE_MM = 2;
 export const CURD_TILE = 2;

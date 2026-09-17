@@ -22,6 +22,7 @@ import {
   type Vec3,
 } from '../../src/food/twarogSystem.ts';
 import {
+  CURD_BITE_MM,
   CURD_MM,
   CURD_TOTAL_MASS_G,
   LOD_BODY_LENGTHS,
@@ -76,11 +77,49 @@ describe('twarog system', () => {
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
     expect(sys.chunkCount).toBeGreaterThan(1);
     expect(sys.totalMassGrams).toBeCloseTo(CURD_TOTAL_MASS_G, 5);
+    // The opening bite is already gone when the portion is served.
+    expect(sys.openingBiteIndices.length).toBeGreaterThan(0);
+    expect(sys.portionMassGrams).toBeLessThan(CURD_TOTAL_MASS_G);
+    expect(sys.remainingMassGrams).toBeCloseTo(sys.portionMassGrams, 5);
     let ingested = 0;
     for (const chunk of sys.chunks) ingested += sys.commitChunk(chunk.index);
-    expect(ingested).toBeCloseTo(CURD_TOTAL_MASS_G, 5);
+    expect(ingested).toBeCloseTo(sys.portionMassGrams, 5);
     expect(sys.remainingMassGrams).toBe(0);
     expect(sys.uneatenCount).toBe(0);
+  });
+
+  it('serves every portion with a walkable opening-bite crater at the anchored corner', () => {
+    const fractured = fractureCurdBlock({ seed: 1 });
+    const sys = TwarogSystem.fromFracture(fractured, { store: null });
+    const origin = { x: 0, y: boardTopY() + mm(CURD_MM.height) / 2, z: 0 };
+    const anchor = sys.biteAnchor!;
+    expect(anchor.x).toBeCloseTo(sys.hx * CURD_BITE_MM.anchorFracX);
+    expect(anchor.z).toBeCloseTo(sys.hz * CURD_BITE_MM.anchorFracZ);
+    // Bite front (where eating starts) sits in the crater column.
+    expect(sys.biteFront.x).toBeCloseTo(anchor.x);
+    expect(sys.biteFront.z).toBeCloseTo(anchor.z);
+    expect(sys.lastBiteFront).toEqual(anchor);
+    // Only crater cells are eaten, and the block is still "pristine" for approach bounds.
+    const eaten = sys.chunks.filter((c) => c.eaten).map((c) => c.index).sort((a, b) => a - b);
+    expect(eaten).toEqual([...fractured.openingBite].sort((a, b) => a - b));
+    expect(sys.pristine()).toBe(true);
+    expect(sys.foodBounds({ x: 0, z: 0 })).toEqual(sys.worldAabb({ x: 0, z: 0 }));
+    // Standing in the crater: strictly below the top face, strictly above the board.
+    const floor = sys.supportHeightAt(origin.x + anchor.x, origin.z + anchor.z, origin);
+    expect(floor).toBeGreaterThan(boardTopY() + 1);
+    expect(floor).toBeLessThan(origin.y + sys.hy - 6);
+    // Away from the crater the top face is intact.
+    const far = sys.supportHeightAt(origin.x - sys.hx * 0.5, origin.z + sys.hz * 0.5, origin);
+    expect(far).toBeGreaterThan(origin.y + sys.hy - 4);
+    // A real bite ends pristine; a fresh portion brings the crater back.
+    const first = sys.chunks.find((c) => !c.eaten)!;
+    sys.commitChunk(first.index);
+    expect(sys.pristine()).toBe(false);
+    sys.nextPortion();
+    expect(sys.pristine()).toBe(true);
+    expect(sys.chunks.filter((c) => c.eaten).length).toBe(fractured.openingBite.length);
+    expect(sys.remainingMassGrams).toBeCloseTo(sys.portionMassGrams, 5);
+    expect(sys.supportHeightAt(origin.x + anchor.x, origin.z + anchor.z, origin)).toBeCloseTo(floor, 5);
   });
 
   it('uses a contact radius of 0.3 visual body lengths', () => {
@@ -223,7 +262,7 @@ describe('twarog system', () => {
   it('supportHeightAt is the tallest uneaten chunk, else table, and drops when that chunk is eaten', () => {
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
     const origin = { x: 0, y: boardTopY() + mm(CURD_MM.height) / 2, z: 0 };
-    const top = sys.chunks.reduce((a, c) => (c.topY > a.topY ? c : a));
+    const top = sys.chunks.filter((c) => !c.eaten).reduce((a, c) => (c.topY > a.topY ? c : a));
     const wx = origin.x + top.centroid.x;
     const wz = origin.z + top.centroid.z;
     const before = sys.supportHeightAt(wx, wz, origin);
