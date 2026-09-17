@@ -16,7 +16,6 @@ import { clamp01 } from '../body/math.ts';
 import { Xoshiro128ss } from '../brain/rng.ts';
 import {
   CONTACT_RADIUS_BODY_LENGTHS,
-  CURD_BITE_MM,
   CURD_CHUNK_COUNT,
   CURD_DENSITY_G_CM3,
   CURD_MM,
@@ -24,9 +23,9 @@ import {
   ETERNITY_MASS_FRAC,
   LOD_BODY_LENGTHS,
   LOD_FADE_MS,
-  bodyCollisionPadMm,
   contactRadiusMm,
   flyVisualLengthMm,
+  foodStandPadMm,
   lodDistanceMm,
   lodFadeSec,
   mm,
@@ -698,8 +697,12 @@ export class TwarogSystem {
     return target;
   }
 
-  /** Push the body root outside the remaining food volume (padded by half body length). */
-  clampRoot(fly: Vec3, foodOrigin: Vec3, pad = bodyCollisionPadMm()): Vec3 {
+  /**
+   * Push the body root outside the remaining food volume. The default pad is
+   * the FOOD stand pad (just under the wall-feeding standoff) — the generic
+   * half-body pad would keep the short proboscis from ever reaching a face.
+   */
+  clampRoot(fly: Vec3, foodOrigin: Vec3, pad = foodStandPadMm()): Vec3 {
     const out = clampOutsideXzAabb(fly, this.foodBounds(foodOrigin), pad);
     return { x: out.x, y: fly.y, z: out.z };
   }
@@ -715,11 +718,16 @@ export class TwarogSystem {
     const lx = x - foodOrigin.x;
     const lz = z - foodOrigin.z;
     let best = -Infinity;
-    for (const c of this.chunks) {
-      if (c.eaten) continue;
-      if (Math.hypot(lx - c.centroid.x, lz - c.centroid.z) <= c.radiusXz) {
-        const top = foodOrigin.y + c.topY;
-        if (top > best) best = top;
+    // Cell footprints are circles (max vertex radius) and overhang the hull by
+    // several mm; the block is a box, so only points inside its XZ count.
+    const inHull = Math.abs(lx) <= this.hx && Math.abs(lz) <= this.hz;
+    if (inHull) {
+      for (const c of this.chunks) {
+        if (c.eaten) continue;
+        if (Math.hypot(lx - c.centroid.x, lz - c.centroid.z) <= c.radiusXz) {
+          const top = foodOrigin.y + c.topY;
+          if (top > best) best = top;
+        }
       }
     }
     let foodY = 0;
@@ -739,10 +747,17 @@ export class TwarogSystem {
     return composeSupport(x, z, foodY);
   }
 
-  /** Local XZ inside the opening-bite footprint (radiusXz around the anchor). */
+  /**
+   * Local XZ over an opening-bite cell (its own footprint), i.e. genuinely
+   * open crater — not the whole anchor disc, whose rim is still intact top face.
+   */
   inOpeningBiteXz(lx: number, lz: number): boolean {
-    if (!this.biteAnchor || this.openingBite.size === 0) return false;
-    return Math.hypot(lx - this.biteAnchor.x, lz - this.biteAnchor.z) <= CURD_BITE_MM.radiusXz;
+    if (this.openingBite.size === 0) return false;
+    for (const i of this.openingBite) {
+      const c = this.chunks[i];
+      if (c && Math.hypot(lx - c.centroid.x, lz - c.centroid.z) <= c.radiusXz) return true;
+    }
+    return false;
   }
 
   /**

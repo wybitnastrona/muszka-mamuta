@@ -15,17 +15,23 @@ import {
   FLY_RENDER_SCALE,
   FLY_WALK_MM_S,
   POUCH_MM,
+  WALL_FEED_BITE_MM,
+  WALL_FEED_PITCH_RAD,
+  boardTopY,
   bodyCollisionPadMm,
   contactRadiusAt,
   contactRadiusMm,
   extendedLabellumReachAt,
-  extendedLabellumReachMm,
   mm,
+  pitchedTipAt,
   standoffAt,
   standoffMm,
 } from '../../src/scene/scale.ts';
+import { wallFeedLiftAt, wallFeedLiftMm } from '../../src/body/wallFeed.ts';
 
 const dt = 1 / 60;
+/** Director tests stand the root 2 mm above the support (see makeDirector). */
+const ROOT_STAND = 2;
 
 describe('APPROACH surface standoff', () => {
   it('ends outside the food AABB with the labellum on a surface chunk from 12 starts', () => {
@@ -79,14 +85,20 @@ describe('APPROACH surface standoff', () => {
       expect(sm.state).toBe('TASTE');
       expect(pointInXzAabb(pos, box)).toBe(false);
       const approach = sys.approachTarget(pos, food);
-      const reach = extendedLabellumReachMm();
+      // Real geometry: measured extended tip, pitched by the wall-feeding
+      // posture, on a root standing ROOT_STAND + lift above the board.
+      const tip = pitchedTipAt(FLY_RENDER_SCALE, WALL_FEED_PITCH_RAD);
+      const rootY = boardTopY() + ROOT_STAND + wallFeedLiftMm();
       const labellum = {
-        x: pos.x + Math.sin(heading) * reach - food.x,
-        y: -sys.hy * 0.45,
-        z: pos.z + Math.cos(heading) * reach - food.z,
+        x: pos.x + Math.sin(heading) * tip.z - food.x,
+        y: rootY + tip.y - food.y,
+        z: pos.z + Math.cos(heading) * tip.z - food.z,
       };
-      const toHit = Math.hypot(pos.x + Math.sin(heading) * reach - approach.hit.x, pos.z + Math.cos(heading) * reach - approach.hit.z);
+      const toHit = Math.hypot(pos.x + Math.sin(heading) * tip.z - approach.hit.x, pos.z + Math.cos(heading) * tip.z - approach.hit.z);
       expect(toHit).toBeLessThanOrEqual(contactRadiusMm() + APPROACH_ARRIVE_MM);
+      // The tip is inside the wall plane (contact), above the board, below the top face.
+      expect(labellum.y).toBeGreaterThan(boardTopY() - food.y);
+      expect(labellum.y).toBeLessThan(sys.hy);
       const chunk = sys.nearestUneaten(labellum, sys.contactReachMm());
       expect(chunk).not.toBeNull();
     }
@@ -116,21 +128,25 @@ describe('APPROACH surface standoff', () => {
     for (const mul of [0.5, 1, 2] as const) {
       const scale = FLY_RENDER_SCALE * mul;
       const stand = standoffAt(scale);
-      const reach = extendedLabellumReachAt(scale);
-      const parked = { x: food.x, y: 2, z: food.z - sys.hz - stand };
+      const tip = pitchedTipAt(scale, WALL_FEED_PITCH_RAD);
+      const rootY = boardTopY() + ROOT_STAND + wallFeedLiftAt(scale);
+      const parked = { x: food.x, y: rootY, z: food.z - sys.hz - stand };
       const heading = 0;
       const approach = sys.approachTarget(parked, food, stand);
       expect(approach.arrived || approach.distance <= 1e-6).toBe(true);
       const labellum = {
-        x: parked.x + Math.sin(heading) * reach - food.x,
-        y: -sys.hy * 0.45,
-        z: parked.z + Math.cos(heading) * reach - food.z,
+        x: parked.x + Math.sin(heading) * tip.z - food.x,
+        y: rootY + tip.y - food.y,
+        z: parked.z + Math.cos(heading) * tip.z - food.z,
       };
+      // Pitched tip sinks WALL_FEED_BITE_MM into the face at every scale.
       const tipOnHit = Math.hypot(
-        parked.x + Math.sin(heading) * reach - approach.hit.x,
-        parked.z + Math.cos(heading) * reach - approach.hit.z,
+        parked.x + Math.sin(heading) * tip.z - approach.hit.x,
+        parked.z + Math.cos(heading) * tip.z - approach.hit.z,
       );
-      expect(tipOnHit).toBeLessThan(1);
+      expect(tipOnHit).toBeCloseTo(WALL_FEED_BITE_MM, 6);
+      // Flat (unpitched) reach would NOT arrive — that was the old bug.
+      expect(extendedLabellumReachAt(scale)).toBeLessThan(stand);
       const radius = contactRadiusAt(scale) + 2 * sys.chunkHalfExtentMm();
       expect(sys.nearestUneaten(labellum, radius), `scale ${scale}`).not.toBeNull();
     }

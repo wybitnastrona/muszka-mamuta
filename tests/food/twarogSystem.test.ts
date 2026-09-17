@@ -338,11 +338,18 @@ describe('twarog system', () => {
       y: layout.board.topY + 2 - food.y,
       z: approach.point.z + Math.cos(approach.yaw) * labellumRestReachMm() - food.z,
     };
+    // One body length short of the standoff (still walking in): no contact yet.
+    const back = flyVisualLengthMm();
+    const farLab = {
+      x: restLab.x - Math.sin(approach.yaw) * back,
+      y: restLab.y,
+      z: restLab.z - Math.cos(approach.yaw) * back,
+    };
     const miss = sys.step(input({
-      labellum: restLab,
-      sensors: [restLab],
+      labellum: farLab,
+      sensors: [farLab],
       tasting: false,
-      flyXZ: { x: approach.point.x, z: approach.point.z },
+      flyXZ: { x: approach.point.x - Math.sin(approach.yaw) * back, z: approach.point.z - Math.cos(approach.yaw) * back },
       foodXZ: { x: food.x, z: food.z },
     }));
     expect(miss.chemo.rates.labellarHz).toBe(0);

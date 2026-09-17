@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SceneDirector } from '../../src/body/sceneDirector.ts';
 import { isEatState, LOOP_STATES, type LoopVariant } from '../../src/body/sceneLoop.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
-import { POUCH_MM, boardTopY, flyVisualLengthMm, mm, standoffMm } from '../../src/scene/scale.ts';
+import { POUCH_MM, WALL_FEED_PITCH_RAD, boardTopY, flyVisualLengthMm, mm, standoffMm } from '../../src/scene/scale.ts';
 import { fractureCurdBlock } from '../../src/food/proceduralTwarog.ts';
 import { closestXzAabb, TwarogSystem, pointInXzAabb } from '../../src/food/twarogSystem.ts';
 import { UP_ALIGN_MAX_RAD, bodyUpAxis, pointInAabb3, tiltFromNormal } from '../../src/body/collision.ts';
@@ -117,6 +117,48 @@ describe('SceneDirector scripted loop (reel)', () => {
       expect(p).toBeGreaterThanOrEqual(0);
       expect(p).toBeLessThanOrEqual(1);
     }
+  });
+
+  it('feeds from the side nose-up with the labellum in the wall, and flat from the top', () => {
+    const d = makeLoopDirector();
+    const layout = kitchenLayout();
+    const origin = { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z };
+    const wall = d.food.worldAabb(origin);
+    let topPump = 0;
+    let sidePump = 0;
+    for (let i = 0; i < 5000; i++) {
+      const out = d.update({ ...drive, satiety: 0.3 });
+      if (d.fsm.state !== 'PUMP') continue;
+      const pitch = Math.abs(out.flyPose.pitch);
+      const contacts = d.lastContacts();
+      const support = d.food.supportHeightAt(d.position.x, d.position.z, origin);
+      if (out.macro === 'EAT_TOP' && d.mode === 'onFood' && support > boardTopY() + 0.5) {
+        topPump++;
+        expect(pitch).toBeLessThan(0.02);
+        // Top feeding: labellum on the standing surface, i.e. within the block's
+        // vertical extent (contact is sampled before glue/constraints move the root).
+        expect(contacts.labellum.y).toBeLessThanOrEqual(d.food.hy + 0.5);
+        expect(contacts.labellum.y).toBeGreaterThanOrEqual(-d.food.hy);
+      }
+      if ((out.macro === 'EAT_SIDE' || out.macro === 'EAT_SIDE_2') && d.mode === 'ground') {
+        sidePump++;
+        // Nose-up posture settled (eased over ~150 ms).
+        if (sidePump > 15) expect(pitch).toBeGreaterThan(WALL_FEED_PITCH_RAD * 0.9);
+        // Labellum inside the wall plane by up to 1 mm, above the board, below the top face.
+        const lab = { x: origin.x + contacts.labellum.x, z: origin.z + contacts.labellum.z };
+        const hit = closestXzAabb(lab, wall);
+        const gap = Math.hypot(lab.x - hit.x, lab.z - hit.z);
+        if (sidePump > 15) {
+          expect(gap).toBeLessThan(1);
+          expect(origin.y + contacts.labellum.y).toBeGreaterThan(boardTopY());
+          expect(origin.y + contacts.labellum.y).toBeLessThan(origin.y + d.food.hy);
+          expect(out.flyPose.forelegExtend).toBeGreaterThan(0.8);
+        }
+      }
+      if (topPump > 40 && sidePump > 40) break;
+    }
+    expect(topPump).toBeGreaterThan(40);
+    expect(sidePump).toBeGreaterThan(40);
   });
 
   it('completes one reel loop at seed 1 without ORBIT / EXIT_FRAME', () => {

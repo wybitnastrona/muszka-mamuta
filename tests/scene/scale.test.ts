@@ -14,16 +14,21 @@ import {
   POUCH_MM,
   REAL_FLY_BODY_MM,
   SEAL_MM,
+  WALL_FEED_BITE_MM,
+  WALL_FEED_PITCH_RAD,
   bodyCollisionPadMm,
   boardTopY,
   contactRadiusMm,
   crumbSizeMm,
+  extendedLabellumReachMm,
   flyRootScale,
   flyVisualHalfLengthMm,
   flyVisualLengthMm,
+  foodStandPadMm,
   lodDistanceMm,
   lodFadeSec,
   mm,
+  pitchedTipAt,
   standoffMm,
   proboscisReachMm,
 } from '../../src/scene/scale.ts';
@@ -62,9 +67,15 @@ describe('scene scale', () => {
     expect(LOD_BODY_LENGTHS).toBe(3);
     expect(ETERNITY_MASS_FRAC).toBe(0.05);
     expect(flyVisualHalfLengthMm()).toBeCloseTo(flyVisualLengthMm() / 2);
-    expect(standoffMm()).toBeCloseTo(flyVisualHalfLengthMm() + proboscisReachMm());
+    // Standoff is the wall-feeding distance: the measured, pitched tip sinks
+    // WALL_FEED_BITE_MM into a vertical face. It is far shorter than the old
+    // "half body + proboscis" guess because the real extended reach is ~4.5 mm.
+    expect(standoffMm()).toBeCloseTo(pitchedTipAt(FLY_RENDER_SCALE, WALL_FEED_PITCH_RAD).z - WALL_FEED_BITE_MM);
+    expect(extendedLabellumReachMm()).toBeLessThan(flyVisualHalfLengthMm());
+    expect(proboscisReachMm()).toBeGreaterThan(0);
     expect(bodyCollisionPadMm()).toBeCloseTo(flyVisualHalfLengthMm());
-    expect(standoffMm()).toBeGreaterThan(bodyCollisionPadMm());
+    expect(standoffMm()).toBeGreaterThan(foodStandPadMm());
+    expect(foodStandPadMm()).toBeLessThan(bodyCollisionPadMm());
     expect(crumbSizeMm()).toBeCloseTo(flyVisualLengthMm() * 0.08);
   });
 

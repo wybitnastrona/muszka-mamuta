@@ -21,14 +21,18 @@ import {
   type Vec3,
 } from '../food/twarogSystem.ts';
 import {
+  EXTENDED_TIP_NATIVE,
+  FLY_RENDER_SCALE,
   FLY_WALK_MM_S,
   POUCH_BASE_HEIGHT_MM,
+  REST_TIP_NATIVE,
   boardTopY,
   bodyCollisionPadMm,
   flyVisualLengthMm,
-  labellumRestReachMm,
+  foodStandPadMm,
   standoffMm,
 } from '../scene/scale.ts';
+import { WALL_FEED_TAU_S, pitchedLabellumLocal, wallFeedLiftMm, wallFeedPitch } from './wallFeed.ts';
 import { FlightController } from './flight.ts';
 import {
   FLIGHT_CEILING_MM,
@@ -169,13 +173,29 @@ export type SceneDirectorDeps = {
   }) => ContactSample;
 };
 
-function kinematicContacts(position: Vec3, heading: number, foodOrigin: Vec3, sensorY?: number): ContactSample {
-  const reach = labellumRestReachMm();
-  const y = sensorY ?? position.y;
+/**
+ * Rig-less labellum estimate (tests, worker-only builds): the MEASURED rest /
+ * extended tip (scale.ts) rotated by the body pitch and pushed along the
+ * heading. `sensorY` overrides the height (top feeding: the surface).
+ */
+function kinematicContacts(
+  position: Vec3,
+  heading: number,
+  foodOrigin: Vec3,
+  opts: { pitch?: number; extended?: boolean; sensorY?: number } = {},
+): ContactSample {
+  const tip = pitchedLabellumLocal(
+    FLY_RENDER_SCALE,
+    opts.pitch ?? 0,
+    !!opts.extended,
+    REST_TIP_NATIVE,
+    EXTENDED_TIP_NATIVE,
+  );
+  const y = opts.sensorY ?? position.y + tip.y;
   const labW = {
-    x: position.x + Math.sin(heading) * reach,
+    x: position.x + Math.sin(heading) * tip.z,
     y,
-    z: position.z + Math.cos(heading) * reach,
+    z: position.z + Math.cos(heading) * tip.z,
   };
   const labellum = {
     x: labW.x - foodOrigin.x,
@@ -230,6 +250,15 @@ export class SceneDirector {
   private wingFlickL = 0;
   private wingFlickR = 0;
   private forelegExtend = 0;
+  /** 0 → 1 while feeding at a vertical face from the board (authored posture, wallFeed.ts). */
+  private wallFeedU = 0;
+  /** Last labellum / sensor sample handed to the food (food-local). */
+  private contacts: ContactSample = { labellum: { x: 0, y: 0, z: 0 }, sensors: [] };
+
+  /** Last contact sample (food-local millimetres). Observation only; tests and debug. */
+  lastContacts(): ContactSample {
+    return this.contacts;
+  }
   private caption = '';
   private spoonShadow = 0;
   private crumbAttach: CrumbBone = null;
@@ -895,7 +924,8 @@ export class SceneDirector {
 
   private applyStandingY(dt: number): void {
     if (this.mode === 'flight' || this.onWall) return;
-    const target = this.surfaceY();
+    // Wall-feeding lift: pitch reads as about the hind feet, not the root.
+    const target = this.surfaceY() + (this.mode === 'ground' ? wallFeedLiftMm() * this.wallFeedU : 0);
     if (this.mode === 'onFood') {
       this.position.y = target;
       this.stepping = false;
@@ -939,6 +969,7 @@ export class SceneDirector {
       const padded = this.food.clampRoot(
         { x: this.position.x, y: this.position.y, z: this.position.z },
         this.foodOrigin,
+        foodStandPadMm(),
       );
       const packPos = clampOutsideXzObb(padded, this.pouch, bodyCollisionPadMm());
       this.position.x = packPos.x;
@@ -1067,9 +1098,35 @@ export class SceneDirector {
       }
     }
     this.glueToFood();
-    this.forelegExtend = 0;
-    if (!this.onWall) this.pitch = 0;
+    pose = this.applyWallFeedPosture(pose, dt);
     return { pose, walk, pumpAmplitude, events };
+  }
+
+  /** Feeding from the board at a vertical face: TASTE–RETRACT in ground mode. */
+  private wallFeeding(): boolean {
+    if (this.mode !== 'ground' || this.onWall || this.refillClip) return false;
+    const s = this.fsm.state;
+    return s === 'TASTE' || s === 'EXTEND' || s === 'PUMP' || s === 'RETRACT';
+  }
+
+  /**
+   * Ease the nose-up posture in/out and put the forelegs up on the food.
+   * Top feeding (onFood) and walking keep pitch 0. The lift is applied in
+   * applyStandingY so Y stays consistent with the board/food support.
+   */
+  private applyWallFeedPosture(pose: Pose, dt: number): Pose {
+    const target = this.wallFeeding() ? 1 : 0;
+    const k = 1 - Math.exp(-Math.max(0, dt) / WALL_FEED_TAU_S);
+    this.wallFeedU += (target - this.wallFeedU) * k;
+    if (this.wallFeedU < 1e-3) this.wallFeedU = 0;
+    const u = this.wallFeedU;
+    if (!this.onWall) this.pitch = wallFeedPitch() * u;
+    this.forelegExtend = u;
+    if (u <= 0) return pose;
+    return overlayEuler(pose, {
+      foreleg_L_tarsus: [55 * u, 0, 18 * u],
+      foreleg_R_tarsus: [55 * u, 0, -18 * u],
+    });
   }
 
   private stepFood(input: DirectorInput, pose: Pose, pumping: boolean) {
@@ -1088,7 +1145,12 @@ export class SceneDirector {
       position: { x: this.position.x, y: this.position.y, z: this.position.z },
       heading: this.heading,
       pose,
-    }) ?? kinematicContacts(this.position, this.heading, this.foodOrigin, topY);
+    }) ?? kinematicContacts(this.position, this.heading, this.foodOrigin, {
+      pitch: this.pitch,
+      extended: this.fsm.state === 'EXTEND' || this.fsm.state === 'PUMP',
+      sensorY: topY,
+    });
+    this.contacts = contacts;
     return this.food.step({
       dt: input.dt,
       pumping,
@@ -1292,11 +1354,13 @@ export class SceneDirector {
     const padded = this.food.clampRoot(
       { x: this.position.x, y: this.position.y, z: this.position.z },
       this.foodOrigin,
+      foodStandPadMm(),
     );
     const packPos = clampOutsideXzObb(padded, this.pouch, bodyCollisionPadMm());
     this.position.x = packPos.x;
     this.position.z = packPos.z;
     this.mode = 'ground';
+    pose = this.applyWallFeedPosture(pose, dt);
     this.applyConstraints(dt);
     pose = this.applyGait(pose, walk > 0 && !this.refillClip, dt);
     this.applyGroundWings(walk <= 0 && !this.refillClip);
@@ -1311,7 +1375,11 @@ export class SceneDirector {
       position: { x: this.position.x, y: this.position.y, z: this.position.z },
       heading: this.heading,
       pose,
-    }) ?? kinematicContacts(this.position, this.heading, this.foodOrigin);
+    }) ?? kinematicContacts(this.position, this.heading, this.foodOrigin, {
+      pitch: this.pitch,
+      extended: this.fsm.state === 'EXTEND' || this.fsm.state === 'PUMP',
+    });
+    this.contacts = contacts;
     const foodOut = this.food.step({
       dt,
       pumping: !this.refillClip && this.fsm.state === 'PUMP',

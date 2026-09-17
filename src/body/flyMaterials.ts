@@ -1,6 +1,14 @@
 /**
  * Authored MeshPhysicalMaterial kit for Flybody parts. Colour and coats are
  * not measured; MaleCNS does not describe cuticle BRDF.
+ *
+ * Look target is the flat, matte reel fly (the viral template render):
+ * smooth deep-red eyes, matte amber chitin, dark antennae and mouthparts.
+ * The earlier glossy kit (clearcoat 1 eyes with a hex facet normal map,
+ * amber sheen on every part, envMap 0.85–1.1) turned each eye into a mirror
+ * ball — the spherical UV is computed about the model origin, so only ~2 × 6
+ * hex cells landed on an eye — and made antennae and the proboscis read as
+ * polished amber horns. See docs/BODY-MODEL.md § Appearance.
  */
 import * as THREE from 'three';
 import type { RenderQuality } from '../scene/quality.ts';
@@ -12,7 +20,6 @@ import {
   OCELLUS,
   TERGITE_BANDS,
   fillBristleAlpha,
-  fillHexNormal,
   fillSimplexRoughness,
 } from '../scene/proceduralMaps.ts';
 
@@ -21,6 +28,18 @@ export type FlyMaterialKit = {
   maps: THREE.Texture[];
   setCropVolume: (value: number) => void;
 };
+
+/** Matte chitin: the reel look, not lacquer. */
+export const CUTICLE_ROUGHNESS = 0.6;
+export const CUTICLE_CLEARCOAT = 0.12;
+export const CUTICLE_ENV = 0.4;
+/** Antennae / palps / mouthpart segments (Flybody part `black`). */
+export const CUTICLE_DARK = '#2a1a10';
+export const DARK_ROUGHNESS = 0.72;
+/** Compound eye: smooth, deep red, soft highlight. */
+export const EYE_ROUGHNESS = 0.45;
+export const EYE_CLEARCOAT = 0.2;
+export const EYE_ENV = 0.35;
 
 function dataTex(
   data: Uint8Array,
@@ -118,34 +137,27 @@ export function createFlyMaterials(quality: RenderQuality = DESKTOP_QUALITY): Fl
   const roughnessMap = dataTex(roughData, size, THREE.NoColorSpace, THREE.RepeatWrapping);
   maps.push(roughnessMap);
 
-  const hexData = new Uint8Array(size * size * 4);
-  fillHexNormal(hexData, size, 30);
-  const hexNormal = dataTex(hexData, size, THREE.NoColorSpace, THREE.ClampToEdgeWrapping);
-  maps.push(hexNormal);
-
   const bristleData = new Uint8Array(size * size * 4);
   fillBristleAlpha(bristleData, size);
   const bristleAlpha = dataTex(bristleData, size, THREE.NoColorSpace, THREE.ClampToEdgeWrapping);
   maps.push(bristleAlpha);
 
-  const coat = quality.clearcoat ? 0.35 : 0;
+  const coat = quality.clearcoat ? CUTICLE_CLEARCOAT : 0;
   const irid = quality.iridescence ? 1 : 0;
 
   const cuticle = (
     color: string,
-    opts: { tergites?: boolean; lighter?: boolean } = {},
+    opts: { tergites?: boolean; dark?: boolean } = {},
   ): THREE.MeshPhysicalMaterial => {
     const mat = new THREE.MeshPhysicalMaterial({
       color,
-      roughness: 0.55,
-      roughnessMap,
-      metalness: 0.04,
-      clearcoat: coat,
-      clearcoatRoughness: 0.3,
-      sheen: 0.2,
-      sheenColor: new THREE.Color('#c88840'),
-      sheenRoughness: 0.55,
-      envMapIntensity: 0.85,
+      roughness: opts.dark ? DARK_ROUGHNESS : CUTICLE_ROUGHNESS,
+      roughnessMap: opts.dark ? null : roughnessMap,
+      metalness: 0.02,
+      clearcoat: opts.dark ? 0 : coat,
+      clearcoatRoughness: 0.5,
+      sheen: 0,
+      envMapIntensity: opts.dark ? 0.2 : CUTICLE_ENV,
     });
     if (opts.tergites) attachTergites(mat, cropRef);
     return mat;
@@ -154,24 +166,27 @@ export function createFlyMaterials(quality: RenderQuality = DESKTOP_QUALITY): Fl
   const materials: Record<string, THREE.Material> = {
     body: cuticle(CUTICLE_AMBER, { tergites: true }),
     brown: cuticle('#8a4a1c'),
-    black: cuticle('#3a2414'),
+    // Antennae, palps and proboscis segments: really dark, no amber sheen.
+    black: cuticle(CUTICLE_DARK, { dark: true }),
     lower: cuticle(CUTICLE_LEG),
+    // Compound eye: one smooth deep-red dome with a soft highlight. No facet
+    // normal map — the eye's spherical UV about the model origin spans only
+    // 0.067 × 0.204, i.e. ~2 × 6 hex cells per eye, which read as beads.
     red: new THREE.MeshPhysicalMaterial({
       color: EYE_RED,
-      roughness: 0.15,
-      metalness: 0.05,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
-      normalMap: hexNormal,
-      normalScale: new THREE.Vector2(0.65, 0.65),
-      envMapIntensity: 1.1,
+      roughness: EYE_ROUGHNESS,
+      metalness: 0,
+      clearcoat: EYE_CLEARCOAT,
+      clearcoatRoughness: 0.4,
+      envMapIntensity: EYE_ENV,
     }),
     ocelli: new THREE.MeshPhysicalMaterial({
       color: OCELLUS,
-      roughness: 0.08,
-      metalness: 0.2,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
+      roughness: 0.3,
+      metalness: 0.05,
+      clearcoat: 0.3,
+      clearcoatRoughness: 0.3,
+      envMapIntensity: 0.4,
     }),
     'bristle-brown': new THREE.MeshPhysicalMaterial({
       color: '#281c10',

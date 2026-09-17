@@ -124,27 +124,53 @@ export function flyRootScale(): number {
 }
 
 /**
- * Rest labellum z in Flybody model units (`anchors.json` labellum_L / labellum_R).
- * Scaled by `flyRootScale()` this is the rest reach of the tip from the root.
+ * Labellum midpoint in root space, Flybody native units, MEASURED by forward
+ * kinematics on `anchors.json` (see tests/body/feedingMotion.test.ts — the
+ * test fails if these drift from the rig). `y` is below the root, `z` ahead.
+ *
+ * Rest = idle clip with the authored resting fold (rostrum +30°, haustellum
+ * +40°). Extended = end of the `per` clip (rostrum −35°, haustellum −60°).
+ * The whole rostrum→labellum chain is ~1.6 mm at 6×, so PER adds only ~1.8 mm
+ * of forward reach. The earlier kit assumed the extended tip reached
+ * `standoff` (11.25 mm) — a declaration, not a measurement — which is why the
+ * side-feeding proboscis ended in the board instead of the twaróg wall.
  */
-export const LABELLUM_REST_Z_NATIVE = 0.0657;
+export const REST_TIP_NATIVE = { y: -0.0462, z: 0.0553 } as const;
+export const EXTENDED_TIP_NATIVE = { y: -0.0604, z: 0.0905 } as const;
+
+/** Kept for callers that only need the rest z. */
+export const LABELLUM_REST_Z_NATIVE = REST_TIP_NATIVE.z;
 
 /** Rest labellum anterior of the root, millimetres at render scale. */
 export function labellumRestReachAt(scale: number): number {
-  return LABELLUM_REST_Z_NATIVE * flyRootScaleAt(scale);
+  return REST_TIP_NATIVE.z * flyRootScaleAt(scale);
 }
 
 export function labellumRestReachMm(): number {
   return labellumRestReachAt(FLY_RENDER_SCALE);
 }
 
-/**
- * Length of a fully extended PER past the head-anterior, millimetres at render
- * scale. Authored from the PER Euler keys (rostrum −35°, haustellum −60°) so
- * the tip clears the head AABB; not a measured length.
- */
+/** Extended labellum anterior of the root (≈ 4.5 mm at 6×). Measured, see above. */
+export function extendedLabellumReachAt(scale: number): number {
+  return EXTENDED_TIP_NATIVE.z * flyRootScaleAt(scale);
+}
+
+export function extendedLabellumReachMm(): number {
+  return extendedLabellumReachAt(FLY_RENDER_SCALE);
+}
+
+/** Extended labellum below the root (≈ 3.0 mm at 6×). */
+export function extendedLabellumDropAt(scale: number): number {
+  return -EXTENDED_TIP_NATIVE.y * flyRootScaleAt(scale);
+}
+
+export function extendedLabellumDropMm(): number {
+  return extendedLabellumDropAt(FLY_RENDER_SCALE);
+}
+
+/** How much PER adds beyond the resting reach (≈ 1.8 mm at 6×). */
 export function proboscisReachAt(scale: number): number {
-  return Math.max(flyVisualLengthAt(scale) * 0.25, labellumRestReachAt(scale));
+  return extendedLabellumReachAt(scale) - labellumRestReachAt(scale);
 }
 
 export function proboscisReachMm(): number {
@@ -152,38 +178,63 @@ export function proboscisReachMm(): number {
 }
 
 /**
- * How far the body root stays from the food surface so the labellum can
- * touch it while the body mesh stays clear: half visual body length plus
- * the extended proboscis.
+ * Side-feeding posture (authored): body pitched nose-up at a vertical food
+ * face so the short proboscis meets the wall. 32° stays inside the 35° up-cone
+ * (`UP_ALIGN_MAX_RAD`) so the surface-normal slerp does not fight it.
  */
+export const WALL_FEED_PITCH_RAD = (32 * Math.PI) / 180;
+/** How far the labellum tip may sink into the wall so it reads as contact. */
+export const WALL_FEED_BITE_MM = 0.4;
+
+/**
+ * Extended labellum after pitching the body nose-up by `pitch` about the
+ * root, in root-space millimetres: `z` forward, `y` up.
+ */
+export function pitchedTipAt(scale: number, pitch: number): { y: number; z: number } {
+  const y = EXTENDED_TIP_NATIVE.y * flyRootScaleAt(scale);
+  const z = EXTENDED_TIP_NATIVE.z * flyRootScaleAt(scale);
+  const c = Math.cos(pitch);
+  const s = Math.sin(pitch);
+  return { y: y * c + z * s, z: z * c - y * s };
+}
+
+/**
+ * Root-to-wall distance at which the pitched labellum sinks `WALL_FEED_BITE_MM`
+ * into a vertical food face (≈ 5.0 mm at 6×). This IS the approach standoff:
+ * APPROACH ends where feeding can actually touch the food.
+ */
+export function wallFeedStandoffAt(scale: number): number {
+  return pitchedTipAt(scale, WALL_FEED_PITCH_RAD).z - WALL_FEED_BITE_MM;
+}
+
 export function standoffAt(scale: number): number {
-  return flyVisualLengthAt(scale) / 2 + proboscisReachAt(scale);
+  return wallFeedStandoffAt(scale);
 }
 
 export function standoffMm(): number {
   return standoffAt(FLY_RENDER_SCALE);
 }
 
-/**
- * Anterior offset of the extended labellum from the body root. Equal to
- * `standoffMm()` so a root parked at the standoff point puts the tip on
- * the food surface.
- */
-export function extendedLabellumReachAt(scale: number): number {
-  return standoffAt(scale);
-}
-
-export function extendedLabellumReachMm(): number {
-  return extendedLabellumReachAt(FLY_RENDER_SCALE);
-}
-
-/** Padding used when clamping the root so the body mesh stays outside food. */
+/** Padding used when clamping the root so the body mesh stays outside solids (flight, pouch, orbit). */
 export function bodyCollisionPadAt(scale: number): number {
   return flyVisualLengthAt(scale) / 2;
 }
 
 export function bodyCollisionPadMm(): number {
   return bodyCollisionPadAt(FLY_RENDER_SCALE);
+}
+
+/**
+ * Padding for the FOOD root clamp only. Smaller than the body pad because the
+ * pitched wall-feeding body leans over the wall edge; must stay below the
+ * standoff or APPROACH could never arrive.
+ */
+export function foodStandPadAt(scale: number): number {
+  return Math.max(1, standoffAt(scale) - 0.5);
+}
+
+export function foodStandPadMm(): number {
+  return foodStandPadAt(FLY_RENDER_SCALE);
 }
 
 /** Crumb particle size, scaled with the fly (0.08 visual body lengths). */

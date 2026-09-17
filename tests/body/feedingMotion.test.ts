@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
   CLIP_FPS,
   CLIPS,
@@ -7,18 +8,32 @@ import {
   EXTEND_LABELLUM,
   EXTEND_ROSTRUM,
   PER_ANTICIPATION_S,
+  REST_ROSTRUM,
   MotionMixer,
   blendPoses,
   reviewTime,
   sampleClip,
 } from '../../src/body/feedingMotion.ts';
+import { applyPoseToBones, buildSkeleton } from '../../src/body/rig.ts';
 import { eulerDegToQuat, headingError, turnToward } from '../../src/body/math.ts';
 import { parseDebugMode, parseLoopVariant, formatGateOverlay } from '../../src/body/debugQuery.ts';
 import { CAMERA_PRESETS } from '../../src/body/cameras.ts';
 import { ANCHORS } from '../../src/body/hierarchy.ts';
+import type { Pose } from '../../src/body/types.ts';
+import { EXTENDED_TIP_NATIVE, REST_TIP_NATIVE, flyRootScale } from '../../src/scene/scale.ts';
 
 function quatDot(a: readonly number[], b: readonly number[]): number {
   return Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]);
+}
+
+/** Labellum midpoint in root space (Flybody native units) for a pose — forward kinematics on the real anchors. */
+export function labellumTipNative(pose: Pose): { x: number; y: number; z: number } {
+  const { armature, bones } = buildSkeleton();
+  applyPoseToBones(bones, pose);
+  armature.updateMatrixWorld(true);
+  const l = bones.get('labellum_L')!.getWorldPosition(new THREE.Vector3());
+  const r = bones.get('labellum_R')!.getWorldPosition(new THREE.Vector3());
+  return { x: (l.x + r.x) / 2, y: (l.y + r.y) / 2, z: (l.z + r.z) / 2 };
 }
 
 describe('feeding motion clips', () => {
@@ -34,6 +49,29 @@ describe('feeding motion clips', () => {
     expect(quatDot(pose.haustellum.rotation, eulerDegToQuat([EXTEND_HAUSTELLUM, 0, 0]))).toBeGreaterThan(0.98);
     expect(quatDot(pose.labellum_L.rotation, eulerDegToQuat([0, 0, EXTEND_LABELLUM]))).toBeGreaterThan(0.98);
     expect(quatDot(pose.labellum_R.rotation, eulerDegToQuat([0, 0, -EXTEND_LABELLUM]))).toBeGreaterThan(0.98);
+  });
+
+  it('rests with the proboscis folded under the head and unfolds it visibly in PER (FK on the real anchors)', () => {
+    const rest = labellumTipNative(sampleClip(CLIPS.idle, 0, { reduceMotion: true }));
+    const hanging = labellumTipNative(sampleClip(CLIPS.idle, 0, { reduceMotion: true }));
+    // Flybody's unfolded chain would hang to y ≈ -0.063; the fold lifts it toward the head.
+    expect(rest.y).toBeGreaterThan(-0.055);
+    expect(rest.z).toBeLessThan(0.0657);
+    const per = labellumTipNative(sampleClip(CLIPS.per, CLIPS.per.duration, { reduceMotion: true }));
+    const travelMm = Math.hypot(per.y - rest.y, per.z - rest.z) * flyRootScale();
+    expect(travelMm).toBeGreaterThanOrEqual(1.5);
+    expect(per.z).toBeGreaterThan(rest.z);
+    // The scale.ts constants are these very numbers; they must not drift from the rig.
+    expect(rest.y).toBeCloseTo(REST_TIP_NATIVE.y, 3);
+    expect(rest.z).toBeCloseTo(REST_TIP_NATIVE.z, 3);
+    expect(per.y).toBeCloseTo(EXTENDED_TIP_NATIVE.y, 3);
+    expect(per.z).toBeCloseTo(EXTENDED_TIP_NATIVE.z, 3);
+    const pump = labellumTipNative(sampleClip(CLIPS.pump, 0, { amplitude: 1, reduceMotion: true }));
+    expect(pump.z).toBeCloseTo(per.z, 3);
+    // retract ends where rest starts
+    const back = labellumTipNative(sampleClip(CLIPS.retract, CLIPS.retract.duration, { reduceMotion: true }));
+    expect(back.y).toBeCloseTo(hanging.y, 4);
+    expect(back.z).toBeCloseTo(hanging.z, 4);
   });
 
   it('keeps PER on −X so the tip moves anterior +Z and ventral −Y, not sideways', () => {
@@ -74,7 +112,7 @@ describe('feeding motion clips', () => {
 
   it('retracts with a 5% overshoot past rest', () => {
     const pose = sampleClip(CLIPS.retract, 0.28, { reduceMotion: true });
-    const overshoot = eulerDegToQuat([35 * 0.05, 0, 0]);
+    const overshoot = eulerDegToQuat([REST_ROSTRUM + 35 * 0.05, 0, 0]);
     expect(quatDot(pose.rostrum.rotation, overshoot)).toBeGreaterThan(0.98);
   });
 

@@ -17,6 +17,7 @@ import {
   labellumRestReachMm,
   mm,
 } from '../../src/scene/scale.ts';
+import { WALL_FEED_TAU_S, wallFeedLiftMm } from '../../src/body/wallFeed.ts';
 
 export type GroundTraceFrame = {
   i: number;
@@ -73,6 +74,10 @@ export function runGroundTrace(opts: GroundTraceOpts): GroundTraceFrame[] {
   mixer.play('odorTrack', { fade: 0 });
   const pouch = pouchObb();
   let pos = { x: layout.fly.x, y: layout.board.topY + 2, z: layout.fly.z };
+  const standY = pos.y;
+  // Side-feeding lift added after the refactor (wallFeed.ts): the frozen
+  // integrator mirrors the director's eased lift so Y stays comparable.
+  let wallFeedU = 0;
   let refillClip: 'retract' | 'groom' | null = null;
   let refillHold = 0;
   let hudState: FeedingState = 'SEARCH';
@@ -138,6 +143,11 @@ export function runGroundTrace(opts: GroundTraceOpts): GroundTraceFrame[] {
     const packPos = clampOutsideXzObb(padded, pouch, bodyCollisionPadMm());
     pos.x = packPos.x;
     pos.z = packPos.z;
+    const s = fsm.state;
+    const feedingAtWall = !refillClip && (s === 'TASTE' || s === 'EXTEND' || s === 'PUMP' || s === 'RETRACT');
+    wallFeedU += ((feedingAtWall ? 1 : 0) - wallFeedU) * (1 - Math.exp(-dt / WALL_FEED_TAU_S));
+    if (wallFeedU < 1e-3) wallFeedU = 0;
+    pos.y = standY + wallFeedLiftMm() * wallFeedU;
 
     const flyLocal = { x: pos.x - food.x, y: pos.y - food.y, z: pos.z - food.z };
     sys.followBiteFront(flyLocal);

@@ -27,6 +27,19 @@ const EXTEND_ROSTRUM = -35;
 const EXTEND_HAUSTELLUM = -60;
 const EXTEND_LABELLUM = 18;
 
+/**
+ * Resting fold (authored). Flybody ships the mouthparts hanging as if
+ * mid-extension; a resting fly keeps the proboscis retracted under the head
+ * and PER unfolds it (Dethier 1976). +X folds the hanging chain up/back, so
+ * every non-feeding clip inherits this and PER becomes a visible unfold.
+ */
+export const REST_ROSTRUM = 30;
+export const REST_HAUSTELLUM = 40;
+const MOUTH_REST: Partial<Record<BoneName, EulerDeg>> = {
+  rostrum: [REST_ROSTRUM, 0, 0],
+  haustellum: [REST_HAUSTELLUM, 0, 0],
+};
+
 export type SampleOpts = {
   amplitude?: number;
   timeSec?: number;
@@ -47,8 +60,13 @@ type EulerKey = { t: number; bones: Partial<Record<BoneName, EulerDeg>> };
 function restPose(): Pose {
   const pose = {} as Pose;
   for (const name of BONE_NAMES) pose[name] = { rotation: IDENTITY };
+  for (const [name, euler] of Object.entries(MOUTH_REST) as [BoneName, EulerDeg][]) {
+    pose[name] = { rotation: eulerDegToQuat(euler) };
+  }
   return pose;
 }
+
+const REST_POSE = restPose();
 
 function trackFromKeys(keys: { t: number; euler: EulerDeg }[]): { times: number[]; values: number[] } {
   const times: number[] = [];
@@ -152,10 +170,18 @@ export const CLIPS: Record<ClipName, Clip> = {
   ]),
 
   per: clipFromEulerKeys('per', 0.4, false, 'inOut', [
-    { t: 0, bones: { rostrum: [0, 0, 0], haustellum: [0, 0, 0], labellum_L: [0, 0, 0], labellum_R: [0, 0, 0] } },
+    {
+      t: 0,
+      bones: { rostrum: MOUTH_REST.rostrum!, haustellum: MOUTH_REST.haustellum!, labellum_L: [0, 0, 0], labellum_R: [0, 0, 0] },
+    },
     {
       t: PER_ANTICIPATION_S,
-      bones: { rostrum: [2, 0, 0], haustellum: [3, 0, 0], labellum_L: [0, 0, -1], labellum_R: [0, 0, 1] },
+      bones: {
+        rostrum: [REST_ROSTRUM + 2, 0, 0],
+        haustellum: [REST_HAUSTELLUM + 3, 0, 0],
+        labellum_L: [0, 0, -1],
+        labellum_R: [0, 0, 1],
+      },
     },
     {
       t: 0.4,
@@ -189,17 +215,18 @@ export const CLIPS: Record<ClipName, Clip> = {
       },
     },
     {
+      // Slight overshoot past the resting fold, then settle.
       t: 0.28,
       bones: {
-        rostrum: [35 * 0.05, 0, 0],
-        haustellum: [60 * 0.05, 0, 0],
+        rostrum: [REST_ROSTRUM + 35 * 0.05, 0, 0],
+        haustellum: [REST_HAUSTELLUM + 60 * 0.05, 0, 0],
         labellum_L: [0, 0, -18 * 0.05],
         labellum_R: [0, 0, 18 * 0.05],
       },
     },
     {
       t: 0.42,
-      bones: { rostrum: [0, 0, 0], haustellum: [0, 0, 0], labellum_L: [0, 0, 0], labellum_R: [0, 0, 0] },
+      bones: { rostrum: MOUTH_REST.rostrum!, haustellum: MOUTH_REST.haustellum!, labellum_L: [0, 0, 0], labellum_R: [0, 0, 0] },
     },
   ]),
 
@@ -283,7 +310,8 @@ export function sampleClip(clip: Clip, timeSec: number, opts: SampleOpts = {}): 
   const pose = restPose();
   for (const name of BONE_NAMES) {
     const track = clip.tracks[name];
-    pose[name] = { rotation: track ? quatAt(track, t, clip.ease) : IDENTITY };
+    // Untracked bones sit at the authored rest (mouth folded), not identity.
+    pose[name] = { rotation: track ? quatAt(track, t, clip.ease) : REST_POSE[name].rotation };
   }
   if (clip.name === 'pump') {
     const amp = clamp01(opts.amplitude ?? 1);
@@ -460,4 +488,4 @@ export function eulerOf(pose: BonePose): { x: number; y: number; z: number; w: n
   return { x: pose.rotation[0], y: pose.rotation[1], z: pose.rotation[2], w: pose.rotation[3] };
 }
 
-export { EXTENDED_POSE, EXTEND_ROSTRUM, EXTEND_HAUSTELLUM, EXTEND_LABELLUM };
+export { EXTENDED_POSE, REST_POSE, EXTEND_ROSTRUM, EXTEND_HAUSTELLUM, EXTEND_LABELLUM };

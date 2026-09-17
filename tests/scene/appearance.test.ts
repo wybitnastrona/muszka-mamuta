@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { createFlyMaterials } from '../../src/body/flyMaterials.ts';
+import {
+  CUTICLE_CLEARCOAT,
+  CUTICLE_DARK,
+  EYE_CLEARCOAT,
+  createFlyMaterials,
+} from '../../src/body/flyMaterials.ts';
 import { createKitchen, kitchenDrawCount, poseSpoon } from '../../src/body/kitchen.ts';
 import { frameForPreset, kitchenFrame, letterboxSize, reelFrame, usesShallowDof } from '../../src/body/cameras.ts';
 import { CAMERA_PRESETS } from '../../src/body/types.ts';
@@ -107,17 +112,30 @@ describe('fly materials', () => {
     const ocelli = kit.materials.ocelli as THREE.MeshPhysicalMaterial;
     expect(body).toBeInstanceOf(THREE.MeshPhysicalMaterial);
     expect(body.color.getHexString()).toBe(CUTICLE_AMBER.slice(1));
-    expect(body.clearcoat).toBeCloseTo(0.35);
-    expect(body.sheen).toBeCloseTo(0.2);
+    // Matte reel look: no lacquer, no amber sheen.
+    expect(body.clearcoat).toBeCloseTo(CUTICLE_CLEARCOAT);
+    expect(body.clearcoat).toBeLessThanOrEqual(0.15);
+    expect(body.sheen).toBe(0);
+    expect(body.roughness).toBeGreaterThanOrEqual(0.55);
+    expect(body.envMapIntensity).toBeLessThanOrEqual(0.5);
+    // Smooth deep-red eye: the hex facet map is gone (it gave ~2 × 6 cells per eye).
     expect(eye.color.getHexString()).toBe(EYE_RED.slice(1));
-    expect(eye.clearcoat).toBe(1);
-    expect(eye.normalMap).toBeTruthy();
+    expect(eye.normalMap).toBeNull();
+    expect(eye.clearcoat).toBeCloseTo(EYE_CLEARCOAT);
+    expect(eye.clearcoat).toBeLessThan(0.5);
+    expect(eye.roughness).toBeGreaterThanOrEqual(0.4);
+    // Antennae / mouthparts stay dark and matte.
+    const dark = kit.materials.black as THREE.MeshPhysicalMaterial;
+    expect(dark.color.getHexString()).toBe(CUTICLE_DARK.slice(1));
+    expect(dark.sheen).toBe(0);
+    expect(dark.clearcoat).toBe(0);
+    expect(dark.roughness).toBeGreaterThanOrEqual(0.7);
     expect(wing.transmission).toBeCloseTo(0.9);
     expect(wing.iridescence).toBe(1);
     expect(wing.iridescenceThicknessRange[0]).toBe(100);
     expect(wing.iridescenceThicknessRange[1]).toBe(400);
     expect(bristle.alphaTest).toBeGreaterThan(0);
-    expect(ocelli.clearcoat).toBe(1);
+    expect(ocelli.clearcoat).toBeLessThan(0.5);
     expect(TERGITE_BANDS).toBe(5);
     expect(EXPOSURE).toBeCloseTo(1.1);
     const [r, g, b] = kelvinToRgb(KEY_KELVIN);
