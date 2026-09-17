@@ -87,14 +87,33 @@ Fog is FogExp2 tinted from the grid floor, density tied to camera–board
 distance so the subject never exceeds 25% fog. Compound eyes and the PET film
 reflect a blurred equirect of the real kitchen (`env_512.jpg`, intensity 0.5).
 
-Fly materials are `MeshPhysicalMaterial`. Cuticle base `#b8722f` with five
-authored tergite bands and an abdomen Fresnel that scales with `cropVolume`.
-Compound eyes (`red`) use a procedural hex normal map. Wings (`wing_L` /
-`wing_R`) are transmissive and iridescent. Bristles use a tip-alpha gradient.
+Fly materials are `MeshPhysicalMaterial`, tuned to the flat, matte look of
+the reel fly rather than lacquer. Cuticle base `#b8722f`, roughness 0.6,
+clearcoat 0.12, no sheen, envMap 0.4, with five authored tergite bands and an
+abdomen Fresnel that scales with `cropVolume`. Antennae, palps and proboscis
+segments (Flybody part `black`) are a dark matte `#2a1a10` with no coat.
+Compound eyes (`red`) are one smooth deep-red dome (`#8a1a12`, roughness
+0.45, clearcoat 0.2, envMap 0.35) with **no** facet normal map: the eye UV is
+spherical about the model origin and spans only 0.067 × 0.204, so a 30-cell
+hex map put ~2 × 6 huge cells on each eye, and with clearcoat 1 / roughness
+0.15 they read as a mirror ball of red beads (`docs/review/head-before-after.jpg`).
+The earlier amber sheen on every part likewise turned the antennae and the
+proboscis into polished horns. Wings (`wing_L` / `wing_R`) are transmissive
+and iridescent. Bristles use a tip-alpha gradient.
 Head counter-rotates 60% against body pitch/roll; antennae keep 2–4° Perlin
 and 8° flicks on odor-yaw jumps; standing tarsi sink 0.3 mm with a baked
 contact-AO blob. None of this writes `ActivityFrame` or changes contact
 sampling.
+
+**Resting proboscis fold (authored).** Flybody ships the mouthparts hanging
+as if mid-extension, so PER barely read (the tip moved ~1.2 mm). `restPose()`
+now folds rostrum +30° and haustellum +40° (+X folds the chain up/back), every
+non-feeding clip inherits it, `per` unfolds from there to the authored
+extension and `retract` returns to it. Measured by forward kinematics on the
+anchors: rest tip 2.3 mm below / 2.75 mm ahead of the root, extended tip
+3.0 mm below / 4.5 mm ahead, so PER now travels ~1.9 mm. A resting fly keeps
+the proboscis retracted and extends it on tarsal contact (Dethier 1976, *The
+Hungry Fly*); the angles are authored.
 
 Camera presets frame the same studio: **Widok kuchni** (overview), **Z boku**,
 **Zbliżenie** (labellum dolly, shallow DOF), **Przegląd**, **Reel** (9:16,
@@ -173,9 +192,46 @@ The body up-axis stays within 35° of the surface normal (world +Y on the table
 and board, the face normal on a wall), slerped back over 150 ms, except during
 the `escapeShadow` tumble (`takeoff2`).
 
+## Side feeding posture (authored, measured reach)
+
+Feeding from the board at a vertical face (`EAT_SIDE`, `mode === 'ground'`)
+used to leave the proboscis in the board: `standoffMm()` was 11.25 mm (half
+body + a guessed 25%-of-body PER) and `extendedLabellumReachMm()` was simply
+*defined* as equal to it. Forward kinematics on `anchors.json` say otherwise —
+the extended labellum is **4.5 mm ahead and 3.0 mm below** the root
+(`EXTENDED_TIP_NATIVE`, guarded by a test), because the whole
+rostrum→labellum chain is ~1.6 mm at 6×. `contactReachMm()` (≈15 mm) still
+found bottom-layer cells, so eating proceeded while nothing touched.
+
+Now (`src/body/wallFeed.ts`):
+
+- `standoffMm()` is the **wall-feeding standoff**: the root distance at which
+  the pitched tip sinks `WALL_FEED_BITE_MM` (0.4 mm) into the face — ≈ 5.0 mm
+  at 6×. APPROACH therefore stops where feeding can actually touch.
+- `TwarogSystem.clampRoot` pads the food by `foodStandPadMm()` (standoff −
+  0.5 mm); the generic half-body pad stays for flight, pouch and orbit.
+- During TASTE → RETRACT in ground mode the body pitches nose-up
+  `WALL_FEED_PITCH_RAD` = 32° (inside the 35° up-cone), the root lifts by
+  `hindFootOffset · sin(32°)` ≈ 1.9 mm so the rotation reads as about the
+  hind feet, and the forelegs go up onto the food (same overlay as landing).
+  Pitch and legs ease in/out over 150 ms. The pitched tip is then ≈ 5.4 mm
+  ahead and level with the root; the head front (≈ 4.7 mm after the pitch)
+  stays outside the wall.
+- `supportHeightAt` counts cell footprints only inside the block's XZ, so
+  standing 5 mm from a face no longer "steps up" onto an overhanging cell
+  circle.
+- The rig-less contact fallback (`kinematicContacts`) uses the measured tip
+  rotated by the current pitch, so tests and the worker-only path see the
+  same labellum the rig would.
+
+Top feeding is unchanged: pitch 0, proboscis down, surface under the root.
+Basis: tarsal contact → proboscis extension toward the food (Dethier 1976);
+the 32° and the lift are authored for the reel, not measured. Not addressed
+here: repeated PUMP at one spot bores a column to the board (pre-existing).
+
 | `mode` | Solids | Y | Up |
 | --- | --- | --- | --- |
-| `ground` | food AABB + pouch OBB + board, `standoffOnRay` unchanged | standing height | +Y cone |
+| `ground` | food AABB (`foodStandPadMm`) + pouch OBB + board, `standoffOnRay` at the wall standoff | standing height (+ wall-feed lift) | +Y cone (32° nose-up while feeding) |
 | `flight` | same 3D exclusion + 200 ms saccade lookahead | support…220 mm | +Y cone |
 | `onFood` | centre stays out of the interior; top-face standing | `supportHeightAt` each frame | +Y cone (wall: face normal) |
 
