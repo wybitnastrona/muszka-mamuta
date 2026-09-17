@@ -17,7 +17,6 @@ import {
   POUCH_MM,
   WALL_FEED_BITE_MM,
   WALL_FEED_PITCH_RAD,
-  boardTopY,
   bodyCollisionPadMm,
   contactRadiusAt,
   contactRadiusMm,
@@ -26,6 +25,7 @@ import {
   pitchedTipAt,
   standoffAt,
   standoffMm,
+  tableTopY,
 } from '../../src/scene/scale.ts';
 import { wallFeedLiftAt, wallFeedLiftMm } from '../../src/body/wallFeed.ts';
 
@@ -88,7 +88,7 @@ describe('APPROACH surface standoff', () => {
       // Real geometry: measured extended tip, pitched by the wall-feeding
       // posture, on a root standing ROOT_STAND + lift above the board.
       const tip = pitchedTipAt(FLY_RENDER_SCALE, WALL_FEED_PITCH_RAD);
-      const rootY = boardTopY() + ROOT_STAND + wallFeedLiftMm();
+      const rootY = tableTopY() + ROOT_STAND + wallFeedLiftMm();
       const labellum = {
         x: pos.x + Math.sin(heading) * tip.z - food.x,
         y: rootY + tip.y - food.y,
@@ -97,7 +97,7 @@ describe('APPROACH surface standoff', () => {
       const toHit = Math.hypot(pos.x + Math.sin(heading) * tip.z - approach.hit.x, pos.z + Math.cos(heading) * tip.z - approach.hit.z);
       expect(toHit).toBeLessThanOrEqual(contactRadiusMm() + APPROACH_ARRIVE_MM);
       // The tip is inside the wall plane (contact), above the board, below the top face.
-      expect(labellum.y).toBeGreaterThan(boardTopY() - food.y);
+      expect(labellum.y).toBeGreaterThan(tableTopY() - food.y);
       expect(labellum.y).toBeLessThan(sys.hy);
       const chunk = sys.nearestUneaten(labellum, sys.contactReachMm());
       expect(chunk).not.toBeNull();
@@ -129,7 +129,7 @@ describe('APPROACH surface standoff', () => {
       const scale = FLY_RENDER_SCALE * mul;
       const stand = standoffAt(scale);
       const tip = pitchedTipAt(scale, WALL_FEED_PITCH_RAD);
-      const rootY = boardTopY() + ROOT_STAND + wallFeedLiftAt(scale);
+      const rootY = tableTopY() + ROOT_STAND + wallFeedLiftAt(scale);
       const parked = { x: food.x, y: rootY, z: food.z - sys.hz - stand };
       const heading = 0;
       const approach = sys.approachTarget(parked, food, stand);

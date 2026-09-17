@@ -1,0 +1,54 @@
+{
+  "source": "iPhone HEIC in Downloads",
+  "paper": "A4 210mm visible in most frames",
+  "files": {
+    "front": {
+      "jpg": "front.jpg",
+      "source": "IMG_8512.HEIC"
+    },
+    "back": {
+      "jpg": "back.jpg",
+      "source": "IMG_8514.HEIC"
+    },
+    "left": {
+      "jpg": "left.jpg",
+      "source": "IMG_8515.HEIC"
+    },
+    "right": {
+      "jpg": "right.jpg",
+      "source": "IMG_8516.HEIC"
+    },
+    "lid_top": {
+      "jpg": "lid_top.jpg",
+      "source": "IMG_8517.HEIC"
+    },
+    "well": {
+      "jpg": "well.jpg",
+      "source": "IMG_8518.HEIC"
+    },
+    "lid_underside": {
+      "jpg": "lid_underside.jpg",
+      "source": "IMG_8519.HEIC"
+    },
+    "bottom": {
+      "jpg": "bottom.jpg",
+      "source": "IMG_8520.HEIC"
+    },
+    "logo": {
+      "jpg": "logo.jpg",
+      "source": "IMG_8521.HEIC"
+    },
+    "scoop_a": {
+      "jpg": "scoop_a.jpg",
+      "source": "IMG_8523.HEIC"
+    },
+    "scoop_b": {
+      "jpg": "scoop_b.jpg",
+      "source": "IMG_8524.HEIC"
+    },
+    "powder_macro": {
+      "jpg": "powder_macro.jpg",
+      "source": "IMG_8525.HEIC"
+    }
+  }
+}

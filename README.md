@@ -5,7 +5,7 @@
 </p>
 
 Symulacja w przeglądarce: *Drosophila melanogaster* z mózgiem LIF na grafie
-MaleCNS v1.0 je klin polskiego twarogu wiejskiego (**twaróg waniliowy**) w
+MaleCNS v1.0 je **kreatynę** (puszka KFD, miarka, bieżnia lab) w
 nieskończoność. Scena kuchenna, HUD z boku, przełącznik widoków. To
 **zmodyfikowana** wersja szablonu
 [fly-connectome-template](https://github.com/cobanov/fly-connectome-template)
@@ -27,11 +27,15 @@ pomiaru (`docs/DATA-PIPELINE.md`). MaleCNS **nie ma** adnotacji receptorów
 słodki/gorzki (zero trafień Gr64f / Gr5a / Gr66a).
 
 **AUTORSKIE:** parametry LIF (cytowania w `src/brain/params.ts`), model głodu
-i hemolimfy, chemia pokarmu (`TWAROG_MAMUTA_WANILIOWY`, słodycz 0,75), skala
-renderu 6× (15 mm na ekranie), rig proceduralny, każdy klip ruchu, lot, czyszczenie, sen, gag-i,
+i hemolimfy, chemia pokarmu (`CREATINE_KFD`, aa 0,85, słodycz 0,05; twaróg
+waniliowy zostaje fixture'em testowym), skala
+renderu 6× (15 mm na ekranie), rig proceduralny, miarka, bieżnia, chód dwunożny,
+każdy klip ruchu, lot, czyszczenie, sen, gag-i,
 mapowanie MN9 Hz → czas pompy. Konektom steruje **tylko bramką żerowania**
 (kanał gustatoryczny → MN9). `ActivityFrame` jest jednokierunkowy: ciało
-i twaróg go czytają, nigdy do niego nie zapisują.
+i proszek go czytają, nigdy do niego nie zapisują. MaleCNS **nie ma** adnotacji
+kreatyny / Ir76b (0 trafień). Puszka KFD: wrap etykiety ze zdjęć; Ø/H i miarka
+są authored pod rolkę (15 mm mucha), nie milimetrach słoika 500 g.
 
 **OGRANICZENIA:** charakter pobudzający vs hamujący jest wnioskowany, nie
 zmierzony. Cały kanał gustatoryczny napędza MN9 słabiej niż pojedyncze seedy

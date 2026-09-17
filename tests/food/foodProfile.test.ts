@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CREATINE_KFD,
   TWAROG_MAMUTA_WANILIOWY,
   TWAROG_PLAIN_UNSWEETENED,
 } from '../../src/food/foodProfile.ts';
 
+describe('CREATINE_KFD', () => {
+  it('is the authored live profile: aa-heavy, almost unsweetened', () => {
+    expect(CREATINE_KFD.sweet).toBe(0.05);
+    expect(CREATINE_KFD.aa).toBe(0.85);
+    expect(CREATINE_KFD.bitter).toBeLessThan(0.15);
+    expect(CREATINE_KFD.odor).toBeGreaterThan(0);
+    expect(CREATINE_KFD.albedoHex).toBe('#e6e2d8');
+  });
+});
+
 describe('TWAROG_MAMUTA_WANILIOWY', () => {
-  it('is the authored vanilla-sweetened profile', () => {
+  it('is the authored vanilla-sweetened fixture, not the live food', () => {
     expect(TWAROG_MAMUTA_WANILIOWY).toEqual({
       sweet: 0.75,
       aa: 0.70,

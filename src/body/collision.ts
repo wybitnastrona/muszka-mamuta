@@ -1,8 +1,8 @@
 /**
  * Authored 3D exclusion and orientation clamps. Not rigid-body physics.
- * The fly's centre must never enter the twaróg AABB, the pouch OBB or the
- * board volume, in any locomotion mode. Bottom-face exits are forbidden so
- * she cannot be pushed underneath a solid.
+ * The fly's centre must never enter the powder AABB or the mill OBB, in any
+ * locomotion mode. Bottom-face exits are forbidden so she cannot be pushed
+ * underneath a solid.
  */
 import { clamp, lerp } from './math.ts';
 

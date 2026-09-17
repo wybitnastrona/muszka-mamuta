@@ -4,5 +4,5 @@ export function parseReelMode(search = typeof window === 'undefined' ? '' : wind
   return new URLSearchParams(raw).get('reel') === '1';
 }
 
-export const REEL_SLOGAN_PL = 'Zmusiłem muszkę do jedzenia twarogu waniliowego na wieczność';
-export const REEL_SLOGAN_EN = 'I made the fly eat vanilla twaróg for eternity';
+export const REEL_SLOGAN_PL = 'Zmusiłem muszkę do jedzenia kreatyny i chodzenia na bieżni';
+export const REEL_SLOGAN_EN = 'I made the fly eat creatine and walk the mill';

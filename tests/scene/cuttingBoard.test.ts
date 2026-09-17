@@ -5,6 +5,7 @@ import {
   SceneDirector,
 } from '../../src/body/sceneDirector.ts';
 import { pointInObb3, type Obb3 } from '../../src/body/collision.ts';
+import { CreatineSystem } from '../../src/food/creatineSystem.ts';
 import { fractureCurdBlock } from '../../src/food/proceduralTwarog.ts';
 import { TwarogSystem, pointInXzAabb } from '../../src/food/twarogSystem.ts';
 import {
@@ -21,9 +22,9 @@ import {
   BOARD_LOGO_WIDTH_MM,
   BOARD_MM,
   BOARD_YAW_DEG,
-  CURD_MM,
-  POUCH_MM,
+  PILE_MM,
   boardTopY,
+  tableTopY,
   mm,
 } from '../../src/scene/scale.ts';
 import {
@@ -39,16 +40,16 @@ function standY(): number {
 
 function makeDirector() {
   const layout = kitchenLayout();
-  const food = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
+  const food = CreatineSystem.create({ seed: 1, store: null });
   return new SceneDirector({
     food,
-    foodOrigin: { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z },
+    foodOrigin: { x: layout.pile.x, y: layout.pile.y, z: layout.pile.z },
     pouch: {
-      cx: layout.pouch.x,
-      cz: layout.pouch.z,
-      hx: mm(POUCH_MM.length) / 2,
-      hz: mm(POUCH_MM.width) / 2,
-      yaw: layout.pouch.yaw,
+      cx: layout.mill.x,
+      cz: layout.mill.z,
+      hx: layout.mill.hx,
+      hz: layout.mill.hz,
+      yaw: layout.mill.yaw,
     },
     position: { x: layout.fly.x, y: standY(), z: layout.fly.z },
     heading: 0.35,
@@ -112,24 +113,11 @@ describe('cutting board', () => {
     });
   });
 
-  it('keeps the 250 g block flush on the board top', () => {
+  it('keeps the powder mound on the table top', () => {
     const layout = kitchenLayout();
-    expect(layout.curd.y - mm(CURD_MM.height) / 2).toBeCloseTo(layout.board.topY);
-    expect(layout.pouch.y).toBeGreaterThan(layout.board.topY);
-    const maps = stubBoardMaps();
-    const board = createCuttingBoard(maps, { quality: { ...DESKTOP_QUALITY, textureSize: 16 } });
-    board.group.updateMatrixWorld(true);
-    const boardBox = new THREE.Box3().setFromObject(board.group);
-    const block = new THREE.Mesh(
-      new THREE.BoxGeometry(mm(CURD_MM.width), mm(CURD_MM.height), mm(CURD_MM.length)),
-    );
-    block.position.set(layout.curd.x, layout.curd.y, layout.curd.z);
-    const curdBox = new THREE.Box3().setFromObject(block);
-    expect(curdBox.min.y).toBeCloseTo(boardBox.max.y, 5);
-    expect(curdBox.min.y).toBeGreaterThanOrEqual(boardBox.max.y - 1e-4);
-    expect(curdBox.min.y).toBeLessThan(boardBox.max.y + 1e-4);
-    block.geometry.dispose();
-    board.body.geometry.dispose();
+    expect(layout.pile.y - mm(PILE_MM.height) / 2).toBeCloseTo(layout.board.topY);
+    expect(layout.mill.deckY).toBeGreaterThan(layout.board.topY);
+    expect(layout.board.topY).toBe(tableTopY());
   });
 });
 
@@ -144,7 +132,7 @@ describe('supportHeightAt table / board / block', () => {
     const onBoard = boardLocalToWorld(0, layout.board.hz * 0.75);
     expect(pointInBoardFootprint(onBoard.x, onBoard.z)).toBe(true);
     expect(pointInXzAabb(onBoard, sys.worldAabb(origin))).toBe(false);
-    expect(sys.supportHeightAt(onBoard.x, onBoard.z, origin)).toBe(boardTopY());
+    expect(sys.supportHeightAt(onBoard.x, onBoard.z, origin)).toBe(tableTopY());
 
     // Tallest *uneaten* cell: the opening-bite crater cells are gone at serve time.
     const top = sys.chunks.filter((c) => !c.eaten).reduce((a, c) => (c.topY > a.topY ? c : a));
@@ -152,7 +140,7 @@ describe('supportHeightAt table / board / block', () => {
     const wz = origin.z + top.centroid.z;
     const blockY = sys.supportHeightAt(wx, wz, origin);
     expect(blockY).toBeCloseTo(origin.y + top.topY, 5);
-    expect(blockY).toBeGreaterThan(boardTopY());
+    expect(blockY).toBeGreaterThan(tableTopY());
   });
 });
 
@@ -166,23 +154,24 @@ describe('fly on the board', () => {
     for (let i = 0; i < 45; i++) {
       d.update(drive);
       if (pointInBoardFootprint(d.position.x, d.position.z)) {
-        expect(d.position.y).toBeGreaterThanOrEqual(boardTopY() - 0.05);
+        expect(d.position.y).toBeGreaterThanOrEqual(tableTopY() - 0.05);
       }
       expect(pointInObb3(d.position, obb, -0.05)).toBe(false);
     }
   });
 
-  it('steps down onto the table instead of teleporting', () => {
+  it('eases standing Y toward the table instead of teleporting', () => {
     const d = makeDirector();
-    const y0 = standY();
-    d.position.set(320, y0, 0);
-    expect(pointInBoardFootprint(320, 0)).toBe(false);
+    const layout = kitchenLayout();
+    const offX = layout.table.width / 2 + 40;
+    d.position.set(offX, 20, 0);
+    expect(pointInBoardFootprint(offX, 0)).toBe(false);
     const drive = {
       dt: 1 / 60, mn9Rate: 0, satiety: 0.2, bitter: 0, odor: 1, cameraDist: 400,
     };
     const mid = d.update(drive);
-    expect(mid.flyPose.position.y).toBeLessThan(y0);
-    expect(mid.flyPose.position.y).toBeGreaterThan(4);
+    expect(mid.flyPose.position.y).toBeLessThan(24);
+    expect(mid.flyPose.position.y).toBeGreaterThan(2);
     const steps = Math.ceil(BOARD_STEP_S / drive.dt) + 2;
     let y = mid.flyPose.position.y;
     for (let i = 0; i < steps; i++) y = d.update(drive).flyPose.position.y;

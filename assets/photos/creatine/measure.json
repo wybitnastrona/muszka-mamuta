@@ -1,0 +1,31 @@
+{
+  "note": "GrabCut bbox aspect includes the lid. Scene TUB_MM is authored fly-scale.",
+  "right": {
+    "bbox_px": {
+      "w": 648,
+      "h": 843
+    },
+    "aspect_h_over_w": 1.3009259259259258
+  },
+  "back": {
+    "bbox_px": {
+      "w": 648,
+      "h": 838
+    },
+    "aspect_h_over_w": 1.2932098765432098
+  },
+  "left": {
+    "bbox_px": {
+      "w": 648,
+      "h": 829
+    },
+    "aspect_h_over_w": 1.279320987654321
+  },
+  "front": {
+    "bbox_px": {
+      "w": 648,
+      "h": 838
+    },
+    "aspect_h_over_w": 1.2932098765432098
+  }
+}

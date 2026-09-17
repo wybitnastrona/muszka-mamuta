@@ -17,7 +17,7 @@ import { GAG_CAPTIONS_PL, GAG_IDS } from '../../src/body/gags.ts';
 describe('HUD captions', () => {
   it('uses the exact Polish feeding-phase lines', () => {
     expect(PHASE_IDS).toEqual(['APPROACH', 'TASTE', 'EXTEND', 'PUMP', 'RETRACT', 'REST']);
-    expect(PHASE_STRIP.APPROACH).toMatchObject({ label: 'PODEJŚCIE', pl: 'Wyczuwa wanilię' });
+    expect(PHASE_STRIP.APPROACH).toMatchObject({ label: 'PODEJŚCIE', pl: 'Wyczuwa proszek' });
     expect(PHASE_STRIP.TASTE).toMatchObject({ label: 'SMAK', pl: 'Sprawdza nogą' });
     expect(PHASE_STRIP.EXTEND).toMatchObject({ label: 'WYSUŃ', pl: 'Wysuwa ryjek' });
     expect(PHASE_STRIP.PUMP).toMatchObject({ label: 'POMPUJ', pl: 'Pompuje' });
@@ -29,7 +29,7 @@ describe('HUD captions', () => {
     const orbit = resolveHudCaption({ lang: 'pl', caption: 'Krąży', macro: 'ORBIT', hudState: 'SEARCH', gag: null });
     expect(orbit.headline).toBe('Krąży');
     expect(orbit.highlightPhase).toBe(false);
-    const taste = resolveHudCaption({ lang: 'pl', caption: '', macro: 'EAT_TOP', hudState: 'TASTE', gag: null });
+    const taste = resolveHudCaption({ lang: 'pl', caption: '', macro: 'GROUND', hudState: 'TASTE', gag: null });
     expect(taste.headline).toBe('Sprawdza nogą');
     expect(taste.highlightPhase).toBe(true);
     expect(taste.phase).toBe('TASTE');
@@ -39,7 +39,7 @@ describe('HUD captions', () => {
       expect(out.headline).toBe(line);
     }
     expect(translateCaption('Czyści się', 'en')).toBe('Grooming');
-    expect(translateCaption('Przechodzi', 'en')).toBe('Walking');
+    expect(translateCaption('Chodzi na bieżni', 'en')).toBe('Walking the mill');
   });
 
   it('formats readouts', () => {
@@ -56,7 +56,7 @@ describe('reel query', () => {
   it('is on only for reel=1', () => {
     expect(parseReelMode('?reel=1')).toBe(true);
     expect(parseReelMode('?debug=weights')).toBe(false);
-    expect(REEL_SLOGAN_PL).toContain('twarogu waniliowego');
+    expect(REEL_SLOGAN_PL).toContain('kreatyny');
   });
 });
 

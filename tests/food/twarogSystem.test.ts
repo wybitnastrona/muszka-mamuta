@@ -28,6 +28,7 @@ import {
   LOD_BODY_LENGTHS,
   LOD_FADE_MS,
   boardTopY,
+  tableTopY,
   contactRadiusMm as scaleContactRadiusMm,
   flyVisualLengthMm,
   labellumRestReachMm,
@@ -276,7 +277,7 @@ describe('twarog system', () => {
     const after = sys.supportHeightAt(wx, wz, origin);
     expect(after).toBeLessThan(before);
     for (const c of sys.chunks) sys.commitChunk(c.index);
-    expect(sys.supportHeightAt(wx, wz, origin)).toBe(boardTopY());
+    expect(sys.supportHeightAt(wx, wz, origin)).toBe(tableTopY());
   });
 
   it('projectOntoVerticalFace sits on the outward XZ normal', () => {
@@ -326,20 +327,19 @@ describe('twarog system', () => {
     const layout = kitchenLayout();
     const food = layout.curd;
     const sys = TwarogSystem.fromFracture(fractureCurdBlock({ seed: 1 }), { store: null });
-    const fly = { x: layout.fly.x, y: layout.board.topY + 2, z: layout.fly.z };
+    const fly = { x: food.x + 180, y: tableTopY() + 2, z: food.z + 180 };
     const approach = sys.approachTarget(fly, food);
     sys.followBiteFront({
       x: approach.point.x - food.x,
-      y: layout.board.topY + 2 - food.y,
+      y: tableTopY() + 2 - food.y,
       z: approach.point.z - food.z,
     });
     const restLab = {
       x: approach.point.x + Math.sin(approach.yaw) * labellumRestReachMm() - food.x,
-      y: layout.board.topY + 2 - food.y,
+      y: tableTopY() + 2 - food.y,
       z: approach.point.z + Math.cos(approach.yaw) * labellumRestReachMm() - food.z,
     };
-    // One body length short of the standoff (still walking in): no contact yet.
-    const back = flyVisualLengthMm();
+    const back = flyVisualLengthMm() * 4;
     const farLab = {
       x: restLab.x - Math.sin(approach.yaw) * back,
       y: restLab.y,

@@ -85,7 +85,7 @@ export function applyFootContactOffset(
   bone.position.copy(_world);
 }
 
-export function standingFootSinkMm(mode: 'ground' | 'flight' | 'onFood'): number {
+export function standingFootSinkMm(mode: 'ground' | 'flight' | 'onFood' | 'mill'): number {
   return mode === 'flight' ? 0 : FOOT_SINK_MM;
 }
 

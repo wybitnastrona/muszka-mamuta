@@ -49,7 +49,7 @@ describe('landing (van Breugel & Dickinson 2012)', () => {
     }
     expect(sawExtend).toBe(true);
     expect(extendedBeforeTouch).toBe(true);
-    expect(angularSizeDeg(40)).toBeGreaterThan(LAND_FORELEG_DEG);
+    expect(angularSizeDeg(30)).toBeGreaterThan(LAND_FORELEG_DEG);
   });
 });
 
@@ -148,7 +148,7 @@ describe('flight vs solids', () => {
   });
 
   it('derives the food half-size from the real block', () => {
-    expect(FOOD_HALF_SIZE_MM).toBe(50);
+    expect(FOOD_HALF_SIZE_MM).toBe(25);
   });
 
   it('clamps landing targets to at or above local support', () => {

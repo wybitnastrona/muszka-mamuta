@@ -3,9 +3,9 @@
  *
  * One scene unit = 1 millimetre at render scale. The real fly is 2.5 mm;
  * FLY_RENDER_SCALE (6) is a documented visual exaggeration, so the on-screen
- * fly is 15 mm long against the 100 mm twaróg block (about 1:7, half the
- * block's 30 mm height; the true ratio is 1:40). Raised from 4× so she reads
- * on a 1080×1920 reel. Food and packaging stay at true millimetre size.
+ * fly is 15 mm long against the authored KFD tub (~50 mm across). Raised
+ * from 4× so she reads on a 1080×1920 reel. The unused twaróg / pouch
+ * constants stay at true millimetre size for fixtures.
  *
  * Flybody's native mesh is ~0.301 units along +Z; `flyRootScale()` maps that
  * onto `REAL_FLY_BODY_MM * FLY_RENDER_SCALE`. Standoff, contact radius, LOD
@@ -20,7 +20,35 @@ export const FLY_RENDER_SCALE = 6;
 export const FLYBODY_NATIVE_LENGTH = 0.3012;
 
 export const CURD_MM = { length: 100, width: 80, height: 30 };
-/** End-grain oak cutting board. Length along +X, width along +Z, sits on the table. */
+/**
+ * Powder fill inside the tub well. Radius stays inside `tubInnerRadiusMm()`.
+ * Height is the authored fill (near the rim, with scoop headroom).
+ */
+export const PILE_MM = { radius: 20, height: 14 };
+export const PILE_CELL_COUNT = 80;
+export const PILE_TOTAL_MASS_G = 250;
+export const CREATINE_ALBEDO_HEX = '#e6e2d8';
+/** Fly-scale scoop (authored). A real creatine scoop is 50–80 mm. */
+export const SCOOP_MM = { bowlRadius: 5.5, bowlDepth: 4, handleLength: 12, handleRadius: 0.9 };
+export const SCOOP_CAPACITY_G = 4;
+export const SCOOP_EMPTY_S = 8;
+/** Lab mill on the table. Belt top is `deck` above y = 0. */
+export const MILL_MM = { length: 120, width: 50, height: 22, deck: 8 };
+/**
+ * KFD tub, fly-readable millimetres (authored). Photo wrap is the real
+ * label; Ø/H are not the 500 g jar. Aspect from product shots is ~1.29
+ * including the lid; the live body is shorter so the 15 mm fly can dip.
+ */
+export const TUB_MM = {
+  diameter: 50,
+  height: 26,
+  wall: 2,
+  lidDiameter: 52,
+  lidHeight: 6,
+};
+/** @deprecated Use `TUB_MM`. Same diameter / height. */
+export const TUB_SLOT_MM = { diameter: TUB_MM.diameter, height: TUB_MM.height };
+/** End-grain oak cutting board (module kept; live scene no longer mounts it). */
 export const BOARD_MM = { length: 400, width: 300, height: 40 };
 export const BOARD_EDGE_RADIUS_MM = 6;
 export const BOARD_YAW_DEG = 12;
@@ -98,7 +126,12 @@ export function mm(valueMm: number): number {
   return valueMm;
 }
 
-/** World Y of the cutting-board top (table top is y = 0). */
+/** World Y of the oak table top (live standing surface). */
+export function tableTopY(): number {
+  return 0;
+}
+
+/** World Y of the cutting-board top (table top is y = 0). Live scene no longer mounts the board. */
 export function boardTopY(): number {
   return mm(BOARD_MM.height);
 }
@@ -240,6 +273,14 @@ export function foodStandPadMm(): number {
 /** Crumb particle size, scaled with the fly (0.08 visual body lengths). */
 export function crumbSizeMm(): number {
   return flyVisualLengthMm() * 0.08;
+}
+
+export function tubRadiusMm(): number {
+  return mm(TUB_MM.diameter) / 2;
+}
+
+export function tubInnerRadiusMm(): number {
+  return tubRadiusMm() - mm(TUB_MM.wall);
 }
 
 export const POUCH_INNER_MM = {

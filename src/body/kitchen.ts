@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { kitchenLayout } from '../scene/layout.ts';
+import { tableTopY } from '../scene/scale.ts';
 import type { RenderQuality } from '../scene/quality.ts';
 import { DESKTOP_QUALITY } from '../scene/quality.ts';
 import {
@@ -172,7 +173,7 @@ export function createKitchen(
   );
   plate.name = 'cheesePlate';
   plate.scale.set(1.18, 1, 1.38);
-  plate.position.set(layout.curd.x, layout.board.topY + 0.4, layout.curd.z);
+  plate.position.set(width * 0.38, tableTopY() + 0.4, -depth * 0.34);
   plate.receiveShadow = quality.shadows;
   group.add(plate);
 

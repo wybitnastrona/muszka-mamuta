@@ -4,42 +4,47 @@
 graph and synapse signs. Every formula here is an authored ordinary-differential
 model used to drive hunger neuromodulation. Constants were chosen so that
 (1) 90 minutes without food raise hunger above 0.8, (2) a fed fly is less likely
-to bite, and (3) vanilla-sweetened twaróg reaches satiety sooner than unsweetened
-curd. They are not fitted to hemolymph assays.
+to bite, and (3) creatine powder (low `sweet`) reaches satiety slower than the
+vanilla-twaróg fixture. They are not fitted to hemolymph assays.
 
 Stepped **once per animation frame** on the main thread
 (`src/metabolism/hemolymph.ts`). The 20k-neuron LIF stays in the worker.
 
 ## Food (authored assumption)
 
-The wedge is **twaróg Mamuta waniliowy**, not plain curd. Profile in
-`src/food/foodProfile.ts`:
+Live food is **creatine monohydrate powder** (`CREATINE_KFD`). MaleCNS v1.0
+annotations were searched for `creatine|kreatyn|Ir76b|amino`: **zero unique
+hits** (211 577 bodies). No new seeds. The same whole gustatory channel is
+stimulated; these numbers never select a receptor-gene subset. Vanilla twaróg
+remains a **test fixture** only.
 
-| Field | Vanilla (live) | Plain (test fixture) | Role in this model |
-| --- | ---: | ---: | --- |
-| `sweet` | 0.75 | 0.15 | Trehalose yield (main drive) |
-| `aa` | 0.70 | 0.70 | Fat / slower repletion |
-| `sour` | 0.25 | 0.40 | Unused by the ODEs |
-| `bitter` | 0.03 | 0.05 | Unused by the ODEs |
-| `odor` | 0.85 | 0.35 | Vanillin; **olfactory**, at distance, not taste; unused by the ODEs |
-| `albedoHex` | `#e1d7ca` | `#e1d7ca` | Display only |
+Profile in `src/food/foodProfile.ts`:
 
-MaleCNS has **no** sweet/bitter receptor annotations (no Gr64f / Gr5a / Gr66a).
-`sweet` does not select a sugar-GRN subset. It only scales how much trehalose
-each absorbed mass unit adds. Circuit inhibition is the GABA and glutamate
-already present in the extracted graph.
+| Field | Creatine (live) | Vanilla (fixture) | Plain (fixture) | Role in this model |
+| --- | ---: | ---: | ---: | --- |
+| `sweet` | 0.05 | 0.75 | 0.15 | Trehalose yield |
+| `aa` | 0.85 | 0.70 | 0.70 | Fat / slower repletion |
+| `sour` | 0.02 | 0.25 | 0.40 | Unused by the ODEs |
+| `bitter` | 0.08 | 0.03 | 0.05 | Unused by the ODEs |
+| `odor` | 0.55 | 0.85 | 0.35 | Dry plume / vanillin; **olfactory**, at distance, not taste; unused by the ODEs |
+| `albedoHex` | `#e6e2d8` | `#e1d7ca` | `#e1d7ca` | Display only |
 
-Vanilla trehalose yield is **3×** unsweetened curd:
+MaleCNS has **no** sweet/bitter receptor annotations and **no** creatine /
+Ir76b labels. `sweet` does not select a sugar-GRN subset. It only scales how
+much trehalose each absorbed mass unit adds. Circuit inhibition is the GABA
+and glutamate already present in the extracted graph.
 
 ```
 yield_tre(profile) = 0.15 + 1.0 × sweet
+yield_tre(creatine) = 0.20
 yield_tre(vanilla) / yield_tre(plain) = 0.90 / 0.30 = 3
 yield_fat(profile) = 0.55 × aa
 ```
 
-**Behaviour.** Fast sugar raises trehalose → insulin → satiety, so a vanilla
-bout ends sooner. Baseline metabolism then drains trehalose (AKH returns) while
-fat from `aa` moves slowly → **shorter feeding bouts, more of them**.
+**Behaviour.** Low trehalose from creatine → satiety rises slowly → she
+returns to the scoop. Vanilla fixture still reaches satiety sooner (high
+`sweet`). The KFD tub is in the live scene: label wrap from product photos;
+Ø/H are authored fly-scale (see `TUB_MM` in `src/scene/scale.ts`).
 
 ## State (all clamped to [0, 1])
 

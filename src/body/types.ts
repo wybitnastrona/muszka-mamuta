@@ -91,7 +91,7 @@ export type BonePose = { rotation: Quat };
 
 export type Pose = Record<BoneName, BonePose>;
 
-export const CAMERA_PRESETS = ['Widok kuchni', 'Z boku', 'Zbliżenie', 'Przegląd', 'Reel'] as const;
+export const CAMERA_PRESETS = ['Widok kuchni', 'Z boku', 'Zbliżenie', 'Etykieta', 'Przegląd', 'Reel'] as const;
 export type CameraPreset = (typeof CAMERA_PRESETS)[number];
 
 export type FeedingEvent =

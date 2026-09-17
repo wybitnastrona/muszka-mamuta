@@ -1,0 +1,16 @@
+{
+  "label_wrap": "creatine/label_wrap.jpg",
+  "lid_top": "creatine/lid_top.png",
+  "lid_underside": "creatine/lid_underside.png",
+  "well": "creatine/well.png",
+  "bottom": "creatine/bottom.png",
+  "creatine_crumb": "creatine/creatine_crumb.png",
+  "creatine_crumb_normal": "creatine/creatine_crumb_normal.png",
+  "creatine_crumb_rough": "creatine/creatine_crumb_rough.png",
+  "creatine_median_rgb": [
+    106,
+    105,
+    90
+  ],
+  "creatine_median_hex": "#6a695a"
+}

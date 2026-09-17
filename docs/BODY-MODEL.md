@@ -9,7 +9,7 @@ crop volume) and **never writes back**.
 
 The only brain-driven decision is the **feeding gate**: gustatory channel
 (labellar + pharyngeal, class `gustatory`) → MN9 → `TASTE` wait → `EXTEND`.
-When the scene loop is in `EAT_TOP` / `EAT_SIDE`, control is handed to the
+When the scene loop is in `EAT_SCOOP`, control is handed to the
 existing `SEARCH → … → REST` machine so that pause before the proboscis
 extends stays MN9-gated. That pause is the reel shot; the loop does not skip it.
 
@@ -29,7 +29,7 @@ now 3.0 s so the gate has time to open after the longer dwell). REST is
 PUMP is **not** slowed: the pharyngeal pump stays at `PUMP_HZ = 6`. POMPUJ is
 made longer by pumping more cycles per bout (`pumpCycleCount`: 8–14 cycles
 scaling with MN9 drive above threshold, i.e. 1.3–2.3 s), and every cycle is
-still one `bite`, so a longer phase eats more twaróg rather than stretching an
+still one `bite`, so a longer phase sips more scoop powder rather than stretching an
 animation. Clip playback (`per`, `retract`) is untouched; non-looping clips
 hold their last frame for the rest of the dwell.
 
@@ -76,8 +76,8 @@ clips still own the mouthparts; gait replaces only the six leg bones.
 
 ## Appearance (authored, render-only)
 
-Kitchen: one authored studio. The oak slab, dark grid, plate, spoon and
-cutting board share the director, food, pouch and fly. The spoon is the
+Kitchen: one authored studio. The oak slab, dark grid, plate and
+spoon share the director, powder mound, scoop, mill and fly. The spoon is the
 `escapeShadow` gag prop. A photographic match-move was tried and abandoned
 (`docs/SCENE-COMPOSITE.md`): planar PnP from the A4 sheet landed at 27.3 px
 RMS against a 3 px target, so the board floated on the still.
@@ -231,46 +231,48 @@ here: repeated PUMP at one spot bores a column to the board (pre-existing).
 
 | `mode` | Solids | Y | Up |
 | --- | --- | --- | --- |
-| `ground` | food AABB (`foodStandPadMm`) + pouch OBB + board, `standoffOnRay` at the wall standoff | standing height (+ wall-feed lift) | +Y cone (32° nose-up while feeding) |
-| `flight` | same 3D exclusion + 200 ms saccade lookahead | support…220 mm | +Y cone |
-| `onFood` | centre stays out of the interior; top-face standing | `supportHeightAt` each frame | +Y cone (wall: face normal) |
+| `ground` | tub AABB (`foodStandPadMm`) + mill OBB | standing height | +Y cone |
+| `flight` | tub AABB + table (mill is **not** a flight solid so she can land on the belt) + 200 ms saccade lookahead | support…220 mm | +Y cone |
+| `onFood` | centre stays out of the interior | `supportHeightAt` each frame | +Y cone |
+| `mill` | root locked to belt centre | mill `deckY` + stand offset | +Y cone (biped gag: authored pitch 0.48 rad) |
 
 ## Scene loop
 
 `src/body/sceneLoop.ts` sits **above** the feeding FSM. Soft duration caps;
-each state exits on its own completion. The default **reel** loop keeps her
-on the twaróg; flight is punctuation. `?loop=full` restores the debug
-ORBIT / EXIT_FRAME path (flight code is not deleted).
+each state exits on its own completion. The default **reel** loop is scoop →
+powder → mill. Flight is punctuation onto the mill. `?loop=full` restores the
+debug ORBIT / EXIT_FRAME path (flight code is not deleted).
 
 **Reel (default):**
 
 ```
-spawn already on the top face, in TASTE range of a chunk
-EAT_TOP (satiety RETRACT or 45 s) → GROOM_short → WALK_REPOSITION (2–5 body
-lengths on the food, gait) → TAKEOFF_1 (once per portion, top → side) →
-LAND_TABLE → EAT_SIDE (satiety RETRACT or 45 s) → GAG? → GROOM_full →
-WALK_REPOSITION onto the block → NAP (on the food, Murphy 2016) → WAKE →
-next portion → EAT_TOP …
+WALK_SCOOP → PICK_SCOOP → APPROACH_TUB → DIP_SCOOP →
+EAT_SCOOP (Feeding FSM TASTE→EXTEND→PUMP→RETRACT; MN9 gates EXTEND;
+food = powder in the scoop bowl) → DROP_SCOOP → GROOM_short →
+TAKEOFF_MILL → LAND_MILL → WALK_MILL (hexapod in place, belt scrolls) →
+WALK_BIPED (authored hind-leg gag) → GROOM_full →
+NAP? (satiety > 0.8 after a feeding bout) → WAKE → WALK_SCOOP …
 ```
 
-TAKEOFF otherwise fires only for the `escapeShadow` gag (type-2). Between
-bouts she walks; she does not orbit or exit frame.
+Open KFD tub (`src/food/creatineTub.ts`) at `kitchenLayout().tub`: photo label wrap on an authored cylinder. Powder fill lives in the well (`PILE_MM` inside `tubInnerRadiusMm()`). The lid sits beside the tub. Ø/H are reel-scale (not the 500 g jar). The kitchen env map is unchanged (`env_512.jpg`).
 
-While TASTE / EXTEND / PUMP, XZ is clamped within one body length of the
-nearest uneaten chunk centroid (re-target if that chunk is eaten).
+`NAP` only if satiety > 0.8 after a feeding bout (Murphy 2016). HUD caption
+during NAP: **Trawi**. The biped walk is **not** Drosophila literature — mid/hind
+bones are procedural (`src/body/bipedGait.ts`).
 
 **Full (`?loop=full`):**
 
 ```
-ORBIT → LAND_TOP → WALK_TOP → EAT(top) → GROOM_short → TAKEOFF_1 →
-ORBIT(1 circuit) → LAND_TABLE → EAT(side, standoffOnRay) → GAG →
-EAT(side) → GROOM_full → NAP → WAKE → TAKEOFF_1 → EXIT_FRAME →
-reset portion → ORBIT …
+ORBIT → LAND_TOP → WALK_SCOOP → … → WALK_BIPED → GROOM_full →
+NAP? → WAKE → TAKEOFF_EXIT → EXIT_FRAME → reset portion → ORBIT …
 ```
 
-Exactly one gag per loop from a weighted seeded RNG, or none (weight 2).
-`NAP` only if satiety > 0.8 after a sweet bout (Murphy 2016). HUD
-caption during NAP: **Trawi**. Target contact: ≥ 70 s on the food in a 90 s reel loop.
+## Mill gait
+
+`src/body/gait.ts` `millGaitAdvance`: on the belt, `gaitDistance += beltSpeed * dt`
+even when the root ΔXZ is 0. Default belt speed is `FLY_WALK_MM_S` (14 mm/s).
+Feet vs belt, not vs table. Hexapod remains M-tripod; `WALK_BIPED` is a
+separate authored gag.
 
 ## Grooming and sleep
 

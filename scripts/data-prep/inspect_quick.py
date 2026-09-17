@@ -14,12 +14,13 @@ c = a['class'].dropna()
 print(c[c.str.contains('gust|sensor|motor|ascend|descend', case=False)].value_counts().to_string())
 
 pats = {
-    'sweet':   r'Gr64|Gr5a|sweet|sugar',
-    'bitter':  r'Gr66|bitter',
-    'aa':      r'Ir76b|Ir94|amino',
-    'MN9':     r'MN9|rostrum',
-    'probosc': r'haustell|pharyng|proboscis|labell',
-    'fdg':     r'Fdg|G2N|IN1',
+    'sweet':    r'Gr64|Gr5a|sweet|sugar',
+    'bitter':   r'Gr66|bitter',
+    'aa':       r'Ir76b|Ir94|amino',
+    'creatine': r'creatine|kreatyn|Ir76b|amino',
+    'MN9':      r'MN9|rostrum',
+    'probosc':  r'haustell|pharyng|proboscis|labell',
+    'fdg':      r'Fdg|G2N|IN1',
 }
 cols = ['type', 'instance', 'receptorType', 'subclass']
 

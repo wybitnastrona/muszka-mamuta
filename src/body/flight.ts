@@ -25,7 +25,7 @@ import {
   type Normal3,
   type Obb3,
 } from './collision.ts';
-import { CURD_MM, bodyCollisionPadMm } from '../scene/scale.ts';
+import { TUB_MM, bodyCollisionPadMm } from '../scene/scale.ts';
 
 export const SACCADE_TURN_S = 0.05;
 export const SACCADE_STRAIGHT_MIN_S = 0.15;
@@ -56,7 +56,7 @@ export const TAKEOFF2_TURNS = 2;
 export const CRUISE_MM_S = 90;
 export const LAND_TAU_S = 0.45;
 /** Largest XZ half-extent of the twaróg block (100 × 80 mm → 50). Used for angular size. */
-export const FOOD_HALF_SIZE_MM = Math.max(CURD_MM.length, CURD_MM.width) / 2;
+export const FOOD_HALF_SIZE_MM = TUB_MM.diameter / 2;
 export { LOOKAHEAD_S, FLIGHT_CEILING_MM };
 
 export type Vec3 = { x: number; y: number; z: number };

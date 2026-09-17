@@ -41,7 +41,7 @@ export const EMPTY_SCENE_HUD: SceneHudSnapshot = {
   state: 'SEARCH',
   clip: 'odorTrack',
   caption: '',
-  macro: 'EAT_TOP',
+  macro: 'WALK_SCOOP',
   gag: null,
   portions: 0,
   bites: 0,

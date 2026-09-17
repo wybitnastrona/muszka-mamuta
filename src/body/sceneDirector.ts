@@ -11,6 +11,7 @@ import { FeedingStateMachine, SATIETY_RETRACT } from './feedingStateMachine.ts';
 import { odorConcentration, odorGradientYaw } from './odorField.ts';
 import type { ClipName, FeedingEvent, FeedingState, Pose } from './types.ts';
 import { TWAROG_MAMUTA_WANILIOWY } from '../food/foodProfile.ts';
+import { CreatineSystem, type ScoopMode } from '../food/creatineSystem.ts';
 import {
   TwarogSystem,
   clampOutsideXzObb,
@@ -24,14 +25,15 @@ import {
   EXTENDED_TIP_NATIVE,
   FLY_RENDER_SCALE,
   FLY_WALK_MM_S,
-  POUCH_BASE_HEIGHT_MM,
   REST_TIP_NATIVE,
-  boardTopY,
   bodyCollisionPadMm,
   flyVisualLengthMm,
   foodStandPadMm,
   standoffMm,
+  tableTopY,
 } from '../scene/scale.ts';
+import { BIPED_BODY_PITCH_RAD, bipedPoseAtDistance, BIPED_WALK_S, MILL_WALK_S } from './bipedGait.ts';
+import { SCOOP_DIP_S, SCOOP_DROP_S, SCOOP_PICK_S } from './scoop.ts';
 import { WALL_FEED_TAU_S, pitchedLabellumLocal, wallFeedLiftMm, wallFeedPitch } from './wallFeed.ts';
 import { FlightController } from './flight.ts';
 import {
@@ -63,10 +65,10 @@ import {
 } from './sceneLoop.ts';
 import { kitchenLayout } from '../scene/layout.ts';
 import { headingError, clamp, clamp01, easeInOut, lerp } from './math.ts';
-import { gaitPoseAtDistance } from './gait.ts';
+import { gaitPoseAtDistance, millGaitAdvance } from './gait.ts';
 import { wingIdleFlick } from './wings.ts';
 
-export type LocomotionMode = 'ground' | 'flight' | 'onFood';
+export type LocomotionMode = 'ground' | 'flight' | 'onFood' | 'mill';
 
 /** Board → table (or table → board) step. Authored, not a teleport. */
 export const BOARD_STEP_S = 0.2;
@@ -142,6 +144,7 @@ export type DirectorOutput = {
    * with it. Null outside PUMP. Authored prop, see docs/BODY-MODEL.md.
    */
   heldCrumb: { progress: number; chunkIndex: number } | null;
+  scoop: { mode: ScoopMode; fill: number; dipU: number } | null;
   bites: number;
   bitesTarget: number;
   remainingFrac: number;
@@ -228,7 +231,7 @@ export class SceneDirector {
   private refillHold = 0;
   private hudState: FeedingState = 'SEARCH';
   private seed: number;
-  private lastLoop: LoopState = 'EAT_TOP';
+  private lastLoop: LoopState = 'WALK_SCOOP';
   private loopWrapped = false;
   private eatSawRest = false;
   private eatSatietyRetract = false;
@@ -274,6 +277,7 @@ export class SceneDirector {
   private stepT = 0;
   private stepFromY = 0;
   private stepToY = 0;
+  private propT = 0;
 
   constructor(deps: SceneDirectorDeps) {
     this.food = deps.food;
@@ -359,16 +363,18 @@ export class SceneDirector {
     this.groomT = 0;
     this.napT = 0;
     this.wakeT = 0;
+    this.propT = 0;
     this.onWall = false;
     this.caption = '';
     this.spoonShadow = 0;
     this.crumbAttach = null;
     this.napDoubled = false;
     const food = this.foodOrigin;
+    const layout = kitchenLayout();
     this.syncFlightWorld();
     if (state === 'ORBIT' || state === 'ORBIT_SHORT') {
       this.mode = 'flight';
-      this.flight.place({ x: this.position.x, y: Math.max(this.position.y, boardTopY() + 18), z: this.position.z }, this.heading);
+      this.flight.place({ x: this.position.x, y: Math.max(this.position.y, tableTopY() + 18), z: this.position.z }, this.heading);
       this.flight.startOrbit({
         target: food,
         circuits: state === 'ORBIT_SHORT' ? 1 : this.loop.orbitCircuits,
@@ -377,19 +383,18 @@ export class SceneDirector {
       });
     } else if (state === 'LAND_TOP') {
       this.mode = 'flight';
-      const support = this.surfaceYAt(food.x, food.z);
+      const xz = { x: layout.scoop.x, z: layout.scoop.z };
+      const support = this.surfaceYAt(xz.x, xz.z);
       this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
-      this.flight.startLand({ target: { x: food.x, y: support, z: food.z }, supportY: support, seed: this.seed + 5 });
-    } else if (state === 'LAND_TABLE') {
+      this.flight.startLand({ target: { x: xz.x, y: support, z: xz.z }, supportY: support, seed: this.seed + 5 });
+    } else if (state === 'LAND_MILL') {
       this.mode = 'flight';
-      const targetXZ = this.loopVariant === 'reel'
-        ? this.sideStandPoint()
-        : { x: kitchenLayout().fly.x, z: kitchenLayout().fly.z };
-      const support = this.surfaceYAt(targetXZ.x, targetXZ.z);
-      const target = { x: targetXZ.x, y: support, z: targetXZ.z };
+      const mill = layout.mill;
+      const support = mill.deckY + this.standOffset;
+      const target = { x: mill.x, y: support, z: mill.z };
       this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
       this.flight.startLand({ target, supportY: support, seed: this.seed + 7 });
-    } else if (state === 'TAKEOFF_1' || state === 'TAKEOFF_EXIT') {
+    } else if (state === 'TAKEOFF_MILL' || state === 'TAKEOFF_EXIT') {
       this.mode = 'flight';
       this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
       this.flight.startTakeoff1();
@@ -397,31 +402,65 @@ export class SceneDirector {
       this.mode = 'flight';
       this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
       this.flight.startExit(this.heading);
-    } else if (state === 'EAT_TOP') {
+    } else if (state === 'WALK_SCOOP') {
+      this.mode = 'ground';
+      this.walkGoal = { x: layout.scoop.x, z: layout.scoop.z };
+      this.creatine()?.resetScoop();
+    } else if (state === 'PICK_SCOOP') {
+      this.mode = 'ground';
+      this.creatine()?.pick();
+    } else if (state === 'APPROACH_TUB') {
+      this.mode = 'ground';
+      this.walkGoal = this.pileStandPoint();
+    } else if (state === 'DIP_SCOOP') {
+      this.mode = 'ground';
+      this.creatine()?.dip();
+    } else if (state === 'EAT_SCOOP') {
       this.mixer.play('odorTrack', { fade: 0, restart: true });
-      if (this.loopVariant === 'reel') this.placeOnFoodTop({ taste: true });
-      else {
-        this.fsm.reset(this.heading);
-        this.mode = 'onFood';
-      }
-    } else if (state === 'EAT_SIDE' || state === 'EAT_SIDE_2') {
-      this.mixer.play('odorTrack', { fade: 0, restart: true });
-      if (this.loopVariant === 'reel') this.placeOnFoodSide({ taste: true });
-      else {
-        this.fsm.reset(this.heading);
-        this.mode = 'ground';
-      }
-    } else if (state === 'WALK_TOP') {
-      this.mode = 'onFood';
-    } else if (state === 'WALK_REPOSITION') {
-      this.walkGoal = this.pickWalkRepositionTarget();
-      this.mode = this.overFood() ? 'onFood' : 'ground';
+      this.placeAtPile({ taste: true });
+    } else if (state === 'DROP_SCOOP') {
+      this.mode = 'ground';
+      this.creatine()?.drop();
+      this.walkGoal = { x: layout.mill.x - layout.mill.hx - 12, z: layout.mill.z };
+    } else if (state === 'WALK_MILL' || state === 'WALK_BIPED') {
+      this.mode = 'mill';
+      this.position.set(layout.mill.x, layout.mill.deckY + this.standOffset, layout.mill.z);
+      this.heading = 0;
+      this.syncFlightWorld();
     } else if (state === 'NAP' || state === 'WAKE' || state === 'GROOM_SHORT' || state === 'GROOM_FULL') {
-      if (state === 'NAP' && !this.overFood()) this.placeOnFoodTop({ taste: false });
-      this.mode = this.overFood() ? 'onFood' : 'ground';
-    } else if (state === 'GAG') {
-      this.gags.start(this.loop.gag, this.gagCtx(0, 0));
+      this.mode = this.overFood() ? 'onFood' : this.mode === 'mill' ? 'mill' : 'ground';
+      if (state === 'NAP' && this.mode === 'ground') this.placeAtPile({ taste: false });
     }
+  }
+
+  private creatine(): CreatineSystem | null {
+    return this.food instanceof CreatineSystem ? this.food : null;
+  }
+
+  private pileStandPoint(): { x: number; z: number } {
+    const probe = {
+      x: this.foodOrigin.x,
+      y: this.foodOrigin.y,
+      z: this.foodOrigin.z - this.food.hz - standoffMm() - 8,
+    };
+    const ap = this.food.approachTarget(probe, this.foodOrigin);
+    return { x: ap.point.x, z: ap.point.z };
+  }
+
+  private placeAtPile(opts: { taste: boolean }): void {
+    const xz = this.pileStandPoint();
+    this.position.set(xz.x, this.surfaceYAt(xz.x, xz.z), xz.z);
+    const ap = this.food.approachTarget(
+      { x: this.position.x, y: this.position.y, z: this.position.z },
+      this.foodOrigin,
+    );
+    this.heading = ap.yaw;
+    this.mode = 'ground';
+    this.onWall = false;
+    this.syncFlightWorld();
+    this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
+    if (opts.taste) this.fsm.beginTaste(this.heading);
+    else this.fsm.reset(this.heading);
   }
 
   private gagCtx(satiety: number, cropVolume: number) {
@@ -447,15 +486,32 @@ export class SceneDirector {
         ? this.eatSawRest && this.fsm.state === 'SEARCH'
         : this.eatSatietyRetract,
       groomDone: false,
-      gagDone: this.loop.state === 'GAG' && this.loop.gag !== null ? !this.gags.active : this.loop.gag === null,
+      gagDone: true,
       napDone: false,
       wakeDone: false,
+      propDone: false,
       satiety: input.satiety,
       cropVolume: crop,
     };
 
     if (isWalkState(this.loop.state)) {
-      flags.walkDone = this.loop.state === 'WALK_TOP' ? this.stepWalkTop(dt) : this.stepWalkReposition(dt);
+      flags.walkDone = this.stepWalkGoal(dt);
+    } else if (this.loop.state === 'DROP_SCOOP') {
+      this.propT += dt;
+      this.stepWalkGoal(dt);
+      flags.propDone = this.propT >= SCOOP_DROP_S;
+    } else if (this.loop.state === 'PICK_SCOOP') {
+      this.propT += dt;
+      flags.propDone = this.propT >= SCOOP_PICK_S;
+    } else if (this.loop.state === 'DIP_SCOOP') {
+      this.propT += dt;
+      flags.propDone = this.propT >= SCOOP_DIP_S;
+    } else if (this.loop.state === 'WALK_MILL') {
+      this.propT += dt;
+      flags.propDone = this.propT >= MILL_WALK_S;
+    } else if (this.loop.state === 'WALK_BIPED') {
+      this.propT += dt;
+      flags.propDone = this.propT >= BIPED_WALK_S;
     } else if (this.loop.state === 'GROOM_SHORT') {
       this.groomT += dt;
       flags.groomDone = this.groomT >= GROOM_SHORT_S;
@@ -513,12 +569,23 @@ export class SceneDirector {
       });
       pose = this.applyGait(pose, false, dt);
       this.hudState = 'SEARCH';
-    } else if (this.loop.state === 'WALK_TOP' || this.loop.state === 'WALK_REPOSITION') {
+    } else if (isWalkState(this.loop.state) || this.loop.state === 'DROP_SCOOP' || this.loop.state === 'PICK_SCOOP' || this.loop.state === 'DIP_SCOOP') {
+      this.mixer.play(this.loop.state === 'DIP_SCOOP' ? 'idle' : 'approach');
+      pose = this.mixer.update(dt);
+      this.forelegExtend = this.creatine()?.scoopMode === 'held'
+        ? (this.loop.state === 'DIP_SCOOP' ? 0.72 : 0.35)
+        : 0;
+      this.hudState = this.loop.state === 'DIP_SCOOP' ? 'TASTE' : 'APPROACH';
+      pose = this.applyGait(pose, isWalkState(this.loop.state) || this.loop.state === 'DROP_SCOOP', dt);
+      this.applyGroundWings(false);
+    } else if (this.loop.state === 'WALK_MILL' || this.loop.state === 'WALK_BIPED') {
+      this.mode = 'mill';
       this.mixer.play('approach');
       pose = this.mixer.update(dt);
       this.forelegExtend = 0;
       this.hudState = 'APPROACH';
       pose = this.applyGait(pose, true, dt);
+      if (this.loop.state === 'WALK_BIPED') this.pitch = BIPED_BODY_PITCH_RAD;
       this.applyGroundWings(false);
     } else if (this.loop.state === 'GROOM_SHORT' || this.loop.state === 'GROOM_FULL') {
       this.mixer.play('groom');
@@ -550,10 +617,8 @@ export class SceneDirector {
       this.hudState = 'SEARCH';
       pose = this.applyGait(pose, false, dt);
       this.applyGroundWings(true);
-    } else if (this.loop.state === 'GAG') {
-      pose = this.updateGag(dt, input, crop);
     } else {
-      const fed = this.updateFeeding(input, this.loop.state === 'EAT_TOP' ? 'top' : 'side');
+      const fed = this.updateFeeding(input, 'scoop');
       pose = fed.pose;
       walk = fed.walk;
       pumpAmplitude = fed.pumpAmplitude;
@@ -619,6 +684,22 @@ export class SceneDirector {
     const walking = gag.mode !== 'flight';
     let pose = this.applyGait(this.mixer.update(dt), walking, dt);
     return overlayEuler(pose, gag.euler);
+  }
+
+  private stepWalkGoal(dt: number): boolean {
+    if (!this.walkGoal) return true;
+    const target = this.walkGoal;
+    const dx = target.x - this.position.x;
+    const dz = target.z - this.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 0.05) this.heading = Math.atan2(dx, dz);
+    if (dist > 1) {
+      const step = Math.min(dist, FLY_WALK_MM_S * dt);
+      this.position.x += (dx / dist) * step;
+      this.position.z += (dz / dist) * step;
+    }
+    this.mode = this.overFood() ? 'onFood' : 'ground';
+    return dist <= 3;
   }
 
   private stepWalkTop(dt: number): boolean {
@@ -708,7 +789,7 @@ export class SceneDirector {
 
   private overFood(): boolean {
     const support = this.food.supportHeightAt(this.position.x, this.position.z, this.foodOrigin);
-    if (support > boardTopY() + 0.5) return true;
+    if (support > tableTopY() + 0.5) return true;
     return pointInXzAabb({ x: this.position.x, z: this.position.z }, this.food.worldAabb(this.foodOrigin));
   }
 
@@ -823,6 +904,17 @@ export class SceneDirector {
   }
 
   private foodAabb3(): Aabb3 {
+    if (this.food instanceof CreatineSystem) {
+      const { tub } = kitchenLayout();
+      return {
+        cx: tub.x,
+        cy: tub.y,
+        cz: tub.z,
+        hx: tub.diameter / 2,
+        hy: tub.height / 2,
+        hz: tub.diameter / 2,
+      };
+    }
     return {
       cx: this.foodOrigin.x,
       cy: this.foodOrigin.y,
@@ -858,24 +950,39 @@ export class SceneDirector {
     };
   }
 
-  private pouchObb3(): Obb3 {
+  private millObb3(): Obb3 {
+    const m = kitchenLayout().mill;
     return {
-      cx: this.pouch.cx,
-      cy: boardTopY() + POUCH_BASE_HEIGHT_MM / 2,
-      cz: this.pouch.cz,
-      hx: this.pouch.hx,
-      hy: POUCH_BASE_HEIGHT_MM / 2,
-      hz: this.pouch.hz,
-      yaw: this.pouch.yaw,
+      cx: m.x,
+      cy: m.y,
+      cz: m.z,
+      hx: m.hx,
+      hy: m.hy,
+      hz: m.hz,
+      yaw: m.yaw,
     };
+  }
+
+  private pouchObb3(): Obb3 {
+    return this.millObb3();
   }
 
   /** The chunk being pumped, as a shrinking morsel in the forelegs (PUMP only). */
   private heldCrumb(): DirectorOutput['heldCrumb'] {
+    if (this.creatine()) return null;
     if (this.fsm.state !== 'PUMP' || this.refillClip) return null;
     const idx = this.food.consumingIndex();
     if (idx === null) return null;
     return { progress: this.food.consumeProgress(idx), chunkIndex: idx };
+  }
+
+  private scoopState(): DirectorOutput['scoop'] {
+    const c = this.creatine();
+    if (!c) return null;
+    const dipU = this.loop.state === 'DIP_SCOOP'
+      ? easeInOut(clamp01(this.loop.age / SCOOP_DIP_S))
+      : 0;
+    return { mode: c.scoopMode, fill: c.scoopFill, dipU };
   }
 
   /** Solids and the 200 ms lookahead segment, for the `?debug=flight` overlay. */
@@ -888,7 +995,7 @@ export class SceneDirector {
     const from = { x: this.position.x, y: this.position.y, z: this.position.z };
     return {
       aabbs: [this.foodAabb3(), this.tableAabb3()],
-      obbs: [this.pouchObb3(), this.boardObb3()],
+      obbs: [this.millObb3()],
       lookahead: {
         from,
         to: {
@@ -904,7 +1011,7 @@ export class SceneDirector {
   private syncFlightWorld(): void {
     this.flight.setWorld({
       obstacles: [this.foodAabb3(), this.tableAabb3()],
-      obbs: [this.pouchObb3(), this.boardObb3()],
+      obbs: [] as Obb3[],
       floorY: this.food.supportHeightAt(this.position.x, this.position.z, this.foodOrigin),
       ceilingY: FLIGHT_CEILING_MM,
     });
@@ -924,6 +1031,11 @@ export class SceneDirector {
 
   private applyStandingY(dt: number): void {
     if (this.mode === 'flight' || this.onWall) return;
+    if (this.mode === 'mill') {
+      this.position.y = kitchenLayout().mill.deckY + this.standOffset;
+      this.stepping = false;
+      return;
+    }
     // Wall-feeding lift: pitch reads as about the hind feet, not the root.
     const target = this.surfaceY() + (this.mode === 'ground' ? wallFeedLiftMm() * this.wallFeedU : 0);
     if (this.mode === 'onFood') {
@@ -974,17 +1086,19 @@ export class SceneDirector {
       const packPos = clampOutsideXzObb(padded, this.pouch, bodyCollisionPadMm());
       this.position.x = packPos.x;
       this.position.z = packPos.z;
+    } else if (this.mode === 'mill') {
+      const mill = kitchenLayout().mill;
+      this.position.x = mill.x;
+      this.position.z = mill.z;
     }
 
     // In flight the FlightController already resolved solids (with face
     // hysteresis) inside `update()`; resolving again here with a different
     // face choice produced edge chatter. Ground / onFood still resolve here.
-    if (this.mode !== 'flight') {
+    if (this.mode !== 'flight' && this.mode !== 'mill') {
       const skipBoard = this.stepping && this.stepToY > this.stepFromY;
       const aabbs = this.mode === 'onFood' ? [this.tableAabb3()] : [this.foodAabb3(), this.tableAabb3()];
-      const obbs = skipBoard
-        ? [this.pouchObb3()]
-        : [this.pouchObb3(), this.boardObb3()];
+      const obbs = skipBoard ? [] : [this.millObb3()];
       const resolved = resolveSolids(
         { x: this.position.x, y: this.position.y, z: this.position.z },
         { x: this.velocity.x, y: this.velocity.y, z: this.velocity.z },
@@ -1013,6 +1127,7 @@ export class SceneDirector {
       this.pitch = next.pitch;
       this.roll = next.roll - this.bank;
     }
+    if (this.loop.state === 'WALK_BIPED') this.pitch = BIPED_BODY_PITCH_RAD;
 
     if (this.mode === 'flight') {
       this.flight.position = { x: this.position.x, y: this.position.y, z: this.position.z };
@@ -1024,7 +1139,7 @@ export class SceneDirector {
     }
   }
 
-  private updateFeeding(input: DirectorInput, kind: 'top' | 'side'): {
+  private updateFeeding(input: DirectorInput, kind: 'top' | 'side' | 'scoop'): {
     pose: Pose;
     walk: number;
     pumpAmplitude: number;
@@ -1042,7 +1157,7 @@ export class SceneDirector {
     let pumpAmplitude = 0;
     let pose: Pose;
     // Top landing: she is already on the food. Do not skip TASTE — only skip the walk.
-    const distance = kind === 'top' ? Math.min(approach.distance, 0.4) : approach.distance;
+    const distance = kind === 'side' ? approach.distance : Math.min(approach.distance, 0.4);
 
     if (this.refillClip) {
       this.refillHold += dt;
@@ -1081,7 +1196,7 @@ export class SceneDirector {
       pumpAmplitude = output.pumpAmplitude;
       this.hudState = output.state;
       events.push(...output.events);
-      if (output.walk > 0 && kind !== 'top') {
+      if (output.walk > 0 && kind === 'side') {
         this.velocity.set(
           Math.sin(output.heading) * FLY_WALK_MM_S,
           0,
@@ -1095,6 +1210,9 @@ export class SceneDirector {
       if (kind === 'top') {
         this.mode = 'onFood';
         this.onWall = false;
+      } else if (kind === 'scoop') {
+        this.mode = 'ground';
+        this.onWall = false;
       }
     }
     this.glueToFood();
@@ -1104,6 +1222,7 @@ export class SceneDirector {
 
   /** Feeding from the board at a vertical face: TASTE–RETRACT in ground mode. */
   private wallFeeding(): boolean {
+    if (this.loop.state === 'EAT_SCOOP') return false;
     if (this.mode !== 'ground' || this.onWall || this.refillClip) return false;
     const s = this.fsm.state;
     return s === 'TASTE' || s === 'EXTEND' || s === 'PUMP' || s === 'RETRACT';
@@ -1158,7 +1277,7 @@ export class SceneDirector {
       labellum: contacts.labellum,
       cameraDist: input.cameraDist,
       sensors: contacts.sensors,
-      profile: TWAROG_MAMUTA_WANILIOWY,
+      profile: this.creatine()?.profile ?? TWAROG_MAMUTA_WANILIOWY,
       foodXZ,
       flyXZ: posXZ,
     });
@@ -1197,7 +1316,13 @@ export class SceneDirector {
     const step = Math.hypot(this.position.x - this.lastX, this.position.z - this.lastZ);
     const yawRate = dt > 1e-8 ? headingError(this.lastHeading, this.heading) / dt : 0;
     let next = pose;
-    if (walking && this.mode !== 'flight' && dt > 1e-8 && step > 0.02) {
+    if (this.loop.state === 'WALK_BIPED' && dt > 1e-8) {
+      this.gaitDistance = millGaitAdvance(this.gaitDistance, FLY_WALK_MM_S, dt);
+      next = replaceEuler(next, bipedPoseAtDistance(this.gaitDistance, FLY_WALK_MM_S));
+    } else if ((this.mode === 'mill' || this.loop.state === 'WALK_MILL') && walking && dt > 1e-8) {
+      this.gaitDistance = millGaitAdvance(this.gaitDistance, FLY_WALK_MM_S, dt);
+      next = replaceEuler(next, gaitPoseAtDistance(this.gaitDistance, FLY_WALK_MM_S, 0));
+    } else if (walking && this.mode !== 'flight' && dt > 1e-8 && step > 0.02) {
       this.gaitDistance += step;
       next = replaceEuler(next, gaitPoseAtDistance(this.gaitDistance, step / dt, yawRate));
     }
@@ -1274,6 +1399,7 @@ export class SceneDirector {
       spoonShadow: this.spoonShadow,
       crumbAttach: this.crumbAttach,
       heldCrumb: this.heldCrumb(),
+      scoop: this.scoopState(),
       bites: this.fsm.pumpCycles,
       bitesTarget: this.fsm.pumpTarget,
       // Normalised to the portion as served (opening bite already taken), so
@@ -1387,7 +1513,7 @@ export class SceneDirector {
       labellum: contacts.labellum,
       cameraDist: input.cameraDist,
       sensors: contacts.sensors,
-      profile: TWAROG_MAMUTA_WANILIOWY,
+      profile: this.creatine()?.profile ?? TWAROG_MAMUTA_WANILIOWY,
       foodXZ,
       flyXZ: posXZ,
     });

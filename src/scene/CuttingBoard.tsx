@@ -11,6 +11,7 @@ import {
   BOARD_LOGO_WIDTH_MM,
   BOARD_MM,
   BOARD_YAW_DEG,
+  boardTopY,
   mm,
 } from './scale.ts';
 import { kitchenLayout } from './layout.ts';
@@ -118,7 +119,7 @@ export function createCuttingBoard(
   const layout = kitchenLayout();
   const group = new THREE.Group();
   group.name = 'cuttingBoard';
-  group.position.set(layout.board.x, layout.board.y, layout.board.z);
+  group.position.set(layout.board.x, boardTopY() / 2, layout.board.z);
   group.rotation.y = BOARD_YAW_DEG * DEG;
 
   const size = quality.textureSize;

@@ -1,32 +1,33 @@
 /**
- * Macro scene loop ABOVE the feeding FSM. Inside EAT it hands control to
- * SEARCH→…→REST so the MN9 gate still decides when the proboscis extends.
+ * Macro scene loop ABOVE the feeding FSM. Inside EAT_SCOOP it hands control
+ * to SEARCH→…→REST so the MN9 gate still decides when the proboscis extends.
  * Durations are soft caps; each state exits on its own completion flag.
  *
- * Default (`reel`): she lives on the twaróg. Flight is punctuation — one
- * TAKEOFF_1 per portion to switch top→side, plus the escapeShadow gag.
- * `?loop=full` keeps the debug ORBIT / EXIT_FRAME path. Flight code stays.
- *
- * Authored motion. The connectome is not consulted here. See docs/BODY-MODEL.md.
+ * Default (`reel`): scoop → tub → mill. Flight is punctuation onto the
+ * mill. `?loop=full` keeps ORBIT / EXIT_FRAME. Authored motion — the
+ * connectome is not consulted here. See docs/BODY-MODEL.md.
  */
 import { Xoshiro128ss } from '../brain/rng.ts';
 import { LOOP_CAPTIONS_PL } from '../hud/captions.ts';
 import { GROOM_FULL_S, GROOM_SHORT_S, NAP_SATIETY, WAKE_S, canNap, napDuration } from './grooming.ts';
-import { GAG_DURATION_CAP, type GagId, pickGag } from './gags.ts';
+import { BIPED_WALK_S, MILL_WALK_S } from './bipedGait.ts';
+import { SCOOP_DIP_S, SCOOP_DROP_S, SCOOP_PICK_S } from './scoop.ts';
 
 export const LOOP_STATES = [
   'ORBIT',
   'LAND_TOP',
-  'WALK_TOP',
-  'WALK_REPOSITION',
-  'EAT_TOP',
+  'WALK_SCOOP',
+  'PICK_SCOOP',
+  'APPROACH_TUB',
+  'DIP_SCOOP',
+  'EAT_SCOOP',
+  'DROP_SCOOP',
   'GROOM_SHORT',
-  'TAKEOFF_1',
+  'TAKEOFF_MILL',
   'ORBIT_SHORT',
-  'LAND_TABLE',
-  'EAT_SIDE',
-  'GAG',
-  'EAT_SIDE_2',
+  'LAND_MILL',
+  'WALK_MILL',
+  'WALK_BIPED',
   'GROOM_FULL',
   'NAP',
   'WAKE',
@@ -36,10 +37,10 @@ export const LOOP_STATES = [
 
 export type LoopState = (typeof LOOP_STATES)[number];
 
-/** `reel` is the default on-food loop. `full` is `?loop=full` (ORBIT / EXIT_FRAME). */
+/** `reel` is the default scoop/mill loop. `full` is `?loop=full` (ORBIT / EXIT_FRAME). */
 export type LoopVariant = 'reel' | 'full';
 
-/** Hard cap for EAT_TOP / EAT_SIDE / EAT_SIDE_2. Satiety-driven RETRACT can exit earlier. */
+/** Hard cap for EAT_SCOOP. Satiety-driven RETRACT can exit earlier. */
 export const EAT_BOUT_CAP_S = 45;
 
 export type LoopFlags = {
@@ -51,6 +52,7 @@ export type LoopFlags = {
   gagDone: boolean;
   napDone: boolean;
   wakeDone: boolean;
+  propDone: boolean;
   satiety: number;
   cropVolume: number;
 };
@@ -58,28 +60,30 @@ export type LoopFlags = {
 export type LoopOutput = {
   state: LoopState;
   age: number;
-  gag: GagId | null;
+  gag: null;
   caption: string | null;
   orbitCircuits: number;
-  eatKind: 'top' | 'side' | null;
+  eatKind: 'scoop' | null;
   advanced: boolean;
-  /** Fresh portion: EXIT_FRAME→ORBIT (full) or WAKE/WALK→EAT_TOP (reel). */
+  /** Fresh portion: EXIT_FRAME→ORBIT (full) or WAKE→WALK_SCOOP (reel). */
   wrapped: boolean;
 };
 
 const CAP: Record<LoopState, number> = {
   ORBIT: 22,
   LAND_TOP: 8,
-  WALK_TOP: 5,
-  WALK_REPOSITION: 5,
-  EAT_TOP: EAT_BOUT_CAP_S,
+  WALK_SCOOP: 8,
+  PICK_SCOOP: SCOOP_PICK_S + 0.35,
+  APPROACH_TUB: 8,
+  DIP_SCOOP: SCOOP_DIP_S + 0.35,
+  EAT_SCOOP: EAT_BOUT_CAP_S,
+  DROP_SCOOP: SCOOP_DROP_S + 0.4,
   GROOM_SHORT: GROOM_SHORT_S + 0.4,
-  TAKEOFF_1: 2.2,
+  TAKEOFF_MILL: 2.2,
   ORBIT_SHORT: 14,
-  LAND_TABLE: 8,
-  EAT_SIDE: EAT_BOUT_CAP_S,
-  GAG: 20,
-  EAT_SIDE_2: EAT_BOUT_CAP_S,
+  LAND_MILL: 8,
+  WALK_MILL: MILL_WALK_S + 0.4,
+  WALK_BIPED: BIPED_WALK_S + 0.4,
   GROOM_FULL: GROOM_FULL_S + 0.4,
   NAP: 20,
   WAKE: WAKE_S + 0.3,
@@ -87,23 +91,20 @@ const CAP: Record<LoopState, number> = {
   EXIT_FRAME: 1.6,
 };
 
-function eatKind(state: LoopState): 'top' | 'side' | null {
-  if (state === 'EAT_TOP') return 'top';
-  if (state === 'EAT_SIDE' || state === 'EAT_SIDE_2') return 'side';
-  return null;
+function eatKind(state: LoopState): 'scoop' | null {
+  return state === 'EAT_SCOOP' ? 'scoop' : null;
 }
 
 function initialState(variant: LoopVariant): LoopState {
-  return variant === 'full' ? 'ORBIT' : 'EAT_TOP';
+  return variant === 'full' ? 'ORBIT' : 'WALK_SCOOP';
 }
 
 export class SceneLoop {
   readonly variant: LoopVariant;
   state: LoopState;
   age = 0;
-  gag: GagId | null = null;
+  gag: null = null;
   orbitCircuits = 2;
-  /** One voluntary TAKEOFF_1 per portion (top → side). Reel only. */
   faceSwitched = false;
   private rng: Xoshiro128ss;
   private sweetBout = false;
@@ -128,20 +129,15 @@ export class SceneLoop {
   private roll(seed: number): void {
     const rng = new Xoshiro128ss(seed ^ 0x9e3779b9);
     this.orbitCircuits = rng.nextFloat() < 0.5 ? 2 : 3;
-    this.gag = null;
   }
 
   step(dt: number, flags: LoopFlags): LoopOutput {
     this.age += Math.max(0, dt);
     this.wrappedThisStep = false;
-    if (this.state === 'EAT_TOP' || this.state === 'EAT_SIDE' || this.state === 'EAT_SIDE_2') {
-      if (flags.eatBoutDone) this.sweetBout = true;
-    }
-    const cap = this.state === 'GAG' && this.gag
-      ? GAG_DURATION_CAP[this.gag] + 0.4
-      : this.state === 'NAP'
-        ? napDuration(flags.satiety) + 0.3
-        : CAP[this.state];
+    if (this.state === 'EAT_SCOOP' && flags.eatBoutDone) this.sweetBout = true;
+    const cap = this.state === 'NAP'
+      ? napDuration(flags.satiety) + 0.3
+      : CAP[this.state];
     let advanced = false;
     if (this.finished(flags) || this.age >= cap) {
       this.advance(flags);
@@ -150,7 +146,7 @@ export class SceneLoop {
     return {
       state: this.state,
       age: this.age,
-      gag: this.gag,
+      gag: null,
       caption: LOOP_CAPTIONS_PL[this.state] ?? null,
       orbitCircuits: this.state === 'ORBIT_SHORT' ? 1 : this.orbitCircuits,
       eatKind: eatKind(this.state),
@@ -160,28 +156,30 @@ export class SceneLoop {
   }
 
   private finished(flags: LoopFlags): boolean {
-    if (this.age < 0.05 && !(this.state === 'GAG' && this.gag === null)) return false;
+    if (this.age < 0.05) return false;
     switch (this.state) {
       case 'ORBIT':
       case 'ORBIT_SHORT':
       case 'LAND_TOP':
-      case 'LAND_TABLE':
-      case 'TAKEOFF_1':
+      case 'LAND_MILL':
+      case 'TAKEOFF_MILL':
       case 'TAKEOFF_EXIT':
       case 'EXIT_FRAME':
         return flags.flightDone;
-      case 'WALK_TOP':
-      case 'WALK_REPOSITION':
+      case 'WALK_SCOOP':
+      case 'APPROACH_TUB':
         return flags.walkDone;
-      case 'EAT_TOP':
-      case 'EAT_SIDE':
-      case 'EAT_SIDE_2':
+      case 'PICK_SCOOP':
+      case 'DIP_SCOOP':
+      case 'DROP_SCOOP':
+      case 'WALK_MILL':
+      case 'WALK_BIPED':
+        return flags.propDone;
+      case 'EAT_SCOOP':
         return flags.eatBoutDone;
       case 'GROOM_SHORT':
       case 'GROOM_FULL':
         return flags.groomDone;
-      case 'GAG':
-        return this.gag === null || flags.gagDone;
       case 'NAP':
         return flags.napDone;
       case 'WAKE':
@@ -199,11 +197,7 @@ export class SceneLoop {
       this.sweetBout = false;
       this.wrappedThisStep = true;
     }
-    if (
-      this.variant === 'reel'
-      && next === 'EAT_TOP'
-      && (from === 'WAKE' || from === 'WALK_REPOSITION')
-    ) {
+    if (this.variant === 'reel' && next === 'WALK_SCOOP' && (from === 'WAKE' || from === 'GROOM_FULL')) {
       this.roll(this.rng.nextUint32());
       this.sweetBout = false;
       this.faceSwitched = false;
@@ -215,19 +209,19 @@ export class SceneLoop {
   private nextFull(from: LoopState, flags: LoopFlags): LoopState {
     switch (from) {
       case 'ORBIT': return 'LAND_TOP';
-      case 'LAND_TOP': return 'WALK_TOP';
-      case 'WALK_TOP': return 'EAT_TOP';
-      case 'WALK_REPOSITION': return 'EAT_TOP';
-      case 'EAT_TOP': return 'GROOM_SHORT';
-      case 'GROOM_SHORT': return 'TAKEOFF_1';
-      case 'TAKEOFF_1': return 'ORBIT_SHORT';
-      case 'ORBIT_SHORT': return 'LAND_TABLE';
-      case 'LAND_TABLE': return 'EAT_SIDE';
-      case 'EAT_SIDE':
-        this.gag = pickGag(this.rng, { satiety: flags.satiety, cropVolume: flags.cropVolume });
-        return this.gag ? 'GAG' : 'EAT_SIDE_2';
-      case 'GAG': return 'EAT_SIDE_2';
-      case 'EAT_SIDE_2': return 'GROOM_FULL';
+      case 'LAND_TOP': return 'WALK_SCOOP';
+      case 'WALK_SCOOP': return 'PICK_SCOOP';
+      case 'PICK_SCOOP': return 'APPROACH_TUB';
+      case 'APPROACH_TUB': return 'DIP_SCOOP';
+      case 'DIP_SCOOP': return 'EAT_SCOOP';
+      case 'EAT_SCOOP': return 'DROP_SCOOP';
+      case 'DROP_SCOOP': return 'GROOM_SHORT';
+      case 'GROOM_SHORT': return 'TAKEOFF_MILL';
+      case 'TAKEOFF_MILL': return 'ORBIT_SHORT';
+      case 'ORBIT_SHORT': return 'LAND_MILL';
+      case 'LAND_MILL': return 'WALK_MILL';
+      case 'WALK_MILL': return 'WALK_BIPED';
+      case 'WALK_BIPED': return 'GROOM_FULL';
       case 'GROOM_FULL':
         return this.sweetBout && canNap(flags.satiety) ? 'NAP' : 'TAKEOFF_EXIT';
       case 'NAP': return 'WAKE';
@@ -239,44 +233,49 @@ export class SceneLoop {
 
   private nextReel(from: LoopState, flags: LoopFlags): LoopState {
     switch (from) {
-      case 'EAT_TOP': return 'GROOM_SHORT';
-      case 'GROOM_SHORT': return 'WALK_REPOSITION';
-      case 'WALK_REPOSITION':
-        if (!this.faceSwitched) return 'TAKEOFF_1';
-        return this.sweetBout && canNap(flags.satiety) ? 'NAP' : 'EAT_TOP';
-      case 'TAKEOFF_1':
-        this.faceSwitched = true;
-        return 'LAND_TABLE';
-      case 'LAND_TABLE': return 'EAT_SIDE';
-      case 'EAT_SIDE':
-        this.gag = pickGag(this.rng, { satiety: flags.satiety, cropVolume: flags.cropVolume });
-        return this.gag ? 'GAG' : 'GROOM_FULL';
-      case 'GAG': return 'GROOM_FULL';
-      case 'GROOM_FULL': return 'WALK_REPOSITION';
+      case 'WALK_SCOOP': return 'PICK_SCOOP';
+      case 'PICK_SCOOP': return 'APPROACH_TUB';
+      case 'APPROACH_TUB': return 'DIP_SCOOP';
+      case 'DIP_SCOOP': return 'EAT_SCOOP';
+      case 'EAT_SCOOP': return 'DROP_SCOOP';
+      case 'DROP_SCOOP': return 'GROOM_SHORT';
+      case 'GROOM_SHORT': return 'TAKEOFF_MILL';
+      case 'TAKEOFF_MILL': return 'LAND_MILL';
+      case 'LAND_MILL': return 'WALK_MILL';
+      case 'WALK_MILL': return 'WALK_BIPED';
+      case 'WALK_BIPED': return 'GROOM_FULL';
+      case 'GROOM_FULL':
+        return this.sweetBout && canNap(flags.satiety) ? 'NAP' : 'WALK_SCOOP';
       case 'NAP': return 'WAKE';
-      case 'WAKE': return 'EAT_TOP';
-      // Kept reachable so a mid-session `?loop=full` hand-off cannot stall.
+      case 'WAKE': return 'WALK_SCOOP';
       case 'ORBIT': return 'LAND_TOP';
-      case 'LAND_TOP': return 'WALK_TOP';
-      case 'WALK_TOP': return 'EAT_TOP';
-      case 'ORBIT_SHORT': return 'LAND_TABLE';
-      case 'EAT_SIDE_2': return 'GROOM_FULL';
+      case 'LAND_TOP': return 'WALK_SCOOP';
+      case 'ORBIT_SHORT': return 'LAND_MILL';
       case 'TAKEOFF_EXIT': return 'EXIT_FRAME';
-      case 'EXIT_FRAME': return 'EAT_TOP';
+      case 'EXIT_FRAME': return 'WALK_SCOOP';
     }
   }
 }
 
 export function isEatState(state: LoopState): boolean {
-  return state === 'EAT_TOP' || state === 'EAT_SIDE' || state === 'EAT_SIDE_2';
+  return state === 'EAT_SCOOP';
 }
 
 export function isFlightState(state: LoopState): boolean {
   return state === 'ORBIT' || state === 'ORBIT_SHORT' || state === 'LAND_TOP'
-    || state === 'LAND_TABLE' || state === 'TAKEOFF_1' || state === 'TAKEOFF_EXIT'
+    || state === 'LAND_MILL' || state === 'TAKEOFF_MILL' || state === 'TAKEOFF_EXIT'
     || state === 'EXIT_FRAME';
 }
 
 export function isWalkState(state: LoopState): boolean {
-  return state === 'WALK_TOP' || state === 'WALK_REPOSITION';
+  return state === 'WALK_SCOOP' || state === 'APPROACH_TUB';
+}
+
+export function isPropState(state: LoopState): boolean {
+  return state === 'PICK_SCOOP' || state === 'DIP_SCOOP' || state === 'DROP_SCOOP'
+    || state === 'WALK_MILL' || state === 'WALK_BIPED';
+}
+
+export function isMillState(state: LoopState): boolean {
+  return state === 'WALK_MILL' || state === 'WALK_BIPED' || state === 'LAND_MILL';
 }

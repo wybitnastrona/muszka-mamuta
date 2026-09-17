@@ -6,9 +6,9 @@ alwaysApply: true
 # MUSZKA-MAMUTA — agent rules
 
 You are modifying a fork of `cobanov/fly-connectome-template` (React 18, TypeScript strict, Three.js, Vite, Vitest).
-Goal: a browser simulation where a *Drosophila melanogaster* with a MaleCNS v1.0-driven spiking brain eats a wedge
-of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style of the viral "fly brain" reels
-(dark grid → kitchen table, side HUD, view switcher).
+Goal: a browser simulation where a *Drosophila melanogaster* with a MaleCNS v1.0-driven spiking brain eats
+creatine powder from a scoop and walks a lab mill for eternity, in the visual style of the viral "fly brain" reels
+(dark grid → kitchen table, side HUD, view switcher). Live food is an open KFD tub (photo label wrap, authored Ø/H).
 
 ## Non-negotiables
 
@@ -18,7 +18,7 @@ of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style o
    report — do not guess, do not substitute a plausible-sounding name.
 2. MaleCNS bulk files are Apache Arrow Feather. Read with `pd.read_feather` / `pyarrow`. They are NOT CSV.
 3. Keep the model boundary explicit: the brain simulation outputs `ActivityFrame` (existing template contract).
-   Body animation and the twaróg system consume it; they never write into it.
+   Body animation and the creatine / powder system consume it; they never write into it.
 4. Preserve `src/components/Attribution.tsx` and the README credit line ("Built with fly-connectome-template by
    Mert Cobanov"). MaleCNS stays CC BY 4.0, Flybody Apache-2.0. Add a "Methods" panel stating honestly what is
    measured (connectome graph, synapse signs) and what is authored (LIF params, hunger, food chemistry, every
@@ -40,9 +40,10 @@ of Polish farmer's cheese ("twaróg klinek") for eternity, in the visual style o
 - Proboscis motor neurons: MN9 (rostrum protractor = proboscis extension), MN11/MN12 (haustellum), pharyngeal
   pump MNs. Shiu et al., Nature 2024 reproduced sugar GRN → MN9 in a LIF model. This is our ground truth.
 - Bitter GRNs (Gr66a) suppress feeding. Amino-acid / yeast sensing: Ir76b class.
-- Twaróg profile: **vanilla-sweetened** (`TWAROG_MAMUTA_WANILIOWY`, sweet 0.75) —
+- Live food: **creatine powder** (`CREATINE_KFD`, sweet 0.05, aa 0.85) —
   authored, not measured. Drive is still the whole gustatory channel; `sweet`
-  only scales hemolymph trehalose yield (~3× unsweetened curd). See
+  only scales hemolymph trehalose yield (low → slow satiety). Vanilla twaróg
+  (`TWAROG_MAMUTA_WANILIOWY`) is a test fixture. See
   `src/food/foodProfile.ts` and `docs/METABOLISM.md`.
 - Hunger is NOT in the connectome: model it as neuromodulatory gain (AKH raises it, DSK/insulin lower it) applied
   to the whole GRN channel (outgoing weights) and to the MN9 threshold.

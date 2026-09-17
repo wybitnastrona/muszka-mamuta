@@ -180,6 +180,7 @@ describe('debug query and cameras', () => {
 
   it('names camera presets exactly', () => {
     expect(CAMERA_PRESETS.slice(0, 3)).toEqual(['Widok kuchni', 'Z boku', 'Zbliżenie']);
+    expect(CAMERA_PRESETS).toContain('Etykieta');
     expect(CAMERA_PRESETS).toContain('Przegląd');
     expect(CAMERA_PRESETS).toContain('Reel');
   });

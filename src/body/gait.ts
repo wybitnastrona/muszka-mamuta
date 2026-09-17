@@ -182,6 +182,11 @@ export function gaitPoseAtDistance(
   return pose;
 }
 
+/** Belt-driven mill: gait distance follows belt speed, not root ΔXZ. */
+export function millGaitAdvance(distanceMm: number, beltSpeedMmS: number, dt: number): number {
+  return distanceMm + Math.max(0, beltSpeedMmS) * Math.max(0, dt);
+}
+
 /** `t` is seconds; phase is locked to `speedMmS * t` (constant-speed path). */
 export function gaitPose(
   t: number,

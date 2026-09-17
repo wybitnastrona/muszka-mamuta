@@ -76,7 +76,7 @@ describe('kitchen slab', () => {
 
 describe('Reel camera', () => {
   it('is a 9:16 studio frame at 35 mm / 15°, with DOF on the fly', () => {
-    expect(CAMERA_PRESETS).toEqual(['Widok kuchni', 'Z boku', 'Zbliżenie', 'Przegląd', 'Reel']);
+    expect(CAMERA_PRESETS).toEqual(['Widok kuchni', 'Z boku', 'Zbliżenie', 'Etykieta', 'Przegląd', 'Reel']);
     const frame = reelFrame();
     expect(frame.fov).toBeCloseTo(REEL_FOV_DEG);
     const dx = frame.position[0] - frame.lookAt[0];
@@ -85,7 +85,15 @@ describe('Reel camera', () => {
     const elev = (Math.atan2(dy, Math.hypot(dx, dz)) * 180) / Math.PI;
     expect(Math.abs(elev - REEL_ELEV_DEG)).toBeLessThan(0.6);
     const layout = kitchenLayout();
-    expect(frame.lookAt[0]).toBeCloseTo((layout.fly.x + layout.curd.x) * 0.45);
+    expect(frame.lookAt[0]).toBeCloseTo((layout.fly.x + layout.pile.x) * 0.45);
+    const kitchen = kitchenFrame(10);
+    const kdx = kitchen.position[0] - kitchen.lookAt[0];
+    const kdy = kitchen.position[1] - kitchen.lookAt[1];
+    const kdz = kitchen.position[2] - kitchen.lookAt[2];
+    const kitchenElev = (Math.atan2(kdy, Math.hypot(kdx, kdz)) * 180) / Math.PI;
+    expect(kitchenElev).toBeGreaterThan(12);
+    expect(kitchenElev).toBeLessThan(32);
+    expect(kitchen.position[2]).toBeLessThan(kitchen.lookAt[2]);
     expect(frameForPreset('Widok kuchni', 10)).toEqual(kitchenFrame(10));
     expect(frameForPreset('Reel', 10)).toEqual(reelFrame(10));
     const dist = Math.hypot(dx, dy, dz);

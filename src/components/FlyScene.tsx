@@ -3,7 +3,7 @@ import type { CameraPreset, FeedingEvent, FeedingState } from '../body/types.ts'
 import { parseDebugMode } from '../body/debugQuery.ts';
 import { MOTION_LOOP_ORDER } from '../body/feedingMotion.ts';
 import { WEIGHT_LEGEND } from '../body/palette.ts';
-import { TWAROG_MAMUTA_WANILIOWY } from '../food/foodProfile.ts';
+import { CREATINE_KFD } from '../food/foodProfile.ts';
 import type { ChemoSample } from '../food/twarogSystem.ts';
 import { mountFlyScene, type FlyCommand, type FlyRecorderApi } from './flySceneMount.ts';
 import type { SceneHudSnapshot } from './Hud.tsx';
@@ -31,7 +31,7 @@ type FlySceneProps = {
 
 export function FlyScene({
   playing = true, mn9Rate = 0, satiety = 0, bitter = 0,
-  odor = TWAROG_MAMUTA_WANILIOWY.odor, cropVolume = 0, preset,
+  odor = CREATINE_KFD.odor, cropVolume = 0, preset,
   commandRef, seedRef, summaryRef, hemoRef, recorderApiRef,
   onEvents, onHud, onChemo, onPortion,
 }: FlySceneProps) {

@@ -1,26 +1,59 @@
 import {
-  BOARD_MM,
-  BOARD_YAW_DEG,
-  CURD_MM,
   LABEL_IMAGE_H,
   LABEL_IMAGE_W,
+  MILL_MM,
+  PILE_MM,
   POUCH_MM,
-  POUCH_YAW_DEG,
-  SEAL_MM,
-  boardTopY,
+  TUB_MM,
   flyVisualLengthMm,
   mm,
+  tableTopY,
+  tubInnerRadiusMm,
+  tubRadiusMm,
 } from './scale.ts';
 
 const DEG = Math.PI / 180;
 const TABLE_MARGIN_MM = 48;
 
 export type KitchenLayout = {
+  /** Powder fill centre inside the tub well (also aliased as `curd`). */
+  pile: { x: number; y: number; z: number };
+  /** @deprecated Use `pile`. Same object. */
   curd: { x: number; y: number; z: number };
   biteFront: { x: number; y: number; z: number };
   fly: { x: number; z: number };
+  scoop: { x: number; y: number; z: number; yaw: number };
+  mill: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    hx: number;
+    hy: number;
+    hz: number;
+    deckY: number;
+  };
+  tub: {
+    x: number;
+    y: number;
+    z: number;
+    diameter: number;
+    height: number;
+    innerRadius: number;
+    yaw: number;
+  };
+  /** Lid off, on the table beside the open tub. */
+  lid: { x: number; y: number; z: number; diameter: number; height: number; yaw: number };
+  /**
+   * @deprecated Same pose as `tub`. Kept for older callers.
+   */
+  tubSlot: { x: number; y: number; z: number; diameter: number; height: number };
+  /**
+   * Collision / gag OBB. Live scene: the mill (pouch mesh is not mounted).
+   */
   pouch: { x: number; y: number; z: number; yaw: number };
   table: { width: number; depth: number };
+  /** Table working footprint. `topY` is the oak slab (0), not the unused board. */
   board: {
     x: number;
     y: number;
@@ -33,64 +66,109 @@ export type KitchenLayout = {
   };
 };
 
-function tableSizeForBoard(yaw: number): { width: number; depth: number } {
-  const hx = mm(BOARD_MM.length) / 2;
-  const hz = mm(BOARD_MM.width) / 2;
-  const c = Math.abs(Math.cos(yaw));
-  const s = Math.abs(Math.sin(yaw));
+function tableSizeForProps(): { width: number; depth: number } {
+  const tubR = tubRadiusMm();
+  const millHx = mm(MILL_MM.length) / 2;
+  const millHz = mm(MILL_MM.width) / 2;
+  const spanX = 85 + tubR + 8 + mm(TUB_MM.lidDiameter) + 75 + millHx;
+  const spanZ = Math.max(tubR, millHz, mm(TUB_MM.lidDiameter) / 2) + 40;
   return {
-    width: Math.ceil((hx * c + hz * s) * 2 + TABLE_MARGIN_MM),
-    depth: Math.ceil((hx * s + hz * c) * 2 + TABLE_MARGIN_MM),
+    width: Math.ceil(spanX * 2 + TABLE_MARGIN_MM),
+    depth: Math.ceil(spanZ * 2 + TABLE_MARGIN_MM),
   };
 }
 
 /**
- * Fly approaches from −Z (mesh +Z is anterior). Bite corner is the
- * anterior-left of the block ( +X, −Z ) — the corner toward the pouch.
- * Pouch sits to +X, slightly +Z of the curd, yawed 15°, open at local −X.
- * Empty film, plate, 250 g block and fly rest on the cutting board
- * (`board.topY`); the table top stays at y = 0.
+ * Lab table: open KFD tub (−X) with powder in the well, scoop, mill (+X).
+ * No cutting board, no PET pouch. Table top is y = 0.
  */
 export function kitchenLayout(): KitchenLayout {
-  const yaw = BOARD_YAW_DEG * DEG;
-  const topY = boardTopY();
+  const topY = tableTopY();
+  const table = tableSizeForProps();
   const board = {
     x: 0,
-    y: topY / 2,
+    y: 0,
     z: 0,
-    yaw,
-    hx: mm(BOARD_MM.length) / 2,
-    hy: topY / 2,
-    hz: mm(BOARD_MM.width) / 2,
+    yaw: 0,
+    hx: table.width / 2,
+    hy: 0.5,
+    hz: table.depth / 2,
     topY,
   };
-  const hy = mm(CURD_MM.height) / 2;
-  const curd = { x: 0, y: topY + hy, z: 0 };
+  const tubR = tubRadiusMm();
+  const tubH = mm(TUB_MM.height);
+  const tub = {
+    x: -85,
+    y: topY + tubH / 2,
+    z: 0,
+    diameter: mm(TUB_MM.diameter),
+    height: tubH,
+    innerRadius: tubInnerRadiusMm(),
+    yaw: 0,
+  };
+  const hy = mm(PILE_MM.height) / 2;
+  const pile = { x: tub.x, y: topY + hy, z: tub.z };
   const biteFront = {
-    x: mm(CURD_MM.width) / 2,
-    y: topY + mm(CURD_MM.height) * 0.28,
-    z: -mm(CURD_MM.length) / 2,
+    x: pile.x,
+    y: topY + mm(PILE_MM.height) * 0.85,
+    z: pile.z - tubR,
+  };
+  const lidR = mm(TUB_MM.lidDiameter) / 2;
+  const lidH = mm(TUB_MM.lidHeight);
+  const lid = {
+    x: tub.x - tubR - lidR - 8,
+    y: topY + lidH / 2,
+    z: 22,
+    diameter: mm(TUB_MM.lidDiameter),
+    height: lidH,
+    yaw: 0.35,
+  };
+  const scoop = {
+    x: tub.x + tubR + 14,
+    y: topY + 0.6,
+    z: 18,
+    yaw: -0.4,
+  };
+  const millHy = mm(MILL_MM.height) / 2;
+  const mill = {
+    x: 75,
+    y: topY + millHy,
+    z: 0,
+    yaw: 0,
+    hx: mm(MILL_MM.length) / 2,
+    hy: millHy,
+    hz: mm(MILL_MM.width) / 2,
+    deckY: topY + mm(MILL_MM.deck),
   };
   const fly = {
-    x: biteFront.x - 6,
-    z: biteFront.z - flyVisualLengthMm() * 0.9,
+    x: scoop.x - 4,
+    z: scoop.z - flyVisualLengthMm() * 1.1,
   };
-  const pouchYaw = POUCH_YAW_DEG * DEG;
-  const openLocalX = -mm(POUCH_MM.length) / 2;
-  const openWorldX = mm(CURD_MM.width) / 2 + mm(SEAL_MM) + 6;
-  const openWorldZ = 8;
   const pouch = {
-    x: openWorldX - openLocalX * Math.cos(pouchYaw),
-    y: topY + 1.2,
-    z: openWorldZ - openLocalX * Math.sin(pouchYaw),
-    yaw: pouchYaw,
+    x: mill.x,
+    y: mill.deckY,
+    z: mill.z,
+    yaw: mill.yaw,
+  };
+  const tubSlot = {
+    x: tub.x,
+    y: topY,
+    z: tub.z,
+    diameter: tub.diameter,
+    height: tub.height,
   };
   return {
-    curd,
+    pile,
+    curd: pile,
     biteFront,
     fly,
+    scoop,
+    mill,
+    tub,
+    lid,
+    tubSlot,
     pouch,
-    table: tableSizeForBoard(yaw),
+    table,
     board,
   };
 }
@@ -122,12 +200,11 @@ export function pointInBoardFootprint(x: number, z: number, pad = 0): boolean {
 }
 
 /**
- * World Y of the standing surface: chunk / intact hull top, else the board
- * top inside its footprint, else the table (0).
+ * World Y of the standing surface: pile top, else the table (0).
  */
 export function supportHeightAt(x: number, z: number, foodHeight: number): number {
   if (foodHeight > 0) return foodHeight;
-  return pointInBoardFootprint(x, z) ? boardTopY() : 0;
+  return pointInBoardFootprint(x, z) ? tableTopY() : 0;
 }
 
 /**
@@ -149,3 +226,5 @@ export function labelPlaneSize(
   }
   return { length, width };
 }
+
+void DEG;

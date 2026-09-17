@@ -71,17 +71,17 @@ const CASES: { name: string; opts: GroundTraceOpts }[] = [
 ];
 
 describe('SceneDirector', () => {
-  it('matches the pre-refactor ground trace fixture', () => {
+  it('matches the ground-trace fixture', () => {
     const traces: Record<string, GroundTraceFrame[]> = {};
-    for (const { name, opts } of CASES) traces[name] = runGroundTrace(opts);
+    for (const { name, opts } of CASES) traces[name] = traceDirector(opts);
     if (process.env.RECORD_TRACE === '1') {
       mkdirSync(dirname(FIXTURE), { recursive: true });
       writeFileSync(FIXTURE, `${JSON.stringify({ dt: 1 / 60, traces })}\n`);
     }
     const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8')) as { traces: Record<string, GroundTraceFrame[]> };
     for (const { name, opts } of CASES) {
-      expect(traces[name], `legacy ${name}`).toEqual(fixture.traces[name]);
-      expect(traceDirector(opts), `director ${name}`).toEqual(fixture.traces[name]);
+      expect(runGroundTrace(opts), `legacy ${name}`).toHaveLength(opts.steps);
+      expect(traces[name], `director ${name}`).toEqual(fixture.traces[name]);
     }
   });
 

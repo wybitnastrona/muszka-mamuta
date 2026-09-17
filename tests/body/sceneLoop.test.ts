@@ -24,7 +24,7 @@ function ctx(over: Partial<GagContext> = {}): GagContext {
     position: { x: layout.fly.x, y: layout.board.topY + 2, z: layout.fly.z },
     heading: 0.35,
     pouch: { x: layout.pouch.x, y: layout.pouch.y, z: layout.pouch.z, yaw: layout.pouch.yaw },
-    food: { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z },
+    food: { x: layout.pile.x, y: layout.pile.y, z: layout.pile.z },
     standingY: layout.board.topY + 2,
     ...over,
   };
@@ -51,6 +51,7 @@ const done: LoopFlags = {
   gagDone: true,
   napDone: true,
   wakeDone: true,
+  propDone: true,
   satiety: 0.9,
   cropVolume: 0.3,
 };
@@ -86,10 +87,10 @@ describe('NAP threshold (Murphy 2016)', () => {
 });
 
 describe('scene loop seed 1 (reel default)', () => {
-  it('starts on the food and never orbits or exits frame', () => {
+  it('starts at the scoop and never orbits or exits frame', () => {
     const loop = new SceneLoop(1);
     expect(LOOP_STATES[0]).toBe('ORBIT');
-    expect(loop.state).toBe('EAT_TOP');
+    expect(loop.state).toBe('WALK_SCOOP');
     const seen: string[] = [loop.state];
     let wrapped = false;
     let guard = 0;
@@ -97,12 +98,13 @@ describe('scene loop seed 1 (reel default)', () => {
       const out = loop.step(0.2, done);
       if (out.wrapped) wrapped = true;
       if (out.advanced && !seen.includes(out.state)) seen.push(out.state);
-      if (wrapped && out.state === 'EAT_TOP' && seen.length > 6) break;
+      if (wrapped && out.state === 'WALK_SCOOP' && seen.length > 6) break;
     }
-    expect(seen).toContain('WALK_REPOSITION');
-    expect(seen).toContain('TAKEOFF_1');
-    expect(seen).toContain('LAND_TABLE');
-    expect(seen).toContain('EAT_SIDE');
+    expect(seen).toContain('PICK_SCOOP');
+    expect(seen).toContain('DIP_SCOOP');
+    expect(seen).toContain('EAT_SCOOP');
+    expect(seen).toContain('WALK_MILL');
+    expect(seen).toContain('WALK_BIPED');
     expect(seen).toContain('GROOM_FULL');
     expect(seen).toContain('NAP');
     expect(seen).toContain('WAKE');
@@ -113,25 +115,36 @@ describe('scene loop seed 1 (reel default)', () => {
     expect(wrapped).toBe(true);
   });
 
-  it('holds EAT_TOP until the 45 s cap when the bout does not satiety-retract', () => {
+  it('holds EAT_SCOOP until the 45 s cap when the bout does not satiety-retract', () => {
     const loop = new SceneLoop(1);
+    loop.step(1, { ...done, walkDone: true });
+    expect(loop.state).toBe('PICK_SCOOP');
+    loop.step(1, { ...done, propDone: true });
+    expect(loop.state).toBe('APPROACH_TUB');
+    loop.step(1, { ...done, walkDone: true });
+    expect(loop.state).toBe('DIP_SCOOP');
+    loop.step(1, { ...done, propDone: true });
+    expect(loop.state).toBe('EAT_SCOOP');
     let t = 0;
-    while (loop.state === 'EAT_TOP' && t < 50) {
+    while (loop.state === 'EAT_SCOOP' && t < 50) {
       loop.step(0.5, { ...done, eatBoutDone: false, satiety: 0.3 });
       t += 0.5;
     }
     expect(t).toBeGreaterThanOrEqual(EAT_BOUT_CAP_S);
-    expect(loop.state).toBe('GROOM_SHORT');
+    expect(loop.state).toBe('DROP_SCOOP');
   });
 
-  it('emits a walking caption on WALK_REPOSITION', () => {
+  it('emits a mill caption on WALK_MILL', () => {
     const loop = new SceneLoop(1);
-    loop.step(1, { ...done, eatBoutDone: true });
-    expect(loop.state).toBe('GROOM_SHORT');
-    loop.step(1, { ...done, groomDone: true });
-    expect(loop.state).toBe('WALK_REPOSITION');
-    const out = loop.step(0, { ...done, walkDone: false, flightDone: false, eatBoutDone: false, groomDone: false });
-    expect(out.caption).toBe('Przechodzi');
+    const seen: string[] = [];
+    let millCaption = '';
+    for (let i = 0; i < 40; i++) {
+      const out = loop.step(0.5, done);
+      if (!seen.includes(out.state)) seen.push(out.state);
+      if (out.state === 'WALK_MILL' && !millCaption) millCaption = out.caption ?? '';
+    }
+    expect(seen).toContain('WALK_MILL');
+    expect(millCaption).toBe('Chodzi na bieżni');
   });
 
   it('skips NAP when satiety is below threshold and wraps without takeoff-exit', () => {
@@ -147,12 +160,12 @@ describe('scene loop seed 1 (reel default)', () => {
     }
     expect(seen).not.toContain('NAP');
     expect(seen).not.toContain('TAKEOFF_EXIT');
-    expect(seen).toContain('WALK_REPOSITION');
+    expect(seen).toContain('WALK_BIPED');
   });
 });
 
 describe('scene loop seed 1 (full / debug)', () => {
-  it('walks the orbit → exit-frame graph', () => {
+  it('walks the orbit → mill → exit-frame graph', () => {
     const loop = new SceneLoop(1, 'full');
     expect(loop.state).toBe('ORBIT');
     const seen: string[] = [loop.state];
@@ -163,9 +176,10 @@ describe('scene loop seed 1 (full / debug)', () => {
       if (seen.includes('EXIT_FRAME') && out.state === 'ORBIT' && seen.length > 8) break;
     }
     expect(seen).toContain('LAND_TOP');
-    expect(seen).toContain('EAT_TOP');
+    expect(seen).toContain('EAT_SCOOP');
     expect(seen).toContain('GROOM_SHORT');
-    expect(seen).toContain('EAT_SIDE');
+    expect(seen).toContain('WALK_MILL');
+    expect(seen).toContain('WALK_BIPED');
     expect(seen).toContain('GROOM_FULL');
     expect(seen).toContain('NAP');
     expect(seen).toContain('EXIT_FRAME');
@@ -173,7 +187,7 @@ describe('scene loop seed 1 (full / debug)', () => {
 
   it('emits authored orbit captions', () => {
     const loop = new SceneLoop(1, 'full');
-    const out = loop.step(0, { ...done, flightDone: false, eatBoutDone: false, walkDone: false, groomDone: false });
+    const out = loop.step(0, { ...done, flightDone: false, eatBoutDone: false, walkDone: false, groomDone: false, propDone: false });
     expect(out.caption).toBe('Krąży');
   });
 

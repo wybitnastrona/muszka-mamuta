@@ -22,16 +22,18 @@ import { applyWingVisual } from '../body/wings.ts';
 import { describeFlybodyHierarchy, type FlybodyMeta } from '../body/hierarchy.ts';
 import { SceneDirector } from '../body/sceneDirector.ts';
 import { createHeadstage, type Headstage } from '../body/headstage.ts';
+import { createScoop } from '../body/scoop.ts';
+import { createTreadmill } from '../body/treadmill.ts';
+import { createCreatineTub } from '../food/creatineTub.ts';
 import { odorGradientYaw } from '../body/odorField.ts';
-import { createProceduralTwarog, type ProceduralTwarog } from '../food/proceduralTwarog.ts';
-import { TwarogSystem, type ChemoSample } from '../food/twarogSystem.ts';
-import { createTwarogView, type TwarogView } from './Twarog.tsx';
+import { CreatineSystem } from '../food/creatineSystem.ts';
+import type { ChemoSample } from '../food/twarogSystem.ts';
+import { createPowderView, type PowderView } from './Powder.tsx';
 import { createFlyViewport } from './flyViewport.ts';
-import { createPackaging } from '../scene/Packaging.tsx';
-import { createCuttingBoard, disposeCuttingBoard, loadBoardMaps } from '../scene/CuttingBoard.tsx';
 import { kitchenLayout } from '../scene/layout.ts';
-import { POUCH_MM, crumbSizeMm, flyRootScale, mm } from '../scene/scale.ts';
+import { crumbSizeMm, flyRootScale, tableTopY } from '../scene/scale.ts';
 import { disposeKitchenTextures, loadKitchenTextures, type KitchenTextures } from '../scene/textures.ts';
+import { disposeCreatineTextures, loadCreatineTextures, type CreatineTextures } from '../scene/creatineTextures.ts';
 import { KITCHEN_ENV_INTENSITY, loadKitchenEnvironment } from '../scene/kitchenEnvironment.ts';
 import { updateStudioFog } from '../scene/kitchenFog.ts';
 import {
@@ -94,13 +96,14 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   mixer.setJitter(1, window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   let rig: ReturnType<typeof buildFlybodyRig> | null = null;
   let radius = 10;
-  let twarog: ProceduralTwarog | null = null;
-  let twarogView: TwarogView | null = null;
+  let powderView: PowderView | null = null;
   let director: SceneDirector | null = null;
   let headstage: Headstage | null = null;
-  let packLabel: THREE.Object3D | null = null;
+  let scoopHandle: ReturnType<typeof createScoop> | null = null;
+  let millHandle: ReturnType<typeof createTreadmill> | null = null;
+  let tubHandle: ReturnType<typeof createCreatineTub> | null = null;
   let kitchenTex: KitchenTextures | null = null;
-  let cuttingBoard: ReturnType<typeof createCuttingBoard> | null = null;
+  let creatineTex: CreatineTextures | null = null;
   const layout = kitchenLayout();
   const kitchen = createKitchen(layout.table.width, layout.table.depth, view.quality);
   world.add(kitchen.group);
@@ -122,7 +125,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   let ready = false;
   let appliedPreset: CameraPreset | null = null;
   let kitchenEnv: THREE.Texture | null = null;
-  const boardCentre = new THREE.Vector3(0, layout.board.topY, 0);
+  const boardCentre = new THREE.Vector3(0, tableTopY(), 0);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let gateEl: HTMLPreElement | null = null;
   if (debug === 'gate') {
@@ -178,7 +181,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     return new THREE.LineSegments(geom, new THREE.LineBasicMaterial({ color: 0x6ee7b7 }));
   };
 
-  const updateFlightDebug = (d: SceneDirector, mode: 'ground' | 'flight' | 'onFood') => {
+  const updateFlightDebug = (d: SceneDirector, mode: 'ground' | 'flight' | 'onFood' | 'mill') => {
     const s = d.debugSolids();
     while (flightBoxes.length < s.aabbs.length) {
       const h = new THREE.Box3Helper(new THREE.Box3(), 0xf87171);
@@ -222,7 +225,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
 
   const toFood = (worldPt: THREE.Vector3) => {
     tmp.copy(worldPt);
-    twarog!.group.worldToLocal(tmp);
+    powderView!.group.worldToLocal(tmp);
     return { x: tmp.x, y: tmp.y, z: tmp.z };
   };
 
@@ -239,18 +242,6 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
 
   const applyPreset = (name: CameraPreset) => {
     view.setLetterbox(name === 'Reel');
-    if (debug === 'label' && packLabel) {
-      const frame = labelCloseupFrame(packLabel);
-      camera.fov = frame.fov;
-      camera.position.fromArray(frame.position);
-      camera.lookAt(...frame.lookAt);
-      camera.updateProjectionMatrix();
-      controls.target.fromArray(frame.lookAt);
-      controls.enabled = true;
-      controls.update();
-      appliedPreset = name;
-      return;
-    }
     if (name === 'Zbliżenie') {
       controls.enabled = false;
       appliedPreset = name;
@@ -261,7 +252,9 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
       appliedPreset = name;
       return;
     }
-    const frame = frameForPreset(name, radius);
+    const frame = name === 'Etykieta' && tubHandle
+      ? labelCloseupFrame(tubHandle.labelAnchor)
+      : frameForPreset(name, radius);
     camera.fov = frame.fov;
     camera.position.fromArray(frame.position);
     camera.lookAt(...frame.lookAt);
@@ -273,13 +266,12 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   };
 
   const updateCloseup = (dt: number) => {
-    if (!rig || !twarog) return;
+    if (!rig || !powderView) return;
     const left = rig.bones.get('labellum_L');
     const right = rig.bones.get('labellum_R');
     if (left && right) { left.getWorldPosition(labWorld); right.getWorldPosition(labRight); labWorld.lerp(labRight, 0.5); }
     else rig.contact.getWorldPosition(labWorld);
-    biteWorld.copy(twarog.biteFront);
-    twarog.group.localToWorld(biteWorld);
+    biteWorld.set(layout.biteFront.x, layout.biteFront.y, layout.biteFront.z);
     contactMid.copy(labWorld).lerp(biteWorld, 0.18);
     const off = closeupOffset(radius);
     closeCam.copy(contactMid).add(new THREE.Vector3(off[0], off[1], off[2]));
@@ -291,7 +283,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   };
 
   const applyVisualPolish = (
-    mode: 'ground' | 'flight' | 'onFood',
+    mode: 'ground' | 'flight' | 'onFood' | 'mill',
     pitch: number,
     roll: number,
     odorYaw: number,
@@ -401,11 +393,11 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
       if (cmd === 'restartMeal') {
         director.reset(opts.seedRef.current);
         director.food.reset();
-        twarogView?.resetCrumbs();
+        powderView?.resetCrumbs();
         opts.commandRef.current = 'idle';
       } else if (cmd === 'newPortion') {
         const n = director.food.nextPortion();
-        twarogView?.resetCrumbs();
+        powderView?.resetCrumbs();
         opts.setPortions(n);
         opts.setToast(true);
         opts.onPortionRef.current?.(n);
@@ -436,12 +428,12 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           mixer.play(MOTION_LOOP_ORDER[motionIndex], { restart: true, fade: 0.12 });
           opts.setClipLabel(MOTION_LOOP_ORDER[motionIndex]);
         }
-      } else if (twarog && twarogView && director) {
+      } else if (powderView && director) {
         const workerMn9 = opts.summaryRef?.current?.mn9Rate;
         const mn9Rate = typeof workerMn9 === 'number' ? workerMn9 : live.mn9Rate;
         const out = director.update({
           dt, mn9Rate, satiety: live.satiety, bitter: live.bitter, odor: live.odor,
-          cameraDist: camera.position.distanceTo(twarog.group.position),
+          cameraDist: camera.position.distanceTo(powderView.group.position),
           cropVolume: live.cropVolume,
         });
         applyPoseToBones(rig.bones, out.flyPose.pose);
@@ -472,7 +464,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           out.flyPose.roll,
           odorGradientYaw(
             { x: out.flyPose.position.x, z: out.flyPose.position.z },
-            { x: layout.curd.x, z: layout.curd.z },
+            { x: layout.pile.x, z: layout.pile.z },
           ),
           dt,
           live.cropVolume,
@@ -502,7 +494,6 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           tL.getWorldPosition(tarsusL);
           tR.getWorldPosition(tarsusR);
           heldCrumb.position.lerpVectors(tarsusL, tarsusR, 0.5);
-          // Lift slightly toward the labellum so it reads as "held", not "dropped".
           heldCrumb.position.y += heldCrumbSize * 0.35;
           const s = Math.max(0.05, 1 - held.progress);
           heldCrumb.scale.setScalar(s);
@@ -511,6 +502,26 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
         } else {
           heldCrumb.visible = false;
         }
+        if (scoopHandle && tR) {
+          const grip = new THREE.Matrix4();
+          tR.updateWorldMatrix(true, false);
+          grip.copy(tR.matrixWorld);
+          scoopHandle.update({
+            mode: out.scoop?.mode ?? 'table',
+            fill: out.scoop?.fill ?? 0,
+            dipU: out.scoop?.dipU ?? 0,
+            table: layout.scoop,
+            dropped: {
+              x: layout.mill.x - layout.mill.hx - 10,
+              y: tableTopY() + 0.6,
+              z: layout.mill.z + 16,
+              yaw: 0.3,
+            },
+            gripWorld: out.scoop?.mode === 'held' ? grip : null,
+            heading: out.flyPose.heading,
+          });
+        }
+        millHandle?.update(dt, out.mode === 'mill');
         if (out.caption !== lastCaption) {
           lastCaption = out.caption;
           opts.setCaption(out.caption);
@@ -535,10 +546,10 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           opts.setStateLabel(out.hudState);
         }
         if (out.events.length) opts.onEventsRef.current?.(out.events);
-        for (const ev of out.crumbs) twarogView.spawnCrumbs(ev);
+        for (const ev of out.crumbs) powderView.spawnCrumbs(ev);
         for (const ev of out.events) {
           if (ev.type === 'portion') {
-            twarogView.resetCrumbs();
+            powderView.resetCrumbs();
             opts.setPortions(ev.count);
             opts.setToast(true);
             opts.onPortionRef.current?.(ev.count);
@@ -561,7 +572,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
             contactStrength: out.chemo?.contact.strength ?? 0,
           });
         }
-        twarogView.update(dt, director.food);
+        if (director.food instanceof CreatineSystem) powderView.update(dt, director.food);
         if (flightEl) updateFlightDebug(director, out.mode);
         if (out.loopWrapped && rec) void rec.stop();
       }
@@ -571,8 +582,6 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
       const want: CameraPreset = rec ? 'Reel' : opts.presetRef.current;
       if (debug === 'weights') {
         frameWeights();
-      } else if (debug === 'label' && packLabel) {
-        if (appliedPreset !== want) applyPreset(want);
       } else if (want === 'Reel' && cameraLive) {
         if (appliedPreset !== want) applyPreset(want);
         applyReelCamera(sceneTime);
@@ -598,6 +607,12 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     kitchenTex = await loadKitchenTextures(controller.signal);
     if (disposed) return;
     try {
+      creatineTex = await loadCreatineTextures(controller.signal);
+    } catch (err) {
+      console.warn('Creatine tub textures unavailable; using authored plastic.', err);
+      creatineTex = null;
+    }
+    try {
       kitchenEnv = await loadKitchenEnvironment(view.pmrem, controller.signal);
       if (disposed) {
         kitchenEnv.dispose();
@@ -609,31 +624,16 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     } catch {
       kitchenEnv = null;
     }
-    const boardMaps = await loadBoardMaps(controller.signal, renderer.capabilities.getMaxAnisotropy());
-    if (disposed) {
-      boardMaps.top.dispose();
-      boardMaps.topNormal.dispose();
-      boardMaps.logo.dispose();
-      return;
-    }
-    const envForMats = kitchenEnv ?? envMap;
-    cuttingBoard = createCuttingBoard(boardMaps, {
-      anisotropy: renderer.capabilities.getMaxAnisotropy(),
-      envMap: envForMats,
-      quality: view.quality,
-    });
-    world.add(cuttingBoard.group);
-    twarog = createProceduralTwarog(kitchenTex, { seed: 1 });
-    twarog.group.position.set(layout.curd.x, layout.curd.y, layout.curd.z);
-    world.add(twarog.group);
-    const foodSystem = TwarogSystem.fromFracture(twarog.fractured, { seed: 1 });
-    twarogView = createTwarogView(twarog);
+    powderView = createPowderView(layout.pile, creatineTex?.crumb ?? null);
+    world.add(powderView.group);
+    const foodSystem = CreatineSystem.create({ seed: 1 });
     opts.setPortions(foodSystem.portionCount);
-    const pack = createPackaging(kitchenTex, { anisotropy: renderer.capabilities.getMaxAnisotropy(), seed: 11, envMap: envForMats });
-    pack.group.position.set(layout.pouch.x, layout.pouch.y, layout.pouch.z);
-    pack.group.rotation.y = layout.pouch.yaw;
-    world.add(pack.group);
-    packLabel = pack.labelFront;
+    tubHandle = createCreatineTub(creatineTex);
+    world.add(tubHandle.group);
+    scoopHandle = createScoop();
+    world.add(scoopHandle.group);
+    millHandle = createTreadmill();
+    world.add(millHandle.group);
     const meta = await (await get('model.json')).json() as FlybodyMeta;
     const buffer = await (await get(meta.binary)).arrayBuffer();
     if (disposed) return;
@@ -652,15 +652,15 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     }
     built.root.updateMatrixWorld(true);
     const bounds = new THREE.Box3().setFromObject(built.root);
-    const spawnY = layout.board.topY + (-bounds.min.y);
+    const spawnY = tableTopY() + (-bounds.min.y);
     built.root.position.set(layout.fly.x, spawnY, layout.fly.z);
     radius = bounds.getBoundingSphere(new THREE.Sphere()).radius;
     director = new SceneDirector({
       food: foodSystem,
-      foodOrigin: { x: layout.curd.x, y: layout.curd.y, z: layout.curd.z },
+      foodOrigin: { x: layout.pile.x, y: layout.pile.y, z: layout.pile.z },
       pouch: {
-        cx: layout.pouch.x, cz: layout.pouch.z,
-        hx: mm(POUCH_MM.length) / 2, hz: mm(POUCH_MM.width) / 2, yaw: layout.pouch.yaw,
+        cx: layout.mill.x, cz: layout.mill.z,
+        hx: layout.mill.hx, hz: layout.mill.hz, yaw: layout.mill.yaw,
       },
       position: { x: layout.fly.x, y: spawnY, z: layout.fly.z },
       heading: 0.35,
@@ -705,9 +705,9 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
       world.updateMatrixWorld(true);
       frameMouthparts(false);
     }
-    if (debug === 'label' && packLabel) {
+    if (debug === 'label') {
       world.updateMatrixWorld(true);
-      applyPreset('Widok kuchni');
+      applyPreset('Etykieta');
     }
     const autoSec = parseRecordSeconds();
     if (autoSec !== null && !rec) {
@@ -736,9 +736,12 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     gateEl?.remove();
     kitchenEnv?.dispose();
     if (kitchenTex) disposeKitchenTextures(kitchenTex);
-    if (cuttingBoard) disposeCuttingBoard(cuttingBoard);
+    if (creatineTex) disposeCreatineTextures(creatineTex);
     kitchen.maps.forEach((m) => m.dispose());
-    twarogView?.dispose();
+    powderView?.dispose();
+    tubHandle?.dispose();
+    scoopHandle?.dispose();
+    millHandle?.dispose();
     headstage?.dispose();
     view.dispose();
   };

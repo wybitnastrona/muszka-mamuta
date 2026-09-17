@@ -10,7 +10,7 @@ export const PHASE_IDS = ['APPROACH', 'TASTE', 'EXTEND', 'PUMP', 'RETRACT', 'RES
 export type PhaseId = (typeof PHASE_IDS)[number];
 
 export const PHASE_STRIP: Record<PhaseId, { label: string; pl: string; en: string }> = {
-  APPROACH: { label: 'PODEJŚCIE', pl: 'Wyczuwa wanilię', en: 'Sensing vanilla' },
+  APPROACH: { label: 'PODEJŚCIE', pl: 'Wyczuwa proszek', en: 'Sensing powder' },
   TASTE: { label: 'SMAK', pl: 'Sprawdza nogą', en: 'Tasting with a foot' },
   EXTEND: { label: 'WYSUŃ', pl: 'Wysuwa ryjek', en: 'Extending the proboscis' },
   PUMP: { label: 'POMPUJ', pl: 'Pompuje', en: 'Pumping' },
@@ -22,16 +22,22 @@ export const LOOP_CAPTIONS_PL: Record<string, string> = {
   ORBIT: 'Krąży',
   ORBIT_SHORT: 'Krąży',
   LAND_TOP: 'Ląduje',
-  LAND_TABLE: 'Ląduje',
-  TAKEOFF_1: 'Startuje',
+  LAND_MILL: 'Ląduje',
+  TAKEOFF_MILL: 'Startuje',
   TAKEOFF_EXIT: 'Startuje',
   EXIT_FRAME: 'Startuje',
   GROOM_SHORT: 'Czyści się',
   GROOM_FULL: 'Czyści się',
   WAKE: 'Czyści się',
   NAP: 'Trawi',
-  WALK_REPOSITION: 'Przechodzi',
-  WALK_TOP: 'Przechodzi',
+  WALK_SCOOP: 'Idzie po miarkę',
+  APPROACH_TUB: 'Podchodzi do puszki',
+  PICK_SCOOP: 'Podnosi miarkę',
+  DIP_SCOOP: 'Nabiera proszek',
+  DROP_SCOOP: 'Odkłada miarkę',
+  WALK_MILL: 'Chodzi na bieżni',
+  WALK_BIPED: 'Chodzi na dwóch',
+  EAT_SCOOP: 'Je kreatynę',
 };
 
 const LOOP_CAPTIONS_EN: Record<string, string> = {
@@ -41,6 +47,14 @@ const LOOP_CAPTIONS_EN: Record<string, string> = {
   'Czyści się': 'Grooming',
   'Trawi': 'Digesting',
   'Przechodzi': 'Walking',
+  'Idzie po miarkę': 'Walking to the scoop',
+  'Podchodzi do puszki': 'Approaching the tub',
+  'Podnosi miarkę': 'Picking up the scoop',
+  'Nabiera proszek': 'Scooping powder',
+  'Odkłada miarkę': 'Putting the scoop down',
+  'Chodzi na bieżni': 'Walking the mill',
+  'Chodzi na dwóch': 'Walking on two legs',
+  'Je kreatynę': 'Eating creatine',
   'Śpiewa do krowy': 'Singing to the cow',
   'Śliska folia': 'Slippery foil',
   'Okruszek': 'A crumb',
@@ -94,9 +108,9 @@ export function resolveHudCaption(args: {
   const phaseLine = args.lang === 'en' ? PHASE_STRIP[phase].en : PHASE_STRIP[phase].pl;
   const gagLine = args.gag ? GAG_CAPTIONS_PL[args.gag] : '';
   const authored = args.caption || gagLine || loopCaptionPl(args.macro) || '';
-  const eating = args.macro === 'GROUND' || args.macro === 'EAT_TOP'
-    || args.macro === 'EAT_SIDE' || args.macro === 'EAT_SIDE_2'
-    || args.macro === 'WALK_TOP';
+  const eating = args.macro === 'GROUND' || args.macro === 'EAT_SCOOP'
+    || args.macro === 'EAT_TOP' || args.macro === 'EAT_SIDE'
+    || args.macro === 'EAT_SIDE_2' || args.macro === 'WALK_TOP';
   const headline = translateCaption(authored, args.lang) || phaseLine;
   return { phase, headline, phaseLine, highlightPhase: eating && !authored };
 }

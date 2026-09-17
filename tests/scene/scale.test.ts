@@ -10,6 +10,8 @@ import {
   FLY_RENDER_SCALE,
   LOD_BODY_LENGTHS,
   LOD_FADE_MS,
+  MILL_MM,
+  PILE_MM,
   POUCH_INNER_MM,
   POUCH_MM,
   REAL_FLY_BODY_MM,
@@ -49,6 +51,8 @@ describe('scene scale', () => {
     expect(BOARD_EDGE_RADIUS_MM).toBe(6);
     expect(BOARD_YAW_DEG).toBe(12);
     expect(boardTopY()).toBe(40);
+    expect(PILE_MM).toEqual({ radius: 20, height: 14 });
+    expect(MILL_MM.length).toBe(120);
   });
 
   it('derives pouch inner size from curd plus seals', () => {
@@ -88,6 +92,10 @@ describe('scene scale', () => {
     const layout = kitchenLayout();
     const reel = reelFrame(half);
     expect(reel.position[1]).toBeGreaterThan(8);
-    expect(Math.hypot(reel.position[0] - layout.curd.x, reel.position[2] - layout.curd.z)).toBeGreaterThan(200);
+    expect(Math.hypot(reel.position[0] - layout.pile.x, reel.position[2] - layout.pile.z)).toBeGreaterThan(200);
+    expect(layout.pile.x).toBeLessThan(layout.scoop.x);
+    expect(layout.scoop.x).toBeLessThan(layout.mill.x);
+    expect(layout.tubSlot.diameter).toBe(layout.tub.diameter);
+    expect(layout.tub.x).toBe(layout.pile.x);
   });
 });

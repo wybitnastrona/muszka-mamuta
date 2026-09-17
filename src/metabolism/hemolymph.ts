@@ -9,15 +9,15 @@
  * `modulation.ts`). Circuit inhibition is the GABA/glutamate already in the
  * extracted graph — this file does not invent a bitter pathway.
  *
- * Vanilla-sweetened twaróg (`TWAROG_MAMUTA_WANILIOWY`) yields ~3× the
- * trehalose of unsweetened curd (`sweet: 0.15`). Fast sugar → insulin/satiety
- * cuts a bout short; baseline trehalose drain then restores AKH while fat
- * (from `aa`) moves slowly → shorter feeding bouts, more of them.
+ * Live creatine (`CREATINE_KFD`, sweet 0.05) yields little trehalose, so
+ * satiety rises slowly and she returns to the scoop. Vanilla twaróg
+ * (`TWAROG_MAMUTA_WANILIOWY`) remains a test fixture at ~3× the trehalose of
+ * unsweetened curd (`sweet: 0.15`).
  */
 
 import { FRAME_MS, clamp01 } from '../brain/params.ts';
 import {
-  TWAROG_MAMUTA_WANILIOWY,
+  CREATINE_KFD,
   type FoodProfile,
 } from '../food/foodProfile.ts';
 import { CURD_CHUNK_COUNT, CURD_TOTAL_MASS_G } from '../scene/scale.ts';
@@ -184,7 +184,7 @@ export class Hemolymph {
   private readonly spotsInternal: DefecationEvent[] = [];
 
   constructor(opts: HemolymphOptions = {}) {
-    this.profile = opts.profile ?? TWAROG_MAMUTA_WANILIOWY;
+    this.profile = opts.profile ?? CREATINE_KFD;
     this.spotsEnabled = opts.spotsEnabled ?? false;
     this.s = { ...INITIAL_STATE };
     this.reset();

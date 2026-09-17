@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CREATINE_KFD,
   TWAROG_MAMUTA_WANILIOWY,
   TWAROG_PLAIN_UNSWEETENED,
 } from '../../src/food/foodProfile.ts';
@@ -101,15 +102,17 @@ describe('hemolymph (authored, not connectome)', () => {
     expect(gut).toBeLessThanOrEqual(1);
   });
 
-  it('reaches satiety sooner on vanilla-sweetened twaróg than on plain curd', () => {
+  it('reaches satiety sooner on vanilla-sweetened twaróg than on plain curd or creatine', () => {
     expect(trehaloseYield(TWAROG_MAMUTA_WANILIOWY) / trehaloseYield(TWAROG_PLAIN_UNSWEETENED)).toBeCloseTo(3, 5);
 
     const threshold = 0.5;
     const vanillaT = secondsToSatiety(TWAROG_MAMUTA_WANILIOWY, threshold);
     const plainT = secondsToSatiety(TWAROG_PLAIN_UNSWEETENED, threshold);
+    const creatineT = secondsToSatiety(CREATINE_KFD, threshold);
     expect(vanillaT).toBeLessThan(Infinity);
     expect(vanillaT).toBeLessThan(plainT);
     expect(plainT - vanillaT).toBeGreaterThan(2);
+    expect(vanillaT).toBeLessThan(creatineT);
   });
 
   it('emits defecation mass when the gut is full, and hides spots by default', () => {

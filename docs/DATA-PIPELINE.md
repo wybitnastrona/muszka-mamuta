@@ -18,12 +18,15 @@ We therefore:
 2. Split that channel by a **measured** MN9 effect (`deltaMn9Hz` in
    `drive.json`), not by receptor names and not by a single-path sign.
 
-Twaróg Mamuta is the **vanilla-sweetened** variant (`sweet: 0.75` in
-`src/food/foodProfile.ts`) — an authored assumption, not a MaleCNS measurement.
-MaleCNS still has no sugar/bitter split, so hunger modulates the **whole**
-proboscis gustatory channel. Sweetness only scales hemolymph trehalose yield
-(see `docs/METABOLISM.md`). Using the full gustatory set instead of missing
-receptor labels is an authored modelling choice on top of measured connectivity.
+Twaróg Mamuta (`sweet: 0.75`) remains a **test fixture**. Live food is
+authored creatine powder (`CREATINE_KFD`, `sweet: 0.05`, `aa: 0.85`) in
+`src/food/foodProfile.ts` — not a MaleCNS measurement. MaleCNS still has no
+sugar/bitter split **and no creatine / Ir76b annotations** (0 hits on
+`creatine|kreatyn|Ir76b|amino` in 211 577 bodies). Hunger modulates the
+**whole** proboscis gustatory channel. Sweetness only scales hemolymph
+trehalose yield (see `docs/METABOLISM.md`). Using the full gustatory set
+instead of missing receptor labels is an authored modelling choice on top of
+measured connectivity.
 
 ## Rejected: `path_sign` (keep the negative result)
 

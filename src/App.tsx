@@ -14,7 +14,7 @@ import type { PopulationSummary } from './brain/lif';
 import { asset, loadAtlas, type Atlas } from './lib/atlas';
 import { frameAt, type ActivityFrame, type ModelReplay } from './lib/replay';
 import { t, type Lang } from './i18n';
-import { TWAROG_MAMUTA_WANILIOWY } from './food/foodProfile';
+import { CREATINE_KFD } from './food/foodProfile';
 import { Hemolymph } from './metabolism/hemolymph';
 import { MODULATION_PUSH_MS, pushModulation } from './metabolism/modulation';
 import { parseReelMode, REEL_SLOGAN_EN, REEL_SLOGAN_PL } from './hud/reel.ts';
@@ -52,10 +52,10 @@ export function App() {
   const [neuronN, setNeuronN] = useState(0);
   const [preset, setPreset] = useState<CameraPreset>(parseRecordSeconds() != null ? 'Reel' : 'Widok kuchni');
   const [recording, setRecording] = useState(() => parseRecordSeconds() != null);
-  const [hemoHud, setHemoHud] = useState(() => new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY }).hud());
+  const [hemoHud, setHemoHud] = useState(() => new Hemolymph({ profile: CREATINE_KFD }).hud());
   const [sceneHud, setSceneHud] = useState<SceneHudSnapshot>(EMPTY_SCENE_HUD);
   const runtime = useRef<BrainRuntime | null>(null);
-  const hemolymph = useRef(new Hemolymph({ profile: TWAROG_MAMUTA_WANILIOWY, spotsEnabled: false }));
+  const hemolymph = useRef(new Hemolymph({ profile: CREATINE_KFD, spotsEnabled: false }));
   const lastChemoMs = useRef(0);
   const raster = useRef(new SpikeHistory());
   const commandRef = useRef<FlyCommand>('idle');
@@ -286,8 +286,8 @@ export function App() {
             mn9Rate={rates.mn9Rate}
             satiety={hemoHud.satiety}
             cropVolume={hemoHud.cropVolume}
-            bitter={TWAROG_MAMUTA_WANILIOWY.bitter}
-            odor={TWAROG_MAMUTA_WANILIOWY.odor}
+            bitter={CREATINE_KFD.bitter}
+            odor={CREATINE_KFD.odor}
             summaryRef={summaryRef}
             hemoRef={hemolymph}
             onChemo={(sample: ChemoSample) => {
