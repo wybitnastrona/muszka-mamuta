@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   APPROACH_ARRIVE_MM,
+  BITTER_RETRACT,
   FeedingStateMachine,
   HEADING_ALIGN_DEG,
   MN9_HOLD_MS,
   NEAR_FOOD,
+  PUMP_CYCLES_MAX,
+  PUMP_CYCLES_MIN,
   SATIETY_RETRACT,
+  pumpCycleCount,
+  restDuration,
 } from '../../src/body/feedingStateMachine.ts';
+import { PUMP_HZ } from '../../src/body/feedingMotion.ts';
+import { PHASE_MIN_S } from '../../src/body/tempo.ts';
 import { headingError } from '../../src/body/math.ts';
 import type { FeedingState } from '../../src/body/types.ts';
 import { odorGradientYaw } from '../../src/body/odorField.ts';
@@ -48,7 +55,7 @@ describe('feeding state machine', () => {
     const sm = new FeedingStateMachine({ heading: 0.6 });
     const seen: FeedingState[] = [sm.state];
     let dist = NEAR_FOOD * 2.2;
-    for (let i = 0; i < 800; i++) {
+    for (let i = 0; i < 1200; i++) {
       const t = i * dt;
       if (sm.state === 'APPROACH') dist = Math.max(ARRIVED, dist - NEAR_FOOD * 1.2 * dt);
       const mn9 = sm.state === 'TASTE' || sm.state === 'EXTEND' || sm.state === 'PUMP' ? 18 : 0;
@@ -78,8 +85,12 @@ describe('feeding state machine', () => {
 
   it('holds EXTEND until MN9 stays above threshold for 80 ms', () => {
     const sm = new FeedingStateMachine({ heading: 0 });
-    drive(sm, 0.4, { mn9Rate: 0, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
+    // Past the APPROACH dwell, then sit in TASTE past its readability dwell with MN9 silent.
+    drive(sm, PHASE_MIN_S.APPROACH + 0.1, { mn9Rate: 0, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
     expect(sm.state).toBe('TASTE');
+    drive(sm, PHASE_MIN_S.TASTE, { mn9Rate: 0, distanceToFood: ARRIVED });
+    expect(sm.state).toBe('TASTE');
+    // The gate itself is still 80 ms of MN9 above threshold.
     drive(sm, (MN9_HOLD_MS - 20) / 1000, { mn9Rate: 12, distanceToFood: ARRIVED });
     expect(sm.state).toBe('TASTE');
     drive(sm, 0.08, { mn9Rate: 12, distanceToFood: ARRIVED });
@@ -88,10 +99,10 @@ describe('feeding state machine', () => {
 
   it('emits a bite once per completed pump cycle', () => {
     const sm = new FeedingStateMachine({ heading: 0 });
-    drive(sm, 0.5, { mn9Rate: 12, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
+    drive(sm, PHASE_MIN_S.APPROACH + PHASE_MIN_S.TASTE + 0.3, { mn9Rate: 12, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
     expect(['EXTEND', 'PUMP', 'RETRACT']).toContain(sm.state);
     const bites: number[] = [];
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 600; i++) {
       const out = sm.step({
         dt,
         mn9Rate: 40,
@@ -104,19 +115,62 @@ describe('feeding state machine', () => {
       for (const e of out.events) if (e.type === 'bite') bites.push(e.cycle);
       if (sm.state === 'RETRACT' || sm.state === 'REST') break;
     }
-    expect(bites.length).toBeGreaterThanOrEqual(2);
-    expect(bites.length).toBeLessThanOrEqual(5);
+    expect(bites.length).toBeGreaterThanOrEqual(PUMP_CYCLES_MIN);
+    expect(bites.length).toBeLessThanOrEqual(PUMP_CYCLES_MAX);
+    expect(bites.length).toBe(pumpCycleCount(40));
   });
 
   it('retracts early when satiety exceeds 0.85', () => {
     const sm = new FeedingStateMachine({ heading: 0 });
-    drive(sm, 0.7, { mn9Rate: 20, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
+    const toPump = PHASE_MIN_S.APPROACH + PHASE_MIN_S.TASTE + PHASE_MIN_S.EXTEND + 0.3;
+    drive(sm, toPump, { mn9Rate: 20, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
     if (sm.state !== 'PUMP') {
       drive(sm, 0.5, { mn9Rate: 20, distanceToFood: ARRIVED });
     }
     expect(sm.state).toBe('PUMP');
     drive(sm, 0.05, { mn9Rate: 20, satiety: SATIETY_RETRACT + 0.02, distanceToFood: ARRIVED });
     expect(sm.state).toBe('RETRACT');
+  });
+
+  it('holds each phase for its authored minimum, but interrupts still fire at once', () => {
+    const sm = new FeedingStateMachine({ heading: 0 });
+    const seen = new Map<FeedingState, number>();
+    let last: FeedingState = sm.state;
+    let age = 0;
+    const steps = Math.ceil(12 / dt);
+    for (let i = 0; i < steps; i++) {
+      sm.step({
+        dt,
+        mn9Rate: 30,
+        bitter: 0,
+        satiety: 0.2,
+        odorYaw: 0,
+        odorStrength: 1,
+        distanceToFood: ARRIVED,
+      });
+      if (sm.state !== last) {
+        seen.set(last, age);
+        last = sm.state;
+        age = 0;
+      } else {
+        age += dt;
+      }
+      if (last === 'SEARCH' && seen.has('REST')) break;
+    }
+    for (const phase of ['APPROACH', 'TASTE', 'EXTEND', 'RETRACT'] as const) {
+      expect(seen.get(phase), phase).toBeGreaterThanOrEqual(PHASE_MIN_S[phase] - 2 * dt);
+    }
+    // PUMP is lengthened by cycle count at the unchanged 6 Hz pump, not by a dwell.
+    expect(seen.get('PUMP')).toBeGreaterThanOrEqual((PUMP_CYCLES_MIN - 1) / PUMP_HZ);
+    expect(seen.get('REST')).toBeGreaterThanOrEqual(restDuration(0.2) - 2 * dt);
+
+    // Bitter contact leaves PUMP on the next step regardless of the tempo floor.
+    const bitter = new FeedingStateMachine({ heading: 0 });
+    const toPump = PHASE_MIN_S.APPROACH + PHASE_MIN_S.TASTE + PHASE_MIN_S.EXTEND + 0.3;
+    drive(bitter, toPump, { mn9Rate: 30, distanceToFood: ARRIVED, odorStrength: 1, odorYaw: 0 });
+    expect(bitter.state).toBe('PUMP');
+    drive(bitter, dt, { mn9Rate: 30, bitter: BITTER_RETRACT, distanceToFood: ARRIVED });
+    expect(bitter.state).toBe('RETRACT');
   });
 });
 

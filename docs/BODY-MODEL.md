@@ -16,6 +16,28 @@ extends stays MN9-gated. That pause is the reel shot; the loop does not skip it.
 Code: `src/body/sceneDirector.ts`, `sceneLoop.ts`, `flight.ts`, `grooming.ts`,
 `gags.ts`, `wings.ts`. Visual apply-only: `src/components/flySceneMount.ts`.
 
+## Phase tempo (authored readability, not measurement)
+
+The HUD phase strip has to be readable on a 1080×1920 reel, so each feeding
+phase has an **authored minimum duration** in `src/body/tempo.ts`
+(`PHASE_MIN_S`): APPROACH 1.2 s, TASTE 1.0 s, EXTEND 1.1 s, RETRACT 0.8 s.
+The floor blocks only *completion* transitions; interrupts still fire on the
+next step (bitter contact or satiety > 0.85 out of PUMP, TASTE timeout → SEARCH,
+now 3.0 s so the gate has time to open after the longer dwell). REST is
+`restDuration = 1.2 + 2.0 · satiety`.
+
+PUMP is **not** slowed: the pharyngeal pump stays at `PUMP_HZ = 6`. POMPUJ is
+made longer by pumping more cycles per bout (`pumpCycleCount`: 8–14 cycles
+scaling with MN9 drive above threshold, i.e. 1.3–2.3 s), and every cycle is
+still one `bite`, so a longer phase eats more twaróg rather than stretching an
+animation. Clip playback (`per`, `retract`) is untouched; non-looping clips
+hold their last frame for the rest of the dwell.
+
+The MN9 gate (`MN9_EXTEND_HZ = 8`, `MN9_HOLD_MS = 80`) and `TASTE_MIN_S`
+(gate eligibility) are unchanged. None of these seconds are a measurement of
+*Drosophila* feeding; the earlier values (PUMP 0.3–0.8 s, REST 0.35–1.8 s)
+were just too short to read.
+
 ## What Flybody actually has
 
 Group `body` materials: `body`, `black`, `red` (compound eyes), `ocelli`,

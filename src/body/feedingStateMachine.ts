@@ -2,6 +2,7 @@ import type { ClipName, FeedingEvent, FeedingState } from './types.ts';
 import { headingError, turnToward, clamp, clamp01 } from './math.ts';
 import { CLIP_DURATION, PUMP_HZ, clipForState } from './feedingMotion.ts';
 import { ODOR_DETECT } from './odorField.ts';
+import { phaseMayComplete } from './tempo.ts';
 import { flyVisualLengthMm } from '../scene/scale.ts';
 
 export const HEADING_ALIGN_DEG = 15;
@@ -15,8 +16,13 @@ export const NEAR_FOOD = flyVisualLengthMm() * 0.4;
 /** Close enough to the surface-standoff point to leave APPROACH. */
 export const APPROACH_ARRIVE_MM = 1;
 export const STEP_LENGTH = flyVisualLengthMm() * 0.35;
+/** Gate eligibility floor; the readable dwell is PHASE_MIN_S.TASTE (tempo.ts). */
 export const TASTE_MIN_S = 0.25;
-export const TASTE_TIMEOUT_S = 1.6;
+/** Raised with the longer TASTE dwell so the MN9 gate still has time to open. */
+export const TASTE_TIMEOUT_S = 3.0;
+/** Pump cycles per bout at threshold / at strong MN9 drive. PUMP_HZ is unchanged. */
+export const PUMP_CYCLES_MIN = 8;
+export const PUMP_CYCLES_MAX = 14;
 export const GROOM_SATIETY = 0.7;
 
 export type FeedingInput = {
@@ -114,15 +120,15 @@ export class FeedingStateMachine {
         const yaw = input.approachYaw ?? input.odorYaw;
         this.heading = turnToward(this.heading, yaw, dt, TURN_RATE_RAD_S * 0.45);
         const aligned = Math.abs(headingError(this.heading, yaw)) < HEADING_ALIGN_DEG * Math.PI / 180;
-        if (input.distanceToFood <= APPROACH_ARRIVE_MM && aligned) enter('TASTE');
+        if (input.distanceToFood <= APPROACH_ARRIVE_MM && aligned && this.mayComplete()) enter('TASTE');
         break;
       }
       case 'TASTE':
-        if (this.stateAge >= TASTE_MIN_S && this.mn9HoldMs >= MN9_HOLD_MS) enter('EXTEND');
+        if (this.stateAge >= TASTE_MIN_S && this.mn9HoldMs >= MN9_HOLD_MS && this.mayComplete()) enter('EXTEND');
         else if (this.stateAge >= TASTE_TIMEOUT_S) enter('SEARCH');
         break;
       case 'EXTEND':
-        if (this.stateAge >= CLIP_DURATION.per) enter('PUMP');
+        if (this.stateAge >= CLIP_DURATION.per && this.mayComplete()) enter('PUMP');
         break;
       case 'PUMP': {
         this.pumpCycleT += dt;
@@ -136,15 +142,16 @@ export class FeedingStateMachine {
           this.pumpCycles += 1;
           this.biteThisCycle = false;
         }
+        // Interrupts (satiety, bitter) bypass the tempo floor; completion does not.
         if (input.satiety > SATIETY_RETRACT || input.bitter >= BITTER_RETRACT) enter('RETRACT');
-        else if (this.pumpCycles >= this.pumpTarget) enter('RETRACT');
+        else if (this.pumpCycles >= this.pumpTarget && this.mayComplete()) enter('RETRACT');
         break;
       }
       case 'RETRACT':
-        if (this.stateAge >= CLIP_DURATION.retract) enter('REST');
+        if (this.stateAge >= CLIP_DURATION.retract && this.mayComplete()) enter('REST');
         break;
       case 'REST':
-        if (this.stateAge >= restDuration(input.satiety)) enter('SEARCH');
+        if (this.stateAge >= restDuration(input.satiety) && this.mayComplete()) enter('SEARCH');
         break;
     }
 
@@ -165,6 +172,11 @@ export class FeedingStateMachine {
     else this.mn9HoldMs = 0;
   }
 
+  /** Authored readability dwell (tempo.ts). Interrupt transitions do not call this. */
+  private mayComplete(): boolean {
+    return phaseMayComplete(this.state, this.stateAge);
+  }
+
   private beginApproach(distance: number): void {
     this.approachNeeded = clamp(Math.ceil(distance / STEP_LENGTH), 2, 4);
   }
@@ -173,18 +185,28 @@ export class FeedingStateMachine {
     this.pumpCycles = 0;
     this.pumpCycleT = 0;
     this.biteThisCycle = false;
-    this.pumpTarget = clamp(2 + Math.round(3 * clamp01((mn9Rate - MN9_EXTEND_HZ) / 40)), 2, 5);
+    this.pumpTarget = pumpCycleCount(mn9Rate);
   }
 }
 
+/** Authored digest pause: 1.2 s hungry → 3.2 s sated. */
 export function restDuration(satiety: number): number {
-  return 0.35 + 1.45 * clamp01(satiety);
+  return 1.2 + 2.0 * clamp01(satiety);
 }
 
 export function pumpAmplitude(mn9Rate: number): number {
   return clamp01((mn9Rate - 4) / 36);
 }
 
+/**
+ * Cycles per bout scale with MN9 drive above threshold. 8–14 cycles at the
+ * unchanged 6 Hz pump is 1.3–2.3 s of POMPUJ; each cycle is still one bite.
+ */
 export function pumpCycleCount(mn9Rate: number): number {
-  return clamp(2 + Math.round(3 * clamp01((mn9Rate - MN9_EXTEND_HZ) / 40)), 2, 5);
+  const span = PUMP_CYCLES_MAX - PUMP_CYCLES_MIN;
+  return clamp(
+    PUMP_CYCLES_MIN + Math.round(span * clamp01((mn9Rate - MN9_EXTEND_HZ) / 40)),
+    PUMP_CYCLES_MIN,
+    PUMP_CYCLES_MAX,
+  );
 }
