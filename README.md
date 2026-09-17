@@ -28,7 +28,7 @@ słodki/gorzki (zero trafień Gr64f / Gr5a / Gr66a).
 
 **AUTORSKIE:** parametry LIF (cytowania w `src/brain/params.ts`), model głodu
 i hemolimfy, chemia pokarmu (`TWAROG_MAMUTA_WANILIOWY`, słodycz 0,75), skala
-renderu 4× (10 mm na ekranie), rig proceduralny, każdy klip ruchu, lot, czyszczenie, sen, gag-i,
+renderu 6× (15 mm na ekranie), rig proceduralny, każdy klip ruchu, lot, czyszczenie, sen, gag-i,
 mapowanie MN9 Hz → czas pompy. Konektom steruje **tylko bramką żerowania**
 (kanał gustatoryczny → MN9). `ActivityFrame` jest jednokierunkowy: ciało
 i twaróg go czytają, nigdy do niego nie zapisują.
@@ -171,8 +171,8 @@ from measurement (`docs/DATA-PIPELINE.md`). MaleCNS has **no** sugar/bitter
 receptor annotations (no Gr64f / Gr5a / Gr66a).
 
 **AUTHORED:** LIF parameters (`src/brain/params.ts` citations), hunger and
-hemolymph, food chemistry (`TWAROG_MAMUTA_WANILIOWY`, sweet 0.75), 4× render
-scale (10 mm on screen), procedural rig, every motion clip, flight, grooming, sleep, gags,
+hemolymph, food chemistry (`TWAROG_MAMUTA_WANILIOWY`, sweet 0.75), 6× render
+scale (15 mm on screen), procedural rig, every motion clip, flight, grooming, sleep, gags,
 MN9-rate → pump mapping. The connectome drives **only the feeding gate**
 (gustatory channel → MN9). `ActivityFrame` is one-way: body and food consume
 it; they never write into it.

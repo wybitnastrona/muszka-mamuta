@@ -2,10 +2,10 @@
  * Kitchen / body scene units.
  *
  * One scene unit = 1 millimetre at render scale. The real fly is 2.5 mm;
- * FLY_RENDER_SCALE (4) is a documented visual exaggeration, so the on-screen
- * fly is 10 mm long against the 100 mm twaróg block (1:10 instead of the
- * previous 1:5; the true ratio is 1:40). Food and packaging stay at true
- * millimetre size.
+ * FLY_RENDER_SCALE (6) is a documented visual exaggeration, so the on-screen
+ * fly is 15 mm long against the 100 mm twaróg block (about 1:7, half the
+ * block's 30 mm height; the true ratio is 1:40). Raised from 4× so she reads
+ * on a 1080×1920 reel. Food and packaging stay at true millimetre size.
  *
  * Flybody's native mesh is ~0.301 units along +Z; `flyRootScale()` maps that
  * onto `REAL_FLY_BODY_MM * FLY_RENDER_SCALE`. Standoff, contact radius, LOD
@@ -14,7 +14,7 @@
  */
 
 export const REAL_FLY_BODY_MM = 2.5;
-export const FLY_RENDER_SCALE = 4;
+export const FLY_RENDER_SCALE = 6;
 
 /** AABB z-span of `public/data/flybody/model.bin` (measured, not guessed). */
 export const FLYBODY_NATIVE_LENGTH = 0.3012;

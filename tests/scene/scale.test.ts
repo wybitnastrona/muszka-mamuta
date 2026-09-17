@@ -31,12 +31,14 @@ import { closeupOffset, reelFrame } from '../../src/body/cameras.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
 
 describe('scene scale', () => {
-  it('uses one millimetre per scene unit at 4× render scale', () => {
+  it('uses one millimetre per scene unit at 6× render scale', () => {
     expect(mm(100)).toBe(100);
-    expect(FLY_RENDER_SCALE).toBe(4);
-    expect(flyVisualLengthMm()).toBe(10);
+    expect(FLY_RENDER_SCALE).toBe(6);
+    expect(flyVisualLengthMm()).toBe(15);
     expect(flyVisualLengthMm()).toBe(REAL_FLY_BODY_MM * FLY_RENDER_SCALE);
-    expect(flyVisualLengthMm() / CURD_MM.length).toBeCloseTo(0.1);
+    expect(flyVisualLengthMm() / CURD_MM.length).toBeCloseTo(0.15);
+    // Half the block height: visible on a reel, block still reads as a block.
+    expect(flyVisualLengthMm() / CURD_MM.height).toBeCloseTo(0.5);
     expect(flyRootScale()).toBeGreaterThan(1);
     expect(BOARD_MM).toEqual({ length: 400, width: 300, height: 40 });
     expect(BOARD_EDGE_RADIUS_MM).toBe(6);

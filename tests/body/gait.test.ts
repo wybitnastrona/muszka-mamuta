@@ -62,11 +62,17 @@ describe('M-tripod gait', () => {
     const right = feet.filter((f) => !isLeftLeg(f.bone)).map((f) => f.strideMm);
     expect(Math.min(...right)).toBeGreaterThan(Math.max(...left));
     expect(strideScale('foreleg_R_tarsus', yaw)).toBeGreaterThan(strideScale('foreleg_L_tarsus', yaw));
-    const straight = gaitFeet(strideMm() * 0.2, 14, 0);
-    const turned = gaitFeet(strideMm() * 0.2, 14, yaw);
-    const frontL0 = straight.find((f) => f.bone === 'foreleg_L_tarsus')!;
-    const frontL1 = turned.find((f) => f.bone === 'foreleg_L_tarsus')!;
-    expect(Math.abs(frontL1.x - frontL0.x)).toBeGreaterThan(0.01);
+    // Front-leg step direction rotates into the turn. The lateral offset is
+    // proportional to the foot's fore–aft excursion, so sample the whole
+    // cycle rather than one phase (mid-stance has zero excursion).
+    let maxDx = 0;
+    for (let k = 0; k < 10; k++) {
+      const d = strideMm() * (k / 10);
+      const frontL0 = gaitFeet(d, 14, 0).find((f) => f.bone === 'foreleg_L_tarsus')!;
+      const frontL1 = gaitFeet(d, 14, yaw).find((f) => f.bone === 'foreleg_L_tarsus')!;
+      maxDx = Math.max(maxDx, Math.abs(frontL1.x - frontL0.x));
+    }
+    expect(maxDx).toBeGreaterThan(0.01);
   });
 
   it('does not slide stance feet more than 0.2 mm per frame', () => {
