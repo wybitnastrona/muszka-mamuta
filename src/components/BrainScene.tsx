@@ -2,15 +2,35 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type { ActivityFrame } from "../lib/replay";
 import type { Atlas } from "../lib/atlas";
+import { Xoshiro128ss } from "../brain/rng.ts";
+import { t, type Lang } from "../i18n.ts";
+import {
+  PULSE_GAIN_PUMP,
+  PULSE_GAIN_REST,
+  PULSE_GAIN_TAU_S,
+  PULSE_RATE_HZ,
+  easeActivity,
+  easeToward,
+} from "../hud/pulse.ts";
 
-/** Real anatomy; model values are looked up by body ID, never by spatial proximity. */
-export function BrainScene({ atlas, frame }: { atlas: Atlas; frame: ActivityFrame | null }) {
+/**
+ * Real anatomy; model values are looked up by body ID, never by spatial proximity.
+ *
+ * Active somata pulse white in the shader (presentation only; the values are
+ * the same `ActivityFrame` numbers). `emphasis` (POMPUJ) raises the pulse
+ * gain; `prefers-reduced-motion` disables the pulse like it disables the orbit.
+ */
+export function BrainScene({
+  atlas, frame, emphasis = false, lang = 'en',
+}: { atlas: Atlas; frame: ActivityFrame | null; emphasis?: boolean; lang?: Lang }) {
   const signal = useRef(frame);
   const orbit = useRef(true);
   const resetView = useRef<(() => void) | null>(null);
   const [orbiting, setOrbiting] = useState(true);
   const repaint = useRef<(() => void) | null>(null);
+  const gainTarget = useRef(PULSE_GAIN_REST);
   useEffect(() => { signal.current = frame; repaint.current?.(); }, [frame]);
+  useEffect(() => { gainTarget.current = emphasis ? PULSE_GAIN_PUMP : PULSE_GAIN_REST; }, [emphasis]);
   const host = useRef<HTMLDivElement>(null);
 
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -31,6 +51,12 @@ export function BrainScene({ atlas, frame }: { atlas: Atlas; frame: ActivityFram
     let geometry: THREE.BufferGeometry | undefined;
     let material: THREE.ShaderMaterial | undefined;
     let size = new THREE.Vector3(5, 2, 1);
+    let target: Float32Array | null = null;
+    let displayed: Float32Array | null = null;
+    let settled = true;
+    let gain = PULSE_GAIN_REST;
+    let clock = 0;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const fit = () => {
       const { width, height } = element.getBoundingClientRect();
@@ -70,26 +96,50 @@ export function BrainScene({ atlas, frame }: { atlas: Atlas; frame: ActivityFram
       size.multiplyScalar(scale);
       geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(xyz, 3));
+      // `target` is the last 10 Hz frame; `activity` is what is drawn and
+      // eases toward it in the rAF loop so the pulse does not step.
       const activity = new Float32Array(bodyIds.length);
+      target = new Float32Array(bodyIds.length);
+      displayed = activity;
       geometry.setAttribute("activity", new THREE.BufferAttribute(activity, 1));
+      // Per-soma phase so the population does not pulse in lockstep.
+      const rng = new Xoshiro128ss(0x50_4d_41);
+      const phase = new Float32Array(bodyIds.length);
+      for (let i = 0; i < phase.length; i++) phase[i] = rng.nextFloat() * Math.PI * 2;
+      geometry.setAttribute("phase", new THREE.BufferAttribute(phase, 1));
       material = new THREE.ShaderMaterial({
         transparent: true, depthWrite: false,
-        uniforms: { pixelRatio: { value: Math.min(window.devicePixelRatio, 2) } },
-        vertexShader: `attribute float activity; varying float strength; uniform float pixelRatio;
-          void main() { strength = activity; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = (0.9 + strength * 2.0) * pixelRatio; }`,
-        fragmentShader: `varying float strength;
+        uniforms: {
+          pixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+          uTime: { value: 0 },
+          uPulseGain: { value: PULSE_GAIN_REST },
+          uPulseOn: { value: reducedMotion.matches ? 0 : 1 },
+          uPulseRate: { value: PULSE_RATE_HZ * Math.PI * 2 },
+        },
+        vertexShader: `attribute float activity; attribute float phase;
+          varying float strength; varying float pulse;
+          uniform float pixelRatio; uniform float uTime; uniform float uPulseGain; uniform float uPulseOn; uniform float uPulseRate;
+          void main() {
+            strength = activity;
+            // Faster and deeper with gain; zero for inactive somata and under reduced motion.
+            float rate = uPulseRate * (0.6 + 0.4 * uPulseGain);
+            float wave = 0.5 + 0.5 * sin(uTime * rate + phase);
+            pulse = uPulseOn * strength * wave * uPulseGain;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = (0.9 + strength * 2.0 + pulse * 2.4) * pixelRatio; }`,
+        fragmentShader: `varying float strength; varying float pulse;
           void main() { float r = length(gl_PointCoord - vec2(.5)); if (r > .5) discard;
           vec3 color = mix(vec3(.12,.35,.75), vec3(.2,.95,1.), strength);
-          color = mix(color,vec3(1.),smoothstep(.6,1.,strength));
-          gl_FragColor = vec4(color,(.28+.65*strength)*(1.-smoothstep(.18,.5,r))); }`,
+          float white = clamp(smoothstep(.6,1.,strength) + pulse * 0.85, 0., 1.);
+          color = mix(color, vec3(1.), white);
+          float alpha = clamp(.28 + .65 * strength + .3 * pulse, 0., 1.);
+          gl_FragColor = vec4(color, alpha * (1.-smoothstep(.18,.5,r))); }`,
       });
       const paint = () => {
-        if (disposed || !geometry) return;
+        if (disposed || !geometry || !target) return;
         const values = new Map(signal.current?.values ?? []);
-        for (let i = 0; i < bodyIds.length; i++) activity[i] = values.get(bodyIds[i]) ?? 0;
-        geometry.getAttribute("activity").needsUpdate = true;
-        renderer.render(scene, camera);
+        for (let i = 0; i < bodyIds.length; i++) target[i] = values.get(bodyIds[i]) ?? 0;
+        settled = false;
       };
       repaint.current = paint;
       anatomy.add(new THREE.Points(geometry, material));
@@ -116,10 +166,24 @@ export function BrainScene({ atlas, frame }: { atlas: Atlas; frame: ActivityFram
     renderer.domElement.addEventListener("pointerup", up);
     renderer.domElement.addEventListener("pointercancel", up);
     let frame = 0, previous = performance.now();
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const animate = (now: number) => {
       const dt = Math.min(.05,(now - previous) / 1000); previous = now;
       if (orbit.current && !held && !reducedMotion.matches && !document.hidden) anatomy.rotation.y += dt * .12;
+      if (material) {
+        clock += dt;
+        gain = easeToward(gain, gainTarget.current, dt, PULSE_GAIN_TAU_S);
+        material.uniforms.uTime!.value = clock;
+        material.uniforms.uPulseGain!.value = gain;
+        material.uniforms.uPulseOn!.value = reducedMotion.matches ? 0 : 1;
+      }
+      if (!settled && geometry && target && displayed) {
+        const gap = easeActivity(displayed, target, dt);
+        if (gap < 1e-3) {
+          displayed.set(target);
+          settled = true;
+        }
+        geometry.getAttribute("activity").needsUpdate = true;
+      }
       if (!document.hidden) renderer.render(scene, camera);
       frame = requestAnimationFrame(animate);
     };
@@ -137,7 +201,7 @@ export function BrainScene({ atlas, frame }: { atlas: Atlas; frame: ActivityFram
       <button type="button" title="Reset to native XY projection with equal axis scale" onClick={() => { orbit.current = false; setOrbiting(false); resetView.current?.(); }}>XY view</button>
       <button type="button" aria-pressed={orbiting} onClick={() => { orbit.current = !orbit.current; setOrbiting(orbit.current); }}>Orbit {orbiting ? "on" : "off"}</button>
     </div>
-    <div className="brain-legend">Blue: anatomy · cyan/white: supplied values [0, 1]</div>
+    <div className="brain-legend">{t(lang, 'brainLegend')}</div>
     <div ref={host} className="three-viewport brain-viewport" aria-label="MaleCNS brain soma atlas">
       {state !== "ready" && <span className="neural-load" role="status">{state === "error" ? "Atlas unavailable" : "Loading anatomy"}</span>}
 
