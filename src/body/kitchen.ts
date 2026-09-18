@@ -1,17 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { kitchenLayout } from '../scene/layout.ts';
-import { tableTopY } from '../scene/scale.ts';
 import type { RenderQuality } from '../scene/quality.ts';
 import { DESKTOP_QUALITY } from '../scene/quality.ts';
 import {
-  OAK_HEX,
-  PLATE_HEX,
+  LAB_DECK_HEX,
   TABLE_BEVEL_MM,
   TABLE_THICKNESS_MM,
   fillContactAo,
-  fillOakAlbedo,
-  fillSimplexRoughness,
 } from '../scene/proceduralMaps.ts';
 
 export type KitchenSet = {
@@ -108,7 +104,7 @@ export function poseContactAo(
   visible: boolean,
 ): void {
   decal.visible = visible;
-  decal.position.set(x, y + 0.12, z);
+  decal.position.set(x, y + 0.22, z);
 }
 
 export function createKitchen(
@@ -119,63 +115,53 @@ export function createKitchen(
   const group = new THREE.Group();
   group.name = 'kitchenTable';
   const maps: THREE.Texture[] = [];
-  const size = quality.textureSize;
-  const oakData = new Uint8Array(size * size * 4);
-  fillOakAlbedo(oakData, size, 9);
-  const oakMap = dataTex(oakData, size, THREE.SRGBColorSpace);
-  maps.push(oakMap);
-  const oakRoughData = new Uint8Array(size * size * 4);
-  fillSimplexRoughness(oakRoughData, size, 21, 168, 36);
-  const oakRough = dataTex(oakRoughData, size, THREE.NoColorSpace);
-  maps.push(oakRough);
+  const labMat = new THREE.MeshStandardMaterial({
+    color: LAB_DECK_HEX,
+    roughness: 0.85,
+    metalness: 0.04,
+  });
 
-  const table = new THREE.Mesh(
-    beveledSlab(width, depth),
-    new THREE.MeshPhysicalMaterial({
-      color: OAK_HEX,
-      map: oakMap,
-      roughness: 0.72,
-      roughnessMap: oakRough,
-      metalness: 0.02,
-      envMapIntensity: 0.45,
-    }),
-  );
+  const table = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), labMat);
   table.name = 'tableTop';
+  table.rotation.x = -Math.PI / 2;
+  table.position.y = 0;
   table.receiveShadow = quality.shadows;
   table.castShadow = false;
   group.add(table);
 
+  const bulk = new THREE.Mesh(
+    beveledSlab(width, depth),
+    new THREE.MeshStandardMaterial({
+      color: LAB_DECK_HEX,
+      roughness: 0.88,
+      metalness: 0.03,
+    }),
+  );
+  bulk.name = 'tableBulk';
+  bulk.receiveShadow = false;
+  bulk.castShadow = false;
+  group.add(bulk);
+
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(1800, 1800),
-    new THREE.MeshBasicMaterial({ color: 0x07080c }),
+    new THREE.PlaneGeometry(2400, 2400),
+    new THREE.MeshStandardMaterial({
+      color: LAB_DECK_HEX,
+      roughness: 0.85,
+      metalness: 0.02,
+    }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -(TABLE_THICKNESS_MM + 10);
-  floor.name = 'gridFloor';
-  floor.receiveShadow = false;
+  floor.name = 'labFloor';
+  floor.receiveShadow = quality.shadows;
   group.add(floor);
-
-  const grid = new THREE.GridHelper(1600, 64, 0x2a3344, 0x12161c);
-  grid.position.y = -(TABLE_THICKNESS_MM + 8);
-  grid.name = 'darkGrid';
-  group.add(grid);
 
   const layout = kitchenLayout();
   const plate = new THREE.Mesh(
-    new THREE.CylinderGeometry(58, 60, 1.5, 48),
-    new THREE.MeshPhysicalMaterial({
-      color: PLATE_HEX,
-      roughness: 0.42,
-      metalness: 0.04,
-      clearcoat: 0.2,
-      clearcoatRoughness: 0.35,
-    }),
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ visible: false }),
   );
-  plate.name = 'cheesePlate';
-  plate.scale.set(1.18, 1, 1.38);
-  plate.position.set(width * 0.38, tableTopY() + 0.4, -depth * 0.34);
-  plate.receiveShadow = quality.shadows;
-  group.add(plate);
+  plate.name = 'labUnusedPlate';
 
   const spoon = new THREE.Mesh(
     makeSpoonGeometry(),
@@ -187,6 +173,7 @@ export function createKitchen(
     }),
   );
   spoon.name = 'scaleSpoon';
+  spoon.visible = false;
   spoon.castShadow = quality.shadows;
   poseSpoon(spoon, width, depth, 0);
   group.add(spoon);
@@ -214,11 +201,11 @@ export function createKitchen(
   aoMap.wrapT = THREE.ClampToEdgeWrapping;
   maps.push(aoMap);
   const contactAo = new THREE.Mesh(
-    new THREE.PlaneGeometry(14, 9),
+    new THREE.PlaneGeometry(32, 20),
     new THREE.MeshBasicMaterial({
       map: aoMap,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.78,
       depthWrite: false,
     }),
   );

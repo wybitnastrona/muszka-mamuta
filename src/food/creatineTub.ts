@@ -1,13 +1,23 @@
 /**
  * Authored KFD tub mesh. Label wrap is from product photos; Ø/H are
  * fly-readable millimetres, not the 500 g jar. Open in the live scene;
- * no lid mesh (eat stand is south of the tub). Not connectome data.
+ * eat stand is inside the well. Not connectome data.
  */
 import * as THREE from 'three';
-import { CREATINE_ALBEDO_HEX, PILE_MM, TUB_MM, mm } from '../scene/scale.ts';
+import {
+  CREATINE_ALBEDO_HEX,
+  PILE_MM,
+  TUB_MM,
+  mm,
+  powderMoundHeightMm,
+  powderStackHeightMm,
+} from '../scene/scale.ts';
 import { kitchenLayout } from '../scene/layout.ts';
 import type { CreatineTextures } from '../scene/creatineTextures.ts';
 import { pileHeightAt } from './powderPile.ts';
+
+/** Packshot wrap JPEGs are 4:1; the cylinder UV is ~2.43:1. */
+const WRAP_ASPECT_FALLBACK = 4;
 
 export type CreatineTubHandle = {
   group: THREE.Group;
@@ -46,6 +56,44 @@ function invertUvV(geometry: THREE.BufferGeometry): void {
   uv.needsUpdate = true;
 }
 
+function wrapImageAspect(map: THREE.Texture | undefined): number {
+  const img = map?.image as { width?: number; height?: number } | undefined;
+  if (img?.width && img?.height) return img.width / img.height;
+  return WRAP_ASPECT_FALLBACK;
+}
+
+/**
+ * Cylinder UV is 1×1 around 2πr × H. A wider wrap JPEG would squeeze glyphs
+ * on U. Scale U about 0.5 and ClampToEdge so PREMIUM CREATINE keeps aspect.
+ */
+function unsqueezeWrapUv(
+  geometry: THREE.BufferGeometry,
+  radius: number,
+  height: number,
+  imageAspect: number,
+): void {
+  const uv = geometry.getAttribute('uv');
+  if (!uv) return;
+  const cylAspect = (2 * Math.PI * radius) / Math.max(1e-6, height);
+  const uScale = Math.min(1, cylAspect / Math.max(1e-6, imageAspect));
+  for (let i = 0; i < uv.count; i++) {
+    const u = uv.getX(i) as number;
+    uv.setX(i, 0.5 + (u - 0.5) * uScale);
+  }
+  uv.needsUpdate = true;
+}
+
+function applyLabelWrap(mat: THREE.MeshPhysicalMaterial, map: THREE.Texture | undefined): void {
+  if (!map) return;
+  map.wrapS = THREE.ClampToEdgeWrapping;
+  map.wrapT = THREE.ClampToEdgeWrapping;
+  map.repeat.set(1, 1);
+  map.offset.set(0, 0);
+  map.needsUpdate = true;
+  mat.map = map;
+  mat.color.setHex(0xffffff);
+}
+
 function powderMoundGeometry(radius: number, height: number, segs = 24): THREE.LatheGeometry {
   const pts: THREE.Vector2[] = [];
   for (let i = 0; i <= segs; i++) {
@@ -70,12 +118,13 @@ export function createCreatineTub(textures?: CreatineTextures | null): CreatineT
   const bottomMat = plastic(0x151515, 0.6);
   const inner = plastic(0x151515, 0.62);
   const labelMat = plastic(0x151515, 0.6);
-  applyMap(labelMat, textures?.labelWrap, { color: 0xffffff });
+  applyLabelWrap(labelMat, textures?.labelWrap);
 
   // Cylinder UV: u=0 at +Z, u=0.5 at −Z. Group yaw −π/2 aims that front at +X (mill).
   // ImageBitmap upload leaves uv.y=0 at the JPEG bottom; invert V so KFD sits at the rim.
   const labelGeo = new THREE.CylinderGeometry(outerR, outerR, H, 64, 1, true);
   invertUvV(labelGeo);
+  unsqueezeWrapUv(labelGeo, outerR, H, wrapImageAspect(textures?.labelWrap));
   const outer = new THREE.Mesh(labelGeo, labelMat);
   outer.name = 'kfdLabel';
   outer.position.y = H / 2;
@@ -140,12 +189,34 @@ export function createCreatineTub(textures?: CreatineTextures | null): CreatineT
     }
     powderMat.color.setHex(0xffffff);
   }
+  const stackH = powderStackHeightMm();
+  const moundH = powderMoundHeightMm();
+  const stack = new THREE.Mesh(
+    new THREE.CylinderGeometry(innerR * 0.98, innerR * 0.98, stackH, 48),
+    powderMat,
+  );
+  stack.name = 'kfdPowderStack';
+  stack.position.y = floor + stackH / 2;
+  stack.castShadow = true;
+  stack.receiveShadow = true;
+  group.add(stack);
+
+  const stackBase = new THREE.Mesh(
+    new THREE.CircleGeometry(innerR * 0.97, 48),
+    powderMat,
+  );
+  stackBase.name = 'kfdPowderStackBase';
+  stackBase.rotation.x = -Math.PI / 2;
+  stackBase.position.y = floor + stackH + 0.15;
+  stackBase.receiveShadow = true;
+  group.add(stackBase);
+
   const powderMound = new THREE.Mesh(
-    powderMoundGeometry(mm(PILE_MM.radius), mm(PILE_MM.height)),
+    powderMoundGeometry(mm(PILE_MM.radius), moundH),
     powderMat,
   );
   powderMound.name = 'kfdPowderMound';
-  powderMound.position.y = floor;
+  powderMound.position.y = floor + stackH;
   powderMound.castShadow = true;
   powderMound.receiveShadow = true;
   group.add(powderMound);

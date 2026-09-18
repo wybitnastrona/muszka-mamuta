@@ -32,7 +32,6 @@ import {
   lodFadeSec,
   mm,
   pitchedTipAt,
-  scoopEatClearanceMm,
   standoffMm,
   proboscisReachMm,
 } from '../../src/scene/scale.ts';
@@ -102,16 +101,11 @@ describe('scene scale', () => {
     expect(layout.tub.x).toBe(layout.pile.x);
   });
 
-  it('stands south of the Ø110 tub to eat from the dropped scoop', () => {
-    const r = scoopEatClearanceMm();
-    expect(r).toBeGreaterThanOrEqual(80);
-    expect(r).toBeLessThanOrEqual(100);
+  it('stands inside the open well to pump from the held scoop', () => {
     const stand = scoopEatStand();
     const layout = kitchenLayout();
-    expect(stand.x).toBe(layout.tub.x);
-    expect(stand.z).toBeCloseTo(layout.tub.z - r);
-    expect(stand.heading).toBeCloseTo(Math.PI);
-    expect(r).toBeGreaterThan(standoffMm() * 8);
+    expect(Math.hypot(stand.x - layout.tub.x, stand.z - layout.tub.z)).toBeLessThan(layout.tub.innerRadius);
+    expect(stand.heading).toBeCloseTo(Math.PI / 2);
     expect(layout.tub.yaw).toBeCloseTo(-Math.PI / 2);
     expect(layout.tub.height).toBe(mm(TUB_MM.height));
     expect(layout.mill.x).toBeGreaterThan(layout.tub.x + layout.tub.diameter / 2);

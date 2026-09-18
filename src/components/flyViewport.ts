@@ -58,7 +58,7 @@ export function createFlyViewport(
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enablePan = false;
   controls.enableZoom = true;
-  controls.maxDistance = 600;
+  controls.maxDistance = 1200;
   controls.minDistance = 8;
   const kit = createFlyMaterials(quality);
   const materials = kit.materials;

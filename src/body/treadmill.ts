@@ -9,6 +9,9 @@ import { kitchenLayout } from '../scene/layout.ts';
 /** Face +X (belt long axis / handrail). heading 0 is +Z. */
 export const MILL_HEADING = Math.PI / 2;
 
+/** Authored walking-pad pitch: rail (+X) is uphill. */
+export const MILL_INCLINE_RAD = 0.08;
+
 /** Belt shorter than axle span so the rollers read as drums. */
 export const MILL_BELT_SPAN = 0.65;
 
@@ -24,7 +27,7 @@ export function millBeltScroll(
   beltLengthMm = millBeltLengthMm(),
 ): number {
   const len = Math.max(1e-6, beltLengthMm);
-  return (offset + (speedMmS / len) * dt) % 1;
+  return (((offset - (speedMmS / len) * dt) % 1) + 1) % 1;
 }
 
 export function millStandXz(): { x: number; z: number } {
@@ -32,10 +35,20 @@ export function millStandXz(): { x: number; z: number } {
   return { x: mill.x + mill.hx * 0.32, z: mill.z };
 }
 
+/** World Y of the belt after the authored uphill pitch. */
+export function millSurfaceY(worldX: number, localY?: number): number {
+  const mill = kitchenLayout().mill;
+  const L = mm(MILL_MM.length);
+  const y0 = localY ?? mill.deckY;
+  const lx = worldX - mill.x;
+  const pivot = (L / 2) * Math.sin(MILL_INCLINE_RAD);
+  return pivot + lx * Math.sin(MILL_INCLINE_RAD) + y0 * Math.cos(MILL_INCLINE_RAD);
+}
+
 export function millRailGripWorld(): { left: { x: number; y: number; z: number }; right: { x: number; y: number; z: number } } {
   const mill = kitchenLayout().mill;
   const railX = mill.x + mill.hx * 0.46;
-  const y = mill.deckY + 16;
+  const y = millSurfaceY(railX, mill.deckY + 16);
   const dz = mill.hz * 0.22;
   return {
     left: { x: railX, y, z: mill.z + dz },
@@ -43,8 +56,9 @@ export function millRailGripWorld(): { left: { x: number; y: number; z: number }
   };
 }
 
+/** Authored reel odometer: millimetres shown as km so the LED ticks on-camera. */
 export function millConsoleLabel(distanceMm: number): string {
-  return `${Math.round(Math.max(0, distanceMm))} mm`;
+  return `${(Math.max(0, distanceMm) / 1000).toFixed(2)} km`;
 }
 
 const MILL_ROLLER_R = 4.2;
@@ -55,27 +69,29 @@ export function millBaseHeightMm(): number {
 }
 
 /**
- * Horizontal readout on the mill pad at the motor (−X) end — the tub-facing
- * chassis top that stays in the kitchen frame, flush with the pad.
+ * Vertical LED on the motor (−X) fascia, facing the kitchen camera (−Z).
  */
 export function millConsoleLocalPose(): {
   x: number;
   y: number;
   z: number;
   rotX: number;
+  rotY: number;
   width: number;
   depth: number;
   bezelH: number;
 } {
   const L = mm(MILL_MM.length);
-  const width = 28;
-  const depth = 11;
-  const bezelH = 0.8;
+  const W = mm(MILL_MM.width);
+  const width = 24;
+  const depth = 10;
+  const bezelH = 1.4;
   return {
-    x: -L * 0.40,
-    y: millBaseHeightMm() + bezelH + 0.06,
-    z: 0,
-    rotX: -Math.PI / 2,
+    x: -L * 0.42,
+    y: millBaseHeightMm() + 8,
+    z: -W * 0.5 - 0.6,
+    rotX: 0,
+    rotY: Math.PI,
     width,
     depth,
     bezelH,
@@ -136,11 +152,14 @@ function millConsoleTexture(): { tex: THREE.CanvasTexture; paint: (distanceMm: n
   const paint = (distanceMm: number) => {
     ctx.fillStyle = '#050505';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#f2f6f0';
-    ctx.font = 'bold 86px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.shadowColor = '#ff2a1a';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = '#ff2a1a';
+    ctx.font = 'bold 92px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(millConsoleLabel(distanceMm), canvas.width / 2, canvas.height / 2 + 4);
+    ctx.shadowBlur = 0;
     tex.needsUpdate = true;
   };
   paint(0);
@@ -151,14 +170,14 @@ export function createTreadmill(): TreadmillHandle {
   const layout = kitchenLayout().mill;
   const group = new THREE.Group();
   group.name = 'labMill';
-  group.position.set(layout.x, 0, layout.z);
-  group.rotation.y = layout.yaw;
-
   const L = mm(MILL_MM.length);
+  group.position.set(layout.x, (L / 2) * Math.sin(MILL_INCLINE_RAD), layout.z);
+  group.rotation.y = layout.yaw;
+  group.rotation.z = MILL_INCLINE_RAD;
   const W = mm(MILL_MM.width);
   const deck = mm(MILL_MM.deck);
   const rollerR = MILL_ROLLER_R;
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a3340, roughness: 0.55, metalness: 0.25 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.48, metalness: 0.28 });
   const railMat = new THREE.MeshStandardMaterial({ color: 0xb4bcc6, roughness: 0.32, metalness: 0.42 });
   const consoleMat = new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.45, metalness: 0.2 });
 
@@ -208,6 +227,18 @@ export function createTreadmill(): TreadmillHandle {
   railR.position.set(0, deck + 4, -W * 0.42);
   group.add(railL, railR);
 
+  const wallH = 12;
+  const wallGeo = new THREE.BoxGeometry(L * 0.72, wallH, 3.4);
+  const wallL = new THREE.Mesh(wallGeo, frameMat);
+  const wallR = new THREE.Mesh(wallGeo, frameMat);
+  wallL.name = 'millSideWallL';
+  wallR.name = 'millSideWallR';
+  wallL.position.set(0, deck + wallH * 0.35, W * 0.5);
+  wallR.position.set(0, deck + wallH * 0.35, -W * 0.5);
+  wallL.castShadow = true;
+  wallR.castShadow = true;
+  group.add(wallL, wallR);
+
   const postH = 22;
   const postGeo = new THREE.CylinderGeometry(1.4, 1.4, postH, 10);
   const postZ = W * 0.28;
@@ -225,11 +256,11 @@ export function createTreadmill(): TreadmillHandle {
 
   const pose = millConsoleLocalPose();
   const bezel = new THREE.Mesh(
-    new THREE.BoxGeometry(pose.width + 2.4, pose.bezelH, pose.depth + 2.4),
+    new THREE.BoxGeometry(pose.width + 2.6, pose.depth + 2.6, pose.bezelH),
     consoleMat,
   );
   bezel.name = 'millConsoleBezel';
-  bezel.position.set(pose.x, baseH + pose.bezelH / 2, pose.z);
+  bezel.position.set(pose.x, pose.y, pose.z + 0.8);
   bezel.receiveShadow = true;
   group.add(bezel);
 
@@ -242,6 +273,7 @@ export function createTreadmill(): TreadmillHandle {
   screen.name = 'millConsoleScreen';
   screen.position.set(pose.x, pose.y, pose.z);
   screen.rotation.x = pose.rotX;
+  screen.rotation.y = pose.rotY;
   screen.renderOrder = 2;
   group.add(screen);
 

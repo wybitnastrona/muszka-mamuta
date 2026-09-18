@@ -19,7 +19,10 @@ export const ACTIVITY_TAU_S = 0.08;
 /** Time constant for the pulse gain to follow the FSM state. */
 export const PULSE_GAIN_TAU_S = 0.2;
 export const PULSE_GAIN_REST = 1;
-export const PULSE_GAIN_PUMP = 2.2;
+/** Eating creatine: 500% of rest (presentation gain on the soma atlas). */
+export const PULSE_GAIN_PUMP = 5;
+/** Mill walk: 300% of rest, RGB offset in the atlas shader. */
+export const PULSE_GAIN_RUN = 3;
 /** Base pulse rate (rad/s factor applied in the shader); rate rises with gain. */
 export const PULSE_RATE_HZ = 1.1;
 
@@ -47,7 +50,12 @@ export function easeActivity(
   return maxGap;
 }
 
-/** Shader gain for the current feeding phase. Only POMPUJ is emphasised. */
-export function pulseTargetGain(state: FeedingState | null | undefined): number {
-  return state === 'PUMP' ? PULSE_GAIN_PUMP : PULSE_GAIN_REST;
+/** Shader gain for the current feeding phase / mill walk. Presentation only. */
+export function pulseTargetGain(
+  state: FeedingState | null | undefined,
+  millRunning = false,
+): number {
+  if (state === 'PUMP') return PULSE_GAIN_PUMP;
+  if (millRunning) return PULSE_GAIN_RUN;
+  return PULSE_GAIN_REST;
 }

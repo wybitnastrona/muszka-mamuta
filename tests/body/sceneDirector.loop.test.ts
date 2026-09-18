@@ -3,9 +3,9 @@ import { SceneDirector } from '../../src/body/sceneDirector.ts';
 import { BIPED_BODY_PITCH_RAD, bipedStandLiftMm } from '../../src/body/bipedGait.ts';
 import { isEatState, isSplineFlight, LOOP_STATES, type LoopVariant } from '../../src/body/sceneLoop.ts';
 import { kitchenLayout, scoopEatStand } from '../../src/scene/layout.ts';
-import { FLY_WALK_MM_S, MILL_WALK_MM_S, flyVisualLengthMm, scoopEatClearanceMm, tableTopY } from '../../src/scene/scale.ts';
+import { FLY_WALK_MM_S, MILL_WALK_MM_S, flyVisualLengthMm, tableTopY } from '../../src/scene/scale.ts';
 import { CreatineSystem } from '../../src/food/creatineSystem.ts';
-import { millStandXz, MILL_HEADING } from '../../src/body/treadmill.ts';
+import { millStandXz, millSurfaceY, MILL_HEADING } from '../../src/body/treadmill.ts';
 import { UP_ALIGN_MAX_RAD, bodyUpAxis, pointInAabb3, tiltFromNormal } from '../../src/body/collision.ts';
 
 function makeLoopDirector(variant: LoopVariant = 'reel') {
@@ -52,12 +52,11 @@ describe('SceneDirector scripted loop (reel)', () => {
     expect(Math.hypot(d.position.x - layout.tub.x, d.position.z - layout.tub.z)).toBeLessThan(120);
   });
 
-  it('picks up the scoop in the well and PUMPs from the dropped bowl', () => {
+  it('picks up the scoop in the well and PUMPs from the held bowl', () => {
     const d = makeLoopDirector();
     const food = d.food as CreatineSystem;
     const before = food.remainingMassGrams;
     let sawPick = false;
-    let sawDrop = false;
     let sawTaste = false;
     let sawPump = false;
     let pumpAa = 0;
@@ -69,12 +68,8 @@ describe('SceneDirector scripted loop (reel)', () => {
         expect(food.scoopFill).toBeGreaterThan(0);
         expect(food.remainingMassGrams).toBeLessThanOrEqual(before);
       }
-      if (out.macro === 'DROP_SCOOP') {
-        sawDrop = true;
-        expect(out.scoop?.mode).toBe('dropped');
-      }
       if (out.macro === 'EAT_SCOOP') {
-        expect(out.scoop?.mode).toBe('dropped');
+        expect(out.scoop?.mode).toBe('held');
         if (d.fsm.state === 'TASTE' || d.fsm.state === 'EXTEND') sawTaste = true;
         if (d.fsm.state === 'PUMP') {
           sawPump = true;
@@ -82,10 +77,9 @@ describe('SceneDirector scripted loop (reel)', () => {
           expect(out.heldCrumb).toBeNull();
         }
       }
-      if (sawPump && out.macro === 'TAKEOFF_MILL') break;
+      if (sawPump && out.macro === 'FLY_OUT_WITH_SCOOP') break;
     }
     expect(sawPick).toBe(true);
-    expect(sawDrop).toBe(true);
     expect(sawTaste).toBe(true);
     expect(sawPump).toBe(true);
     expect(pumpAa).toBeGreaterThan(0.3);
@@ -101,8 +95,8 @@ describe('SceneDirector scripted loop (reel)', () => {
       if (out.macro === 'AUTONOMOUS' && i > 200) break;
     }
     for (const state of [
-      'FLY_INTO_TUB', 'PICK_SCOOP', 'FLY_OUT_WITH_SCOOP', 'DROP_SCOOP', 'EAT_SCOOP',
-      'TAKEOFF_MILL', 'LAND_MILL', 'WALK_BIPED_ON_MILL', 'AUTONOMOUS',
+      'FLY_INTO_TUB', 'PICK_SCOOP', 'EAT_SCOOP', 'FLY_OUT_WITH_SCOOP',
+      'LAND_MILL', 'WALK_BIPED_ON_MILL', 'AUTONOMOUS',
     ] as const) {
       expect(seen, state).toContain(state);
     }
@@ -148,7 +142,7 @@ describe('SceneDirector scripted loop (reel)', () => {
       expect(Math.abs(out.flyPose.pitch)).toBeGreaterThan(Math.abs(BIPED_BODY_PITCH_RAD) * 0.8);
       expect(out.flyPose.pose.foreleg_L_tarsus).toBeDefined();
       expect(d.position.y).toBeGreaterThan(mill.deckY);
-      expect(d.position.y).toBeLessThan(mill.deckY + bipedStandLiftMm() + 6);
+      expect(d.position.y).toBeLessThan(millSurfaceY(millStandXz().x) + bipedStandLiftMm() + 6);
       if (frames > 8) break;
     }
     expect(frames).toBeGreaterThan(5);
@@ -194,7 +188,7 @@ describe('SceneDirector scripted loop (reel)', () => {
     expect(flyVisualLengthMm()).toBe(15);
   });
 
-  it('eats clear of the tub AABB, then takes off to the mill even if MN9 is quiet', () => {
+  it('eats inside the tub well, then flies out to the mill even if MN9 is quiet', () => {
     const d = makeLoopDirector();
     const layout = kitchenLayout();
     const stand = scoopEatStand();
@@ -208,30 +202,30 @@ describe('SceneDirector scripted loop (reel)', () => {
     for (let i = 0; i < 8000; i++) {
       const out = d.update({ ...drive, mn9Rate: 0.8, satiety: 0.32 });
       if (!seen.includes(out.macro)) seen.push(out.macro);
-      if (out.macro === 'EAT_SCOOP' || out.macro === 'DROP_SCOOP') {
+      if (out.macro === 'EAT_SCOOP') {
         eatDist = Math.hypot(d.position.x - layout.tub.x, d.position.z - layout.tub.z);
         eatHeading = d.heading;
-        expect(eatDist).toBeGreaterThanOrEqual(50);
-        expect(pointInAabb3(d.position, box, -0.05)).toBe(false);
-        expect(Math.abs(d.position.z - stand.z)).toBeLessThan(10);
+        expect(eatDist).toBeLessThan(layout.tub.innerRadius);
+        expect(pointInAabb3(d.position, box, -0.05)).toBe(true);
+        expect(Math.abs(d.position.x - stand.x)).toBeLessThan(12);
       }
       if (out.macro === 'WALK_BIPED_ON_MILL') break;
     }
-    expect(eatDist).toBeGreaterThanOrEqual(scoopEatClearanceMm() - 8);
-    expect(Math.abs(eatHeading)).toBeGreaterThan(2);
-    expect(seen).toContain('TAKEOFF_MILL');
+    expect(eatDist).toBeLessThan(layout.tub.innerRadius);
+    expect(eatHeading).toBeCloseTo(Math.PI / 2, 1);
+    expect(seen).toContain('FLY_OUT_WITH_SCOOP');
     expect(seen).toContain('LAND_MILL');
     expect(seen).toContain('WALK_BIPED_ON_MILL');
-    expect(seen.indexOf('EAT_SCOOP')).toBeGreaterThan(seen.indexOf('DROP_SCOOP'));
+    expect(seen.indexOf('EAT_SCOOP')).toBeGreaterThan(seen.indexOf('PICK_SCOOP'));
     expect(seen.indexOf('WALK_BIPED_ON_MILL')).toBeGreaterThan(seen.indexOf('EAT_SCOOP'));
   });
 
   it('lands hexapod on the belt then stands for the biped gag', () => {
     const d = makeLoopDirector();
-    const mill = kitchenLayout().mill;
     let landPitch = 99;
     let landY = 0;
     let millDist = 0;
+    const standY = millSurfaceY(millStandXz().x);
     for (let i = 0; i < 8000; i++) {
       const out = d.update(drive);
       if (out.macro === 'LAND_MILL') {
@@ -241,8 +235,8 @@ describe('SceneDirector scripted loop (reel)', () => {
       if (out.macro === 'WALK_BIPED_ON_MILL') {
         millDist = out.millDistanceMm;
         expect(Math.abs(landPitch)).toBeLessThan(0.35);
-        expect(landY).toBeLessThan(mill.deckY + bipedStandLiftMm() + 4);
-        expect(d.position.y).toBeGreaterThanOrEqual(mill.deckY);
+        expect(landY).toBeLessThan(standY + 4);
+        expect(d.position.y).toBeGreaterThan(standY - 1);
         if (out.millDistanceMm > MILL_WALK_MM_S * 0.2) break;
       }
     }

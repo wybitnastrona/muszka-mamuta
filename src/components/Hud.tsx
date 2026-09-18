@@ -1,6 +1,5 @@
 /**
  * Side HUD for the kitchen reel. Polish first, English toggle.
- * Readouts throttle at 10 Hz; the spike raster paints every frame.
  * Connectome drives only gustatory → MN9; captions here are authored.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
@@ -8,18 +7,14 @@ import { CAMERA_PRESETS, type CameraPreset, type ClipName, type FeedingState } f
 import type { GagId } from '../body/gags.ts';
 import { t, type Lang } from '../i18n.ts';
 import {
-  PHASE_IDS,
-  PHASE_STRIP,
   formatBites,
   formatPortion,
-  formatSpikeCount,
-  formatSubCaption,
   formatTimeReadout,
   resolveHudCaption,
 } from '../hud/captions.ts';
 import { cameraPresetFromKey } from '../hud/keyboard.ts';
 import { parseReelMode, REEL_SLOGAN_EN, REEL_SLOGAN_PL } from '../hud/reel.ts';
-import { RASTER_COUNT_MS, RASTER_WINDOW_MS, type SpikeHistory } from '../hud/spikeHistory.ts';
+import type { SpikeHistory } from '../hud/spikeHistory.ts';
 import { Attribution } from './Attribution.tsx';
 
 export type SceneHudSnapshot = {
@@ -35,6 +30,7 @@ export type SceneHudSnapshot = {
   gramsEaten: number;
   lifetimeBites: number;
   lifetimeGrams: number;
+  scoopFill: number;
 };
 
 export const EMPTY_SCENE_HUD: SceneHudSnapshot = {
@@ -50,6 +46,7 @@ export const EMPTY_SCENE_HUD: SceneHudSnapshot = {
   gramsEaten: 0,
   lifetimeBites: 0,
   lifetimeGrams: 0,
+  scoopFill: 0,
 };
 
 export type HudReadout = {
@@ -105,88 +102,8 @@ function Gauge({
   );
 }
 
-function SpikeRaster({
-  raster, lang,
-}: {
-  raster: RefObject<SpikeHistory>;
-  lang: Lang;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const countRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    let id = 0;
-    const draw = () => {
-      const hist = raster.current;
-      const ctx = canvas.getContext('2d');
-      if (ctx && hist) {
-        const dpr = Math.min(2, window.devicePixelRatio || 1);
-        const cssW = Math.max(1, canvas.clientWidth);
-        const cssH = Math.max(1, canvas.clientHeight);
-        const w = Math.round(cssW * dpr);
-        const h = Math.round(cssH * dpr);
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width = w;
-          canvas.height = h;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.fillStyle = '#070a0e';
-        ctx.fillRect(0, 0, cssW, cssH);
-        ctx.strokeStyle = '#1c2430';
-        ctx.lineWidth = 1;
-        for (let g = 1; g < 4; g++) {
-          const x = (g / 4) * cssW;
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, cssH);
-          ctx.stroke();
-        }
-        const band = cssH / 2;
-        ctx.strokeStyle = '#28323e';
-        ctx.beginPath();
-        ctx.moveTo(0, band);
-        ctx.lineTo(cssW, band);
-        ctx.stroke();
-        const t0 = hist.nowMs - RASTER_WINDOW_MS;
-        const paint = (times: readonly number[], y0: number, y1: number, color: string) => {
-          const seen = new Uint8Array(Math.max(1, Math.floor(cssW)));
-          for (const t of times) {
-            const x = Math.floor(((t - t0) / RASTER_WINDOW_MS) * cssW);
-            if (x >= 0 && x < seen.length) seen[x] = 1;
-          }
-          ctx.fillStyle = color;
-          for (let x = 0; x < seen.length; x++) {
-            if (seen[x]) ctx.fillRect(x, y0, 1, y1 - y0);
-          }
-        };
-        paint(hist.mn9, 2, band - 1, '#d7f4ff');
-        paint(hist.gust, band + 1, cssH - 2, '#e8c07a');
-        if (countRef.current) {
-          countRef.current.textContent = formatSpikeCount(hist.countIn(RASTER_COUNT_MS), lang);
-        }
-      }
-      id = requestAnimationFrame(draw);
-    };
-    id = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(id);
-  }, [raster, lang]);
-
-  return (
-    <div className="hud-raster" aria-label={lang === 'pl' ? 'Raster iglic MN9 i SMAK' : 'MN9 and taste spike raster'}>
-      <div className="hud-raster-labels" aria-hidden="true">
-        <span>MN9</span>
-        <span>{lang === 'pl' ? 'SMAK' : 'TASTE'}</span>
-      </div>
-      <canvas ref={canvasRef} className="hud-raster-canvas" />
-      <span ref={countRef} className="hud-num hud-raster-count">{formatSpikeCount(0, lang)}</span>
-    </div>
-  );
-}
-
 export function Hud({
-  lang, onLang, reel = parseReelMode(), preset, onPreset, readout, raster,
+  lang, onLang, reel = parseReelMode(), preset, onPreset, readout, raster: _raster,
   onPause, onRestartMeal, onNewPortion, onSeed, recording = false, onRecord,
 }: HudProps) {
   const methodsId = useId();
@@ -220,13 +137,13 @@ export function Hud({
     return (
       <div className="hud hud-reel">
         <p className="hud-slogan">{lang === 'pl' ? REEL_SLOGAN_PL : REEL_SLOGAN_EN}</p>
-        <SpikeRaster raster={raster} lang={lang} />
       </div>
     );
   }
 
   const hz = (n: number) => n.toFixed(1);
-  const pct = (n: number) => `${Math.round(clamp01(n) * 100)}%`;
+  const energy = clamp01(Math.max(scene.scoopFill, readout.crop));
+  void _raster;
 
   return (
     <div className="hud">
@@ -269,32 +186,15 @@ export function Hud({
       </div>
 
       <div className="hud-gauges" aria-label={t(lang, 'gauges')}>
+        <Gauge
+          label={t(lang, 'gaugeCreatineEnergy')}
+          display={`${Math.round(energy * 100)}`}
+          fill={energy}
+        />
+        <Gauge label={t(lang, 'gaugePumpHz')} display={hz(readout.mn9Hz)} fill={readout.mn9Hz / 50} />
         <Gauge label={t(lang, 'gaugeHunger')} display={readout.hunger.toFixed(2)} fill={readout.hunger} />
-        <Gauge label={t(lang, 'gaugeSatiety')} display={readout.satiety.toFixed(2)} fill={readout.satiety} />
-        <Gauge label={t(lang, 'gaugeCrop')} display={readout.crop.toFixed(2)} fill={readout.crop} />
-        <Gauge label={t(lang, 'gaugeLeft')} display={pct(readout.remainingFrac)} fill={readout.remainingFrac} />
-        <Gauge label={t(lang, 'gaugeMn9')} display={hz(readout.mn9Hz)} fill={readout.mn9Hz / 50} />
-        <Gauge label={t(lang, 'gaugeSmak')} display={hz(readout.smakHz)} fill={readout.smakHz / 50} />
+        <p className="hud-caption hud-caption-left" aria-live="polite">{resolved.headline}</p>
       </div>
-
-      <div className="hud-phase">
-        <div className="hud-phase-strip" role="list" aria-label={t(lang, 'phaseStrip')}>
-          {PHASE_IDS.map((id) => {
-            const on = resolved.highlightPhase && resolved.phase === id;
-            const copy = PHASE_STRIP[id];
-            return (
-              <div key={id} role="listitem" className={on ? 'is-on' : ''} aria-current={on ? 'true' : undefined}>
-                <strong>{copy.label}</strong>
-                {on && <span>{resolved.phaseLine}</span>}
-              </div>
-            );
-          })}
-        </div>
-        <p className="hud-caption" aria-live="polite">{resolved.headline}</p>
-        <p className="hud-sub">{formatSubCaption(scene.lifetimeBites, scene.lifetimeGrams, lang)}</p>
-      </div>
-
-      <SpikeRaster raster={raster} lang={lang} />
 
       <div className="hud-controls">
         <button type="button" onClick={onPause}>{readout.playing ? t(lang, 'pause') : t(lang, 'play')}</button>
@@ -318,13 +218,10 @@ export function Hud({
         <button type="button" aria-haspopup="dialog" aria-controls={methodsId} onClick={() => setOpen(true)}>
           {t(lang, 'methodsShort')}
         </button>
+        <div className="hud-credit">
+          <Attribution />
+        </div>
       </div>
-
-      <footer className="hud-foot">
-        <span>{t(lang, 'hudFoot')}</span>
-        <button type="button" className="hud-foot-link" onClick={() => setOpen(true)}>{t(lang, 'methodsShort')}</button>
-      </footer>
-      <Attribution />
 
       <dialog ref={dialog} id={methodsId} className="hud-methods" onClose={() => setOpen(false)} onKeyDown={onDialogKey}>
         <h2>{t(lang, 'methods')}</h2>

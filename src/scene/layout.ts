@@ -7,7 +7,6 @@ import {
   TUB_MM,
   flyVisualLengthMm,
   mm,
-  scoopEatClearanceMm,
   tableTopY,
   tubInnerRadiusMm,
   tubRadiusMm,
@@ -206,16 +205,15 @@ export function supportHeightAt(x: number, z: number, foodHeight: number): numbe
 }
 
 /**
- * Table pose for eating from the held scoop: south of the tub (−Z, camera
- * side), far enough that body and scoop miss the cylinder. Heading π faces
- * −Z (away from the wall), so the bowl does not aim at the jacket.
+ * Eat / pump stand: inside the open well on the powder stack, offset a few
+ * millimetres toward the mill so the fly is not on the exact axis.
  */
 export function scoopEatStand(): { x: number; z: number; heading: number } {
   const tub = kitchenLayout().tub;
   return {
-    x: tub.x,
-    z: tub.z - scoopEatClearanceMm(),
-    heading: Math.PI,
+    x: tub.x + 8,
+    z: tub.z,
+    heading: Math.PI / 2,
   };
 }
 

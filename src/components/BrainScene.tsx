@@ -5,12 +5,12 @@ import type { Atlas } from "../lib/atlas";
 import { Xoshiro128ss } from "../brain/rng.ts";
 import { t, type Lang } from "../i18n.ts";
 import {
-  PULSE_GAIN_PUMP,
   PULSE_GAIN_REST,
   PULSE_GAIN_TAU_S,
   PULSE_RATE_HZ,
   easeActivity,
   easeToward,
+  pulseTargetGain,
 } from "../hud/pulse.ts";
 
 /**
@@ -21,16 +21,20 @@ import {
  * gain; `prefers-reduced-motion` disables the pulse like it disables the orbit.
  */
 export function BrainScene({
-  atlas, frame, emphasis = false, lang = 'en',
-}: { atlas: Atlas; frame: ActivityFrame | null; emphasis?: boolean; lang?: Lang }) {
+  atlas, frame, emphasis = false, running = false, lang = 'en',
+}: { atlas: Atlas; frame: ActivityFrame | null; emphasis?: boolean; running?: boolean; lang?: Lang }) {
   const signal = useRef(frame);
   const orbit = useRef(true);
   const resetView = useRef<(() => void) | null>(null);
   const [orbiting, setOrbiting] = useState(true);
   const repaint = useRef<(() => void) | null>(null);
   const gainTarget = useRef(PULSE_GAIN_REST);
+  const runRef = useRef(running);
   useEffect(() => { signal.current = frame; repaint.current?.(); }, [frame]);
-  useEffect(() => { gainTarget.current = emphasis ? PULSE_GAIN_PUMP : PULSE_GAIN_REST; }, [emphasis]);
+  useEffect(() => {
+    runRef.current = running;
+    gainTarget.current = pulseTargetGain(emphasis ? 'PUMP' : 'SEARCH', running);
+  }, [emphasis, running]);
   const host = useRef<HTMLDivElement>(null);
 
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -115,23 +119,26 @@ export function BrainScene({
           uPulseGain: { value: PULSE_GAIN_REST },
           uPulseOn: { value: reducedMotion.matches ? 0 : 1 },
           uPulseRate: { value: PULSE_RATE_HZ * Math.PI * 2 },
+          uRun: { value: 0 },
         },
         vertexShader: `attribute float activity; attribute float phase;
           varying float strength; varying float pulse;
           uniform float pixelRatio; uniform float uTime; uniform float uPulseGain; uniform float uPulseOn; uniform float uPulseRate;
           void main() {
             strength = activity;
-            // Faster and deeper with gain; zero for inactive somata and under reduced motion.
             float rate = uPulseRate * (0.6 + 0.4 * uPulseGain);
             float wave = 0.5 + 0.5 * sin(uTime * rate + phase);
             pulse = uPulseOn * strength * wave * uPulseGain;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = (0.9 + strength * 2.0 + pulse * 2.4) * pixelRatio; }`,
+            gl_PointSize = (4.2 + strength * 7.5 + pulse * 9.0) * pixelRatio; }`,
         fragmentShader: `varying float strength; varying float pulse;
+          uniform float uTime; uniform float uRun;
           void main() { float r = length(gl_PointCoord - vec2(.5)); if (r > .5) discard;
           vec3 color = mix(vec3(.12,.35,.75), vec3(.2,.95,1.), strength);
           float white = clamp(smoothstep(.6,1.,strength) + pulse * 0.85, 0., 1.);
           color = mix(color, vec3(1.), white);
+          float rgbWave = 0.5 + 0.5 * sin(uTime * 8.0);
+          color += uRun * strength * vec3(0.55 * rgbWave, 0.12, 0.45 * (1.0 - rgbWave));
           float alpha = clamp(.28 + .65 * strength + .3 * pulse, 0., 1.);
           gl_FragColor = vec4(color, alpha * (1.-smoothstep(.18,.5,r))); }`,
       });
@@ -175,6 +182,7 @@ export function BrainScene({
         material.uniforms.uTime!.value = clock;
         material.uniforms.uPulseGain!.value = gain;
         material.uniforms.uPulseOn!.value = reducedMotion.matches ? 0 : 1;
+        material.uniforms.uRun!.value = runRef.current && !reducedMotion.matches ? 1 : 0;
       }
       if (!settled && geometry && target && displayed) {
         const gap = easeActivity(displayed, target, dt);

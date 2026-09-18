@@ -329,7 +329,17 @@ export function App() {
           <section className="panel brain-panel">
             <h2>{t(lang, 'brain')} <span>MaleCNS v1.0</span></h2>
             {atlas
-              ? <BrainScene atlas={atlas} frame={frame} emphasis={sceneHud.state === 'PUMP'} lang={lang} />
+              ? <BrainScene
+                  atlas={atlas}
+                  frame={frame}
+                  emphasis={sceneHud.state === 'PUMP'}
+                  running={
+                    sceneHud.macro === 'WALK_BIPED_ON_MILL'
+                    || sceneHud.macro === 'WALK_MILL'
+                    || sceneHud.macro === 'WALK_BIPED'
+                  }
+                  lang={lang}
+                />
               : <p className="loading" role="status">{t(lang, 'loadingAnatomy')}</p>}
             <div className="panel-bottom">
               {t(lang, 'drag')} · {atlas?.visibleIds.size.toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-US') ?? '…'} {t(lang, 'somata')}

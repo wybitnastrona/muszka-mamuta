@@ -3,6 +3,7 @@ import {
   ACTIVITY_TAU_S,
   PULSE_GAIN_PUMP,
   PULSE_GAIN_REST,
+  PULSE_GAIN_RUN,
   PULSE_GAIN_TAU_S,
   easeActivity,
   easeToward,
@@ -33,13 +34,16 @@ describe('atlas pulse smoothing (presentation only)', () => {
     expect(easeToward(0.3, 0.7, 0, 1)).toBe(0.7);
   });
 
-  it('emphasises only POMPUJ and follows the state over ~200 ms', () => {
+  it('emphasises POMPUJ at 500% and mill walk at 300%', () => {
     expect(pulseTargetGain('PUMP')).toBe(PULSE_GAIN_PUMP);
+    expect(pulseTargetGain('SEARCH', true)).toBe(PULSE_GAIN_RUN);
+    expect(pulseTargetGain('PUMP', true)).toBe(PULSE_GAIN_PUMP);
     for (const s of ['SEARCH', 'ORIENT', 'APPROACH', 'TASTE', 'EXTEND', 'RETRACT', 'REST'] as const) {
       expect(pulseTargetGain(s)).toBe(PULSE_GAIN_REST);
     }
     expect(pulseTargetGain(null)).toBe(PULSE_GAIN_REST);
-    expect(PULSE_GAIN_PUMP).toBeGreaterThan(PULSE_GAIN_REST * 1.5);
+    expect(PULSE_GAIN_PUMP).toBe(PULSE_GAIN_REST * 5);
+    expect(PULSE_GAIN_RUN).toBe(PULSE_GAIN_REST * 3);
     let g = PULSE_GAIN_REST;
     for (let t = 0; t < 0.2; t += 1 / 60) g = easeToward(g, PULSE_GAIN_PUMP, 1 / 60, PULSE_GAIN_TAU_S);
     expect(g).toBeGreaterThan(PULSE_GAIN_REST + (PULSE_GAIN_PUMP - PULSE_GAIN_REST) * 0.55);

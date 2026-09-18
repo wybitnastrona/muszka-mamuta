@@ -3,8 +3,8 @@
  * to SEARCH→…→REST so the MN9 gate still decides when the proboscis extends.
  * Durations are soft caps; each state exits on its own completion flag.
  *
- * Default (`reel`): fly into tub → scoop → drop → eat from the lying scoop
- * → mill hex land → biped walk → AUTONOMOUS roam.
+ * Default (`reel`): fly into tub → pick scoop → PUMP inside the well → fly
+ * out to the mill → hex land → biped walk → AUTONOMOUS roam.
  * `?loop=full` keeps ORBIT / EXIT_FRAME. Authored motion — the
  * connectome is not consulted here. See docs/BODY-MODEL.md.
  */
@@ -226,12 +226,12 @@ export class SceneLoop {
       case 'LAND_TOP': return 'FLY_INTO_TUB';
       case 'FLY_INTO_TUB': return 'PICK_SCOOP';
       case 'WALK_SCOOP': return 'FLY_INTO_TUB';
-      case 'PICK_SCOOP': return 'FLY_OUT_WITH_SCOOP';
+      case 'PICK_SCOOP': return 'EAT_SCOOP';
       case 'APPROACH_TUB': return 'PICK_SCOOP';
-      case 'DIP_SCOOP': return 'FLY_OUT_WITH_SCOOP';
-      case 'FLY_OUT_WITH_SCOOP': return 'DROP_SCOOP';
+      case 'DIP_SCOOP': return 'EAT_SCOOP';
+      case 'EAT_SCOOP': return 'FLY_OUT_WITH_SCOOP';
+      case 'FLY_OUT_WITH_SCOOP': return 'LAND_MILL';
       case 'DROP_SCOOP': return 'EAT_SCOOP';
-      case 'EAT_SCOOP': return 'GROOM_SHORT';
       case 'GROOM_SHORT': return 'TAKEOFF_MILL';
       case 'TAKEOFF_MILL': return 'ORBIT_SHORT';
       case 'ORBIT_SHORT': return 'LAND_MILL';
@@ -253,12 +253,12 @@ export class SceneLoop {
     switch (from) {
       case 'FLY_INTO_TUB': return 'PICK_SCOOP';
       case 'WALK_SCOOP': return 'FLY_INTO_TUB';
-      case 'PICK_SCOOP': return 'FLY_OUT_WITH_SCOOP';
+      case 'PICK_SCOOP': return 'EAT_SCOOP';
       case 'APPROACH_TUB': return 'PICK_SCOOP';
-      case 'DIP_SCOOP': return 'FLY_OUT_WITH_SCOOP';
-      case 'FLY_OUT_WITH_SCOOP': return 'DROP_SCOOP';
+      case 'DIP_SCOOP': return 'EAT_SCOOP';
+      case 'EAT_SCOOP': return 'FLY_OUT_WITH_SCOOP';
+      case 'FLY_OUT_WITH_SCOOP': return 'LAND_MILL';
       case 'DROP_SCOOP': return 'EAT_SCOOP';
-      case 'EAT_SCOOP': return 'TAKEOFF_MILL';
       case 'GROOM_SHORT': return 'TAKEOFF_MILL';
       case 'TAKEOFF_MILL': return 'LAND_MILL';
       case 'LAND_MILL': return 'WALK_BIPED_ON_MILL';

@@ -25,6 +25,8 @@ export const CURD_MM = { length: 100, width: 80, height: 30 };
  * Height is one third of the open tub (authored fill, not a weigh-out).
  */
 export const PILE_MM = { radius: 48, height: 142 / 3 };
+/** Opaque well fill under the mound so the cylinder is not a black hole. */
+export const POWDER_STACK_FRAC = 0.78;
 export const PILE_CELL_COUNT = 80;
 export const PILE_TOTAL_MASS_G = 250;
 export const CREATINE_ALBEDO_HEX = '#e6e2d8';
@@ -282,6 +284,14 @@ export function tubRadiusMm(): number {
 
 export function tubInnerRadiusMm(): number {
   return tubRadiusMm() - mm(TUB_MM.wall);
+}
+
+export function powderStackHeightMm(): number {
+  return mm(PILE_MM.height) * POWDER_STACK_FRAC;
+}
+
+export function powderMoundHeightMm(): number {
+  return mm(PILE_MM.height) * (1 - POWDER_STACK_FRAC);
 }
 
 /**

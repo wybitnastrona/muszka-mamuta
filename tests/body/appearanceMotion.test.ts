@@ -36,21 +36,21 @@ describe('antenna flicks', () => {
 });
 
 describe('foot contact', () => {
-  it('sinks 0.3 mm on standing modes and restores rest translation', () => {
-    expect(standingFootSinkMm('ground')).toBeCloseTo(0.3);
-    expect(standingFootSinkMm('onFood')).toBeCloseTo(0.3);
+  it('lifts pads off the deck on standing modes and restores rest translation', () => {
+    expect(standingFootSinkMm('ground')).toBeCloseTo(-0.45);
+    expect(standingFootSinkMm('onFood')).toBeCloseTo(-0.45);
     expect(standingFootSinkMm('flight')).toBe(0);
     const parent = new THREE.Group();
     const bone = new THREE.Bone();
     parent.add(bone);
     const rest = new THREE.Vector3(0, 2, 0);
-    applyFootContactOffset(bone, rest, 0.3);
+    applyFootContactOffset(bone, rest, -0.45);
     const world = new THREE.Vector3();
     bone.getWorldPosition(world);
-    expect(world.y).toBeCloseTo(1.7);
-    applyFootContactOffset(bone, rest, 0.3);
+    expect(world.y).toBeCloseTo(2.45);
+    applyFootContactOffset(bone, rest, -0.45);
     bone.getWorldPosition(world);
-    expect(world.y).toBeCloseTo(1.7);
+    expect(world.y).toBeCloseTo(2.45);
   });
 });
 

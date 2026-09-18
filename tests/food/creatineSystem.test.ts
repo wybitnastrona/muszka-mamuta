@@ -35,7 +35,7 @@ describe('CreatineSystem scoop', () => {
     expect(sys.scoopFill).toBe(1);
   });
 
-  it('dips surface mass into the scoop and drives chemo from the dropped bowl', () => {
+  it('dips surface mass into the scoop and siphons while held in the well', () => {
     const sys = CreatineSystem.create({ seed: 1, store: null });
     const before = sys.remainingMassGrams;
     const taken = sys.dip();
@@ -45,7 +45,7 @@ describe('CreatineSystem scoop', () => {
     expect(sys.remainingMassGrams).toBeLessThan(before);
     expect(before - sys.remainingMassGrams).toBeGreaterThanOrEqual(SCOOP_CAPACITY_G * 0.5);
 
-    const held = sys.step({
+    const heldFar = sys.step({
       dt: 0.05,
       pumping: true,
       tasting: true,
@@ -53,27 +53,29 @@ describe('CreatineSystem scoop', () => {
       cameraDist: 400,
       sensors: [{ x: 80, y: 0, z: 80 }],
       foodXZ: { x: 0, z: 0 },
-      flyXZ: { x: 30, z: 30 },
+      flyXZ: { x: 80, z: 80 },
     });
     expect(sys.scoopFill).toBe(1);
-    expect(held.events.some((e) => e.type === 'consume')).toBe(false);
+    expect(heldFar.events.some((e) => e.type === 'consume')).toBe(false);
 
-    sys.drop();
     const stand = scoopEatStand();
+    const origin = { x: 0, z: 0 };
+    const inWell = { x: origin.x + 8, z: origin.z };
     const out = sys.step({
       dt: 0.05,
       pumping: true,
       tasting: true,
-      labellum: { x: stand.x, y: 0, z: stand.z },
+      labellum: { x: inWell.x, y: 0, z: inWell.z },
       cameraDist: 400,
-      sensors: [{ x: stand.x, y: 0, z: stand.z }],
-      foodXZ: { x: 0, z: 0 },
-      flyXZ: { x: stand.x, z: stand.z },
+      sensors: [{ x: inWell.x, y: 0, z: inWell.z }],
+      foodXZ: origin,
+      flyXZ: inWell,
     });
-    expect(sys.scoopMode).toBe('dropped');
+    expect(sys.scoopMode).toBe('held');
     expect(out.chemo.contact.aa).toBeGreaterThan(0.4);
     expect(out.chemo.rates.labellarHz).toBeGreaterThan(10);
     expect(sys.scoopFill).toBeLessThan(1);
     expect(out.events.some((e) => e.type === 'consume')).toBe(true);
+    expect(Math.hypot(stand.x, stand.z)).toBeGreaterThan(0);
   });
 });

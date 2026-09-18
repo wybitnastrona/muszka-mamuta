@@ -74,7 +74,7 @@ import { kitchenLayout, scoopEatStand } from '../scene/layout.ts';
 import { headingError, clamp, clamp01, easeInOut, lerp } from './math.ts';
 import { gaitPoseAtDistance, millGaitAdvance } from './gait.ts';
 import { wingIdleFlick } from './wings.ts';
-import { millStandXz, MILL_HEADING } from './treadmill.ts';
+import { millStandXz, millSurfaceY, MILL_HEADING } from './treadmill.ts';
 import { LOOP_CAPTIONS_PL } from '../hud/captions.ts';
 
 export type LocomotionMode = 'ground' | 'flight' | 'onFood' | 'mill';
@@ -409,9 +409,8 @@ export class SceneDirector {
       this.flight.startLand({ target: { x: xz.x, y: support, z: xz.z }, supportY: support, seed: this.seed + 5 });
     } else if (state === 'LAND_MILL') {
       this.mode = 'flight';
-      const mill = layout.mill;
       const stand = millStandXz();
-      const support = mill.deckY + this.standOffset;
+      const support = millSurfaceY(stand.x) + this.standOffset;
       const target = { x: stand.x, y: support, z: stand.z };
       this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
       this.flight.startLand({ target, supportY: support, seed: this.seed + 7 });
@@ -461,9 +460,8 @@ export class SceneDirector {
 
   private lockMillStand(biped: boolean): void {
     const stand = millStandXz();
-    const mill = kitchenLayout().mill;
     this.mode = 'mill';
-    this.position.set(stand.x, mill.deckY + this.standOffset + (biped ? bipedStandLiftMm() : 0), stand.z);
+    this.position.set(stand.x, millSurfaceY(stand.x) + this.standOffset + (biped ? bipedStandLiftMm() : 0), stand.z);
     this.heading = MILL_HEADING;
     this.pitch = biped ? BIPED_BODY_PITCH_RAD : 0;
     this.bank = 0;
@@ -508,32 +506,32 @@ export class SceneDirector {
 
   private startFlyOutWithScoop(): void {
     this.mode = 'flight';
-    const stand = this.eatStandPoint();
-    const heading = this.eatStandHeading();
-    const support = this.surfaceYAt(stand.x, stand.z);
+    const stand = millStandXz();
+    const support = millSurfaceY(stand.x);
     const layout = kitchenLayout();
     const upY = tableTopY() + layout.tub.height + mm(SCOOP_MM.handleLength) + mm(SCOOP_MM.bowlRadius) + 10;
-    const awayZ = layout.tub.z - layout.tub.diameter / 2 - 16;
     this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
     this.flight.startSpline({
       points: [
         { x: this.position.x, y: this.position.y, z: this.position.z },
         { x: this.position.x, y: upY, z: this.position.z },
-        { x: layout.tub.x, y: upY, z: awayZ },
+        { x: (this.position.x + stand.x) * 0.5, y: upY, z: (this.position.z + stand.z) * 0.5 },
         { x: stand.x, y: upY, z: stand.z },
         { x: stand.x, y: support, z: stand.z },
       ],
       duration: FLY_OUT_SCOOP_S,
-      endHeading: heading,
+      endHeading: MILL_HEADING,
     });
   }
 
   private inTubGhost(): boolean {
     return isSplineFlight(this.loop.state)
       || this.loop.state === 'PICK_SCOOP'
+      || this.loop.state === 'EAT_SCOOP'
       || this.autoKind === 'flyIn'
       || this.autoKind === 'pick'
-      || this.autoKind === 'flyOut';
+      || this.autoKind === 'flyOut'
+      || this.autoKind === 'eat';
   }
 
   private isBipedMill(): boolean {
@@ -593,13 +591,10 @@ export class SceneDirector {
     } else if (this.autoKind === 'pick') {
       this.propT += dt;
       if (this.propT >= SCOOP_PICK_S) {
-        this.autoKind = 'flyOut';
-        this.startFlyOutWithScoop();
+        this.autoKind = 'eat';
+        this.mixer.play('odorTrack', { fade: 0, restart: true });
+        this.placeAtPile({ taste: true });
       }
-    } else if (this.autoKind === 'flyOut' && this.flight.done) {
-      this.autoKind = 'eat';
-      this.mixer.play('odorTrack', { fade: 0, restart: true });
-      this.placeAtPile({ taste: true });
     } else if (this.autoKind === 'eat') {
       if (this.eatSatietyRetract || (this.eatSawRest && this.fsm.state === 'SEARCH')) {
         this.creatine()?.drop();
@@ -706,7 +701,7 @@ export class SceneDirector {
     const xz = this.eatStandPoint();
     this.position.set(xz.x, this.surfaceYAt(xz.x, xz.z), xz.z);
     this.heading = this.eatStandHeading();
-    this.mode = 'ground';
+    this.mode = this.creatine() ? 'onFood' : 'ground';
     this.onWall = false;
     this.syncFlightWorld();
     this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
@@ -1299,7 +1294,7 @@ export class SceneDirector {
   private applyStandingY(dt: number): void {
     if (this.mode === 'flight' || this.onWall) return;
     if (this.mode === 'mill') {
-      this.position.y = kitchenLayout().mill.deckY + this.standOffset + (this.isBipedMill() ? bipedStandLiftMm() : 0);
+      this.position.y = millSurfaceY(millStandXz().x) + this.standOffset + (this.isBipedMill() ? bipedStandLiftMm() : 0);
       this.stepping = false;
       return;
     }
@@ -1487,7 +1482,7 @@ export class SceneDirector {
         this.mode = 'onFood';
         this.onWall = false;
       } else if (kind === 'scoop') {
-        this.mode = 'ground';
+        this.mode = this.creatine() ? 'onFood' : 'ground';
         this.onWall = false;
       }
     }

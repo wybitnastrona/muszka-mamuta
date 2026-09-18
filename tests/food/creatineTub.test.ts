@@ -2,13 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createCreatineTub } from '../../src/food/creatineTub.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
-import {
-  PILE_MM,
-  TUB_MM,
-  mm,
-  tubInnerRadiusMm,
-  tubRadiusMm,
-} from '../../src/scene/scale.ts';
+import { PILE_MM, TUB_MM, POWDER_STACK_FRAC, mm, tubInnerRadiusMm, tubRadiusMm } from '../../src/scene/scale.ts';
 import { parseCreatineManifest, LABEL_WRAP_FLIP_Y } from '../../src/scene/creatineTextures.ts';
 import { tubLabelFrame } from '../../src/body/cameras.ts';
 
@@ -43,9 +37,11 @@ describe('KFD tub layout', () => {
     expect(tub.group.getObjectByName('kfdLabel')).toBeTruthy();
     expect(tub.group.getObjectByName('kfdLid')).toBeFalsy();
     expect(tub.group.getObjectByName('kfdPowderMound')).toBeTruthy();
+    expect(tub.group.getObjectByName('kfdPowderStack')).toBeTruthy();
+    expect(tub.group.getObjectByName('kfdPowderStackBase')).toBeTruthy();
     expect(tub.group.getObjectByName('kfdPowderDisc')).toBeFalsy();
     expect(tub.powderMound.geometry.type).toBe('LatheGeometry');
-    expect(tub.powderMound.position.y).toBeCloseTo(mm(TUB_MM.wall));
+    expect(tub.powderMound.position.y).toBeCloseTo(mm(TUB_MM.wall) + mm(PILE_MM.height) * POWDER_STACK_FRAC);
     expect(tub.labelAnchor.position.z).toBeLessThan(0);
     expect(Math.abs(tub.labelAnchor.position.z)).toBeCloseTo(tubRadiusMm());
     tub.group.updateMatrixWorld(true);

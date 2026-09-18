@@ -101,11 +101,11 @@ describe('scene loop seed 1 (reel default)', () => {
       if (out.state === 'AUTONOMOUS' && seen.length > 6) break;
     }
     expect(seen).toContain('PICK_SCOOP');
-    expect(seen).toContain('FLY_OUT_WITH_SCOOP');
-    expect(seen).toContain('DROP_SCOOP');
     expect(seen).toContain('EAT_SCOOP');
+    expect(seen).toContain('FLY_OUT_WITH_SCOOP');
     expect(seen).toContain('WALK_BIPED_ON_MILL');
     expect(seen).toContain('AUTONOMOUS');
+    expect(seen).not.toContain('DROP_SCOOP');
     expect(seen).not.toContain('DIP_SCOOP');
     expect(seen).not.toContain('ORBIT');
     expect(seen).not.toContain('ORBIT_SHORT');
@@ -114,27 +114,23 @@ describe('scene loop seed 1 (reel default)', () => {
     expect(wrapped).toBe(false);
   });
 
-  it('reaches EAT_SCOOP within 20–30 s of soft caps', () => {
+  it('reaches EAT_SCOOP after pick, then flies out to the mill', () => {
     const loop = new SceneLoop(1);
     expect(loop.state).toBe('FLY_INTO_TUB');
     loop.step(6, { ...done, flightDone: true });
     expect(loop.state).toBe('PICK_SCOOP');
     loop.step(1, { ...done, propDone: true });
-    expect(loop.state).toBe('FLY_OUT_WITH_SCOOP');
-    loop.step(6, { ...done, flightDone: true });
-    expect(loop.state).toBe('DROP_SCOOP');
-    loop.step(1, { ...done, propDone: true });
     expect(loop.state).toBe('EAT_SCOOP');
-    const toEat = 6 + 1 + 6 + 1;
+    const toEat = 6 + 1;
     expect(toEat).toBeLessThanOrEqual(30);
-    expect(toEat).toBeGreaterThanOrEqual(10);
+    expect(toEat).toBeGreaterThanOrEqual(5);
     let t = 0;
     while (loop.state === 'EAT_SCOOP' && t < 50) {
       loop.step(0.5, { ...done, eatBoutDone: false, satiety: 0.3 });
       t += 0.5;
     }
     expect(t).toBeGreaterThanOrEqual(EAT_BOUT_CAP_S);
-    expect(loop.state).toBe('TAKEOFF_MILL');
+    expect(loop.state).toBe('FLY_OUT_WITH_SCOOP');
   });
 
   it('emits a mill caption on WALK_BIPED_ON_MILL', () => {
@@ -181,7 +177,6 @@ describe('scene loop seed 1 (full / debug)', () => {
     expect(seen).toContain('LAND_TOP');
     expect(seen).toContain('FLY_INTO_TUB');
     expect(seen).toContain('EAT_SCOOP');
-    expect(seen).toContain('GROOM_SHORT');
     expect(seen).toContain('WALK_BIPED_ON_MILL');
     expect(seen).toContain('GROOM_FULL');
     expect(seen).toContain('NAP');

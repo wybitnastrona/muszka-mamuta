@@ -22,6 +22,8 @@ import {
   TUB_MM,
   flyVisualLengthMm,
   mm,
+  powderMoundHeightMm,
+  powderStackHeightMm,
   tableTopY,
   tubInnerRadiusMm,
 } from '../scene/scale.ts';
@@ -66,16 +68,16 @@ export class CreatineSystem extends TwarogSystem {
     return { cx: origin.x, cz: origin.z, hx: r, hz: r };
   }
 
-  /** In the well the fly stands on the powder mound, not the table. */
+  /** In the well the fly stands on the powder stack + mound, not the table. */
   override supportHeightAt(x: number, z: number, foodOrigin: Vec3): number {
     const dx = x - foodOrigin.x;
     const dz = z - foodOrigin.z;
     if (Math.hypot(dx, dz) < tubInnerRadiusMm()) {
-      return tableTopY() + mm(TUB_MM.wall) + pileHeightAt(
+      return tableTopY() + mm(TUB_MM.wall) + powderStackHeightMm() + pileHeightAt(
         dx,
         dz,
         mm(PILE_MM.radius),
-        mm(PILE_MM.height),
+        powderMoundHeightMm(),
       );
     }
     return tableTopY();
@@ -136,8 +138,13 @@ export class CreatineSystem extends TwarogSystem {
     const stand = scoopEatStand();
     const nearBowl = Math.hypot(input.flyXZ.x - stand.x, input.flyXZ.z - stand.z)
       < flyVisualLengthMm() * 1.8;
+    const inWell = Math.hypot(input.flyXZ.x - input.foodXZ.x, input.flyXZ.z - input.foodXZ.z)
+      < tubInnerRadiusMm();
     const labellumDown = input.tasting || input.pumping;
-    const tastingBowl = this.scoopMode === 'dropped' && this.scoopFill > 0 && nearBowl && labellumDown;
+    const tastingBowl = this.scoopFill > 0 && labellumDown && (
+      (this.scoopMode === 'held' && inWell)
+      || (this.scoopMode === 'dropped' && nearBowl)
+    );
     const siphonEvents: TwarogStepResult['events'] = [];
     if (tastingBowl && input.pumping) {
       const before = this.scoopFill;

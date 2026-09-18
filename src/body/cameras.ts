@@ -15,23 +15,30 @@ export type CameraFrame = {
 
 export const REEL_ASPECT = 9 / 16;
 
-/** 3/4 kitchen view from the mill / +X quarter so the KFD face is readable. */
+/**
+ * Pull-back from the tub/mill look-at, not a 5× mesh scale (that breaks gait).
+ * Previous mill-only crop (lookAt on the deck, camera on mill.x) hid the KFD.
+ */
+export const KITCHEN_FRAMING = 0.95;
+
+/** 3/4 kitchen: tub wrap + mill LED as one pair. Scene mm stay 1:1. */
 export function kitchenFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
   const { tub, mill } = kitchenLayout();
-  const frontX = tub.x + tub.diameter / 2;
   const lookAt: [number, number, number] = [
-    (frontX + mill.x) * 0.5,
-    Math.min(22, mill.deckY + 8),
+    (tub.x + mill.x) * 0.5,
+    Math.max(52, tub.height * 0.38),
     mill.z,
   ];
+  const spanX = (mill.x + mill.hx) - (tub.x - tub.diameter / 2);
+  const dist = Math.max(280, spanX * KITCHEN_FRAMING);
   return {
     position: [
-      mill.x + mill.hx * 0.08,
-      Math.max(124, tub.height * 0.88),
-      -Math.max(176, tub.height * 1.2),
+      lookAt[0] + 36,
+      Math.max(168, tub.height * 1.18),
+      lookAt[2] - dist,
     ],
     lookAt,
-    fov: 38,
+    fov: 48,
   };
 }
 
@@ -86,16 +93,17 @@ export function tubLabelFrame(): CameraFrame {
 }
 
 /**
- * Faza 4 review camera: 3/4 front-left of the fly, whole head and first
- * legs in frame, pulled back enough that the mesh is not clipped.
+ * Faza 4 review camera: 3/4 of the fly from the mill / +X side, outside
+ * the KFD well (the spawn used to sit on a board; a close +Z dolly is now
+ * inside the cylinder).
  */
 export function overviewFrame(radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { fly, biteFront } = kitchenLayout();
-  const s = Math.max(22, radius * 1.55);
+  const { fly, tub } = kitchenLayout();
+  const s = Math.max(42, radius * 3.8);
   return {
-    position: [fly.x + s * 1.05, s * 0.55, fly.z + s * 0.88],
-    lookAt: [fly.x, Math.max(3.5, biteFront.y * 0.5), fly.z + flyVisualLengthMm() * 0.22],
-    fov: 30,
+    position: [fly.x + s * 1.4, Math.max(20, s * 0.7), fly.z - s * 0.45],
+    lookAt: [fly.x, Math.max(6, tub.height * 0.05), fly.z],
+    fov: 34,
   };
 }
 

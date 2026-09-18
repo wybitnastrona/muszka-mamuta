@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { millGaitAdvance } from '../../src/body/gait.ts';
-import { millBeltScroll, millBeltChevron, millBeltLengthMm, millConsoleLabel, millConsoleLocalPose, millBaseHeightMm, millRailGripWorld, millStandXz, MILL_BELT_SPAN, MILL_HEADING } from '../../src/body/treadmill.ts';
+import { millBeltScroll, millBeltChevron, millBeltLengthMm, millConsoleLabel, millConsoleLocalPose, millRailGripWorld, millStandXz, MILL_BELT_SPAN, MILL_HEADING, MILL_INCLINE_RAD } from '../../src/body/treadmill.ts';
 import { scoopBowlLocal } from '../../src/body/scoop.ts';
 import { MILL_WALK_MM_S } from '../../src/scene/scale.ts';
 
@@ -16,9 +16,11 @@ describe('mill belt + gait', () => {
     const dt = 0.5;
     const belt = millBeltLengthMm();
     const next = millBeltScroll(0, dt);
-    expect(next).toBeCloseTo((MILL_WALK_MM_S / belt) * dt);
+    expect(next).toBeCloseTo(1 - (MILL_WALK_MM_S / belt) * dt);
     expect(MILL_BELT_SPAN).toBeLessThan(0.7);
-    expect(millConsoleLabel(MILL_WALK_MM_S * dt)).toBe(`${Math.round(MILL_WALK_MM_S * dt)} mm`);
+    expect(millConsoleLabel(0)).toBe('0.00 km');
+    expect(millConsoleLabel(MILL_WALK_MM_S * dt)).toBe('0.00 km');
+    expect(millConsoleLabel(1250)).toBe('1.25 km');
   });
 
   it('paints chunky high-contrast chevrons, not sub-millimetre noise', () => {
@@ -34,6 +36,11 @@ describe('mill belt + gait', () => {
     expect(flips).toBeLessThanOrEqual(8);
   });
 
+  it('pitches the pad uphill toward the +X rail', () => {
+    expect(MILL_INCLINE_RAD).toBeGreaterThan(0.05);
+    expect(MILL_INCLINE_RAD).toBeLessThan(0.2);
+  });
+
   it('puts the U-rail on +X with left/right grips', () => {
     const stand = millStandXz();
     const grip = millRailGripWorld();
@@ -43,14 +50,12 @@ describe('mill belt + gait', () => {
     expect(grip.left.z).toBeGreaterThan(grip.right.z);
   });
 
-  it('lays the mm readout flat on the mill pad, camera-facing', () => {
+  it('puts a vertical red LED on the motor fascia, camera-facing', () => {
     const pose = millConsoleLocalPose();
-    const baseH = millBaseHeightMm();
-    expect(pose.rotX).toBeCloseTo(-Math.PI / 2);
-    expect(pose.y - baseH).toBeGreaterThan(0);
-    expect(pose.y - baseH).toBeLessThan(2);
+    expect(pose.rotY).toBeCloseTo(Math.PI);
+    expect(pose.rotX).toBeCloseTo(0);
     expect(pose.x).toBeLessThan(0);
-    expect(Math.abs(pose.z)).toBeLessThan(1);
+    expect(pose.z).toBeLessThan(0);
     expect(pose.width).toBeGreaterThan(pose.depth);
   });
 });

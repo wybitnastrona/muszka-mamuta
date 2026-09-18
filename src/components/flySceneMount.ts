@@ -261,7 +261,6 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     camera.updateProjectionMatrix();
     controls.target.fromArray(frame.lookAt);
     controls.enabled = debug !== 'weights';
-    controls.update();
     appliedPreset = name;
   };
 
@@ -474,6 +473,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           out.flyPose.position.z,
         );
         poseSpoon(spoon, layout.table.width, layout.table.depth, out.spoonShadow);
+        spoon.visible = out.spoonShadow > 0.02;
         const gagMat = gagShadow.material as THREE.MeshBasicMaterial;
         gagMat.opacity = out.spoonShadow * 0.55;
         gagShadow.visible = out.spoonShadow > 0.02;
@@ -545,6 +545,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           gramsEaten: out.gramsEaten,
           lifetimeBites: 0,
           lifetimeGrams: 0,
+          scoopFill: out.scoop?.fill ?? 0,
         });
         if (out.hudState !== lastHud.state || out.flyPose.clipName !== lastHud.clip) {
           lastHud = { state: out.hudState, clip: out.flyPose.clipName };
@@ -640,6 +641,8 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     world.add(scoopHandle.group);
     millHandle = createTreadmill();
     world.add(millHandle.group);
+    applyPreset(opts.presetRef.current);
+    view.resize();
     const meta = await (await get('model.json')).json() as FlybodyMeta;
     const buffer = await (await get(meta.binary)).arrayBuffer();
     if (disposed) return;

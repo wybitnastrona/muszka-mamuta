@@ -47,19 +47,30 @@ describe('render quality', () => {
 });
 
 describe('kitchen slab', () => {
-  it('keeps the table top at y=0 with a 1 mm bevel, plate, spoon, grid, contact AO', () => {
+  it('keeps a lab-blue PlaneGeometry deck at y=0 with bulk thickness, spoon, contact AO', () => {
     const kit = createKitchen(420, 340, TINY);
     expect(kit.table.name).toBe('tableTop');
+    expect(kit.table.geometry.type).toBe('PlaneGeometry');
     expect(TABLE_BEVEL_MM).toBe(1);
-    const box = new THREE.Box3().setFromObject(kit.table);
-    expect(box.max.y).toBeLessThan(2.2);
+    const deck = new THREE.Box3().setFromObject(kit.table);
+    expect(deck.max.y).toBeLessThan(0.2);
+    expect(Math.abs(deck.min.y)).toBeLessThan(0.2);
+    const bulk = kit.group.getObjectByName('tableBulk');
+    expect(bulk).toBeTruthy();
+    const box = new THREE.Box3().setFromObject(bulk!);
     expect(box.min.y).toBeLessThan(-20);
-    expect(kit.plate.name).toBe('cheesePlate');
-    expect(kit.group.getObjectByName('darkGrid')).toBeTruthy();
+    const tableMat = kit.table.material as THREE.MeshStandardMaterial;
+    expect(tableMat.color.getHex()).toBe(0x3a6a8c);
+    expect(tableMat.roughness).toBeCloseTo(0.85);
+    expect(kit.group.getObjectByName('labFloor')).toBeTruthy();
+    expect(kit.group.getObjectByName('darkGrid')).toBeFalsy();
+    expect(kit.group.getObjectByName('cheesePlate')).toBeFalsy();
+    expect(kit.group.getObjectByName('cuttingBoard')).toBeFalsy();
     expect(kit.group.getObjectByName('twarog')).toBeFalsy();
     expect(kit.spoon.name).toBe('scaleSpoon');
+    expect(kit.spoon.visible).toBe(false);
     expect(kit.contactAo.name).toBe('thoraxContactAo');
-    expect(kitchenDrawCount(kit.group)).toBeLessThan(12);
+    expect(kitchenDrawCount(kit.group)).toBeLessThan(14);
     poseSpoon(kit.spoon, 420, 340, 0);
     const restX = kit.spoon.position.x;
     poseSpoon(kit.spoon, 420, 340, 1);
@@ -93,8 +104,15 @@ describe('Reel camera', () => {
     const kdy = kitchen.position[1] - kitchen.lookAt[1];
     const kdz = kitchen.position[2] - kitchen.lookAt[2];
     const kitchenElev = (Math.atan2(kdy, Math.hypot(kdx, kdz)) * 180) / Math.PI;
-    expect(kitchenElev).toBeGreaterThan(12);
-    expect(kitchenElev).toBeLessThan(32);
+    expect(kitchenElev).toBeGreaterThan(18);
+    expect(kitchenElev).toBeLessThan(50);
+    expect(kitchen.position[1]).toBeGreaterThan(80);
+    expect(kitchen.position[2]).toBeLessThan(-200);
+    expect(kitchen.lookAt[0]).toBeGreaterThan(layout.tub.x);
+    expect(kitchen.lookAt[0]).toBeLessThan(layout.mill.x);
+    const kitchenDist = Math.hypot(kdx, kdy, kdz);
+    const kitchenSpan = 2 * kitchenDist * Math.tan((kitchen.fov * Math.PI) / 360);
+    expect(kitchenSpan).toBeGreaterThan(layout.tub.height * 0.7);
     expect(kitchen.position[2]).toBeLessThan(kitchen.lookAt[2]);
     expect(frameForPreset('Widok kuchni', 10)).toEqual(kitchenFrame(10));
     expect(frameForPreset('Reel', 10)).toEqual(reelFrame(10));

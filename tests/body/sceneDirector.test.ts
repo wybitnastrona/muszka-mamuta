@@ -103,7 +103,7 @@ describe('SceneDirector', () => {
 });
 
 describe('Przegląd camera', () => {
-  it('is a 3/4 front-left view of the fly, pulled back from the mesh', () => {
+  it('is a 3/4 view of the fly from +X / −Z, outside the KFD well', () => {
     expect(CAMERA_PRESETS).toContain('Przegląd');
     const layout = kitchenLayout();
     const frame = frameForPreset('Przegląd', flyVisualLengthMm() / 2);
@@ -111,12 +111,14 @@ describe('Przegląd camera', () => {
     expect(frame).toEqual(overview);
     expect(frame.position[0]).toBeGreaterThan(layout.fly.x);
     expect(frame.position[1]).toBeGreaterThan(8);
-    expect(frame.position[2]).toBeGreaterThan(layout.fly.z);
+    expect(frame.position[2]).toBeLessThan(layout.fly.z);
     const dist = Math.hypot(
       frame.position[0] - layout.fly.x,
       frame.position[1] - 4,
       frame.position[2] - layout.fly.z,
     );
     expect(dist).toBeGreaterThan(flyVisualLengthMm());
+    expect(Math.hypot(frame.position[0] - layout.tub.x, frame.position[2] - layout.tub.z))
+      .toBeGreaterThan(layout.tub.diameter / 2 + 6);
   });
 });
