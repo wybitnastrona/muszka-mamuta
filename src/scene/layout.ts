@@ -1,6 +1,10 @@
+import { Xoshiro128ss } from '../brain/rng.ts';
 import {
+  BENCH_MM,
+  DUMBBELL_MM,
   LABEL_IMAGE_H,
   LABEL_IMAGE_W,
+  MAT_MM,
   MILL_MM,
   PILE_MM,
   POUCH_MM,
@@ -10,6 +14,7 @@ import {
   tableTopY,
   tubInnerRadiusMm,
   tubRadiusMm,
+  bodyCollisionPadMm,
 } from './scale.ts';
 
 const DEG = Math.PI / 180;
@@ -62,14 +67,133 @@ export type KitchenLayout = {
     hz: number;
     topY: number;
   };
+  /** Rubber mat beside the mill (+Z). Walkable support, not a collision solid. */
+  mat: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    hx: number;
+    hy: number;
+    hz: number;
+    topY: number;
+  };
+  /** Padded bench beside the dumbbell stack. Collision OBB. */
+  bench: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    hx: number;
+    hy: number;
+    hz: number;
+    topY: number;
+  };
+  /**
+   * Four dumbbells (3+1 pyramid) on the mat. Each is a collision OBB.
+   * `length` is the authored bar+plates span passed to createDumbbell.
+   */
+  dumbbells: Array<{
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    hx: number;
+    hy: number;
+    hz: number;
+    length: number;
+  }>;
 };
 
 /** Tub axis on −X; mill on +X with a gap past the Ø110 rim. */
 const TUB_X_MM = -90;
-const MILL_GAP_MM = 28;
+/** Clear air from the tub outer rim to the mill −X face. */
+export const MILL_GAP_MM = 28;
 
-function millCentreX(): number {
+export function millCentreX(): number {
   return TUB_X_MM + tubRadiusMm() + MILL_GAP_MM + mm(MILL_MM.length) / 2;
+}
+
+/** Clear air from the mill +Z face to the mat −Z face. */
+export const GYM_GAP_MM = 12;
+/** Bench long-edge yaw vs the mill frame. */
+export const BENCH_YAW_RAD = (15 * Math.PI) / 180;
+const GYM_DUMBBELL_SEED = 0x47594d31;
+
+export function yawedAabbHalf(hx: number, hz: number, yaw: number): { aabbHx: number; aabbHz: number } {
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  return { aabbHx: hx * c + hz * s, aabbHz: hx * s + hz * c };
+}
+
+function gymMatPose(): KitchenLayout['mat'] {
+  const millHx = mm(MILL_MM.length) / 2;
+  const millHz = mm(MILL_MM.width) / 2;
+  const hx = mm(MAT_MM.length) / 2;
+  const hz = mm(MAT_MM.width) / 2;
+  const hy = mm(MAT_MM.thickness) / 2;
+  return {
+    x: millCentreX() + millHx + GYM_GAP_MM + hx,
+    y: tableTopY() + hy,
+    z: millHz + GYM_GAP_MM + hz,
+    yaw: 0,
+    hx,
+    hy,
+    hz,
+    topY: tableTopY() + mm(MAT_MM.thickness),
+  };
+}
+
+function gymBenchPose(): KitchenLayout['bench'] {
+  const mat = gymMatPose();
+  const hx = mm(BENCH_MM.length) / 2;
+  const hz = mm(BENCH_MM.width) / 2;
+  const hy = mm(BENCH_MM.height) / 2;
+  const yaw = BENCH_YAW_RAD;
+  const { aabbHx } = yawedAabbHalf(hx, hz, yaw);
+  return {
+    x: mat.x + mat.hx + GYM_GAP_MM + aabbHx,
+    y: tableTopY() + hy,
+    z: mat.z,
+    yaw,
+    hx,
+    hy,
+    hz,
+    topY: tableTopY() + mm(BENCH_MM.height),
+  };
+}
+
+function gymDumbbellPoses(): KitchenLayout['dumbbells'] {
+  const mat = gymMatPose();
+  const length = mm(DUMBBELL_MM.length);
+  const r = mm(DUMBBELL_MM.plateRadius);
+  const spacing = r * 2 + 0.8;
+  const rng = new Xoshiro128ss(GYM_DUMBBELL_SEED);
+  const yawOf = () => (rng.nextFloat() - 0.5) * 0.18;
+  const bottomZ = [-spacing, 0, spacing];
+  const bottom: KitchenLayout['dumbbells'] = bottomZ.map((dz) => ({
+    x: mat.x,
+    y: tableTopY() + mm(MAT_MM.thickness) + r,
+    z: mat.z + dz,
+    yaw: yawOf(),
+    hx: length / 2,
+    hy: r,
+    hz: r,
+    length,
+  }));
+  const nest = spacing / 2;
+  const topY = tableTopY() + mm(MAT_MM.thickness) + r + Math.sqrt(Math.max(0, (2 * r) ** 2 - nest ** 2));
+  const top = {
+    x: mat.x,
+    y: topY,
+    z: mat.z + nest,
+    yaw: yawOf(),
+    hx: length / 2,
+    hy: r,
+    hz: r,
+    length,
+  };
+  return [...bottom, top];
 }
 
 function tableSizeForProps(): { width: number; depth: number } {
@@ -77,8 +201,21 @@ function tableSizeForProps(): { width: number; depth: number } {
   const millHx = mm(MILL_MM.length) / 2;
   const millHz = mm(MILL_MM.width) / 2;
   const millX = millCentreX();
-  const spanX = Math.max(Math.abs(TUB_X_MM) + tubR, millX + millHx);
-  const spanZ = Math.max(tubR, millHz) + 48;
+  const mat = gymMatPose();
+  const bench = gymBenchPose();
+  const benchAabb = yawedAabbHalf(bench.hx, bench.hz, bench.yaw);
+  const spanX = Math.max(
+    Math.abs(TUB_X_MM) + tubR,
+    millX + millHx,
+    Math.abs(mat.x) + mat.hx,
+    Math.abs(bench.x) + benchAabb.aabbHx,
+  );
+  const spanZ = Math.max(
+    tubR,
+    millHz,
+    Math.abs(mat.z) + mat.hz,
+    Math.abs(bench.z) + benchAabb.aabbHz,
+  ) + 48;
   return {
     width: Math.ceil(spanX * 2 + TABLE_MARGIN_MM),
     depth: Math.ceil(spanZ * 2 + TABLE_MARGIN_MM),
@@ -138,6 +275,9 @@ export function kitchenLayout(): KitchenLayout {
     hz: mm(MILL_MM.width) / 2,
     deckY: topY + mm(MILL_MM.deck),
   };
+  const mat = gymMatPose();
+  const bench = gymBenchPose();
+  const dumbbells = gymDumbbellPoses();
   const fly = {
     x: tub.x,
     z: tub.z - tubR - flyVisualLengthMm() * 1.4,
@@ -167,6 +307,9 @@ export function kitchenLayout(): KitchenLayout {
     pouch,
     table,
     board,
+    mat,
+    bench,
+    dumbbells,
   };
 }
 
@@ -217,6 +360,28 @@ export function scoopEatStand(): { x: number; z: number; heading: number } {
   };
 }
 
+/** Pad beyond the collision hull, authored for the reel (not a measured standoff). */
+const SCOOP_TABLE_PAD_MM = 8;
+
+/**
+ * Eat / drop stand on the table beside the tub, kitchen-camera side (−Z).
+ * Heading 0 faces +Z, toward the tub axis.
+ */
+export function scoopTableStand(): { x: number; z: number; heading: number } {
+  const tub = kitchenLayout().tub;
+  const clearance = tubRadiusMm() + bodyCollisionPadMm() + SCOOP_TABLE_PAD_MM;
+  return {
+    x: tub.x,
+    z: tub.z - clearance,
+    heading: 0,
+  };
+}
+
+/** Distance from the tub wall to `scoopTableStand` (axis distance − outer radius). */
+export function scoopTableClearanceMm(): number {
+  return bodyCollisionPadMm() + SCOOP_TABLE_PAD_MM;
+}
+
 /**
  * Label plane size in mm. Photograph U follows pouch +X, V follows pouch +Z
  * (no wrap, no extra 90°). `photoWidthOverHeight` is the opaque-region aspect
@@ -235,6 +400,50 @@ export function labelPlaneSize(
     width = length / photoWidthOverHeight;
   }
   return { length, width };
+}
+
+export function pointInGymMat(x: number, z: number): boolean {
+  const m = kitchenLayout().mat;
+  const dx = x - m.x;
+  const dz = z - m.z;
+  const c = Math.cos(m.yaw);
+  const s = Math.sin(m.yaw);
+  const lx = dx * c - dz * s;
+  const lz = dx * s + dz * c;
+  return Math.abs(lx) <= m.hx && Math.abs(lz) <= m.hz;
+}
+
+export function gymMatTopY(): number {
+  return kitchenLayout().mat.topY;
+}
+
+export function gymClearancesMm(): {
+  millToMatZ: number;
+  millToMatX: number;
+  tubRimToMat: number;
+  matToBenchX: number;
+  millToBench: number;
+} {
+  const { tub, mill, mat, bench } = kitchenLayout();
+  const millToMatZ = (mat.z - mat.hz) - (mill.z + mill.hz);
+  const millToMatX = (mat.x - mat.hx) - (mill.x + mill.hx);
+  const closestX = Math.min(Math.max(tub.x, mat.x - mat.hx), mat.x + mat.hx);
+  const closestZ = Math.min(Math.max(tub.z, mat.z - mat.hz), mat.z + mat.hz);
+  const tubRimToMat = Math.hypot(closestX - tub.x, closestZ - tub.z) - tub.diameter / 2;
+  const benchAabb = yawedAabbHalf(bench.hx, bench.hz, bench.yaw);
+  const matToBenchX = (bench.x - benchAabb.aabbHx) - (mat.x + mat.hx);
+  const millMaxX = mill.x + mill.hx;
+  const millMinX = mill.x - mill.hx;
+  const millMaxZ = mill.z + mill.hz;
+  const millMinZ = mill.z - mill.hz;
+  const bMinX = bench.x - benchAabb.aabbHx;
+  const bMaxX = bench.x + benchAabb.aabbHx;
+  const bMinZ = bench.z - benchAabb.aabbHz;
+  const bMaxZ = bench.z + benchAabb.aabbHz;
+  const sepX = millMaxX < bMinX ? bMinX - millMaxX : bMaxX < millMinX ? millMinX - bMaxX : 0;
+  const sepZ = millMaxZ < bMinZ ? bMinZ - millMaxZ : bMaxZ < millMinZ ? millMinZ - bMaxZ : 0;
+  const millToBench = Math.hypot(sepX, sepZ);
+  return { millToMatZ, millToMatX, tubRimToMat, matToBenchX, millToBench };
 }
 
 void DEG;

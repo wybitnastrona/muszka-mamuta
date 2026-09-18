@@ -3,8 +3,9 @@
  * to SEARCH→…→REST so the MN9 gate still decides when the proboscis extends.
  * Durations are soft caps; each state exits on its own completion flag.
  *
- * Default (`reel`): fly into tub → pick scoop → PUMP inside the well → fly
- * out to the mill → hex land → biped walk → AUTONOMOUS roam.
+ * Default (`reel`): fly into tub → pick scoop → fly out to the table →
+ * PUMP 1–3 bites → drop / groom → takeoff → mill land → biped walk →
+ * AUTONOMOUS roam.
  * `?loop=full` keeps ORBIT / EXIT_FRAME. Authored motion — the
  * connectome is not consulted here. See docs/BODY-MODEL.md.
  */
@@ -45,8 +46,11 @@ export type LoopState = (typeof LOOP_STATES)[number];
 /** `reel` is the default scoop/mill loop. `full` is `?loop=full` (ORBIT / EXIT_FRAME). */
 export type LoopVariant = 'reel' | 'full';
 
-/** Hard cap for EAT_SCOOP. Satiety-driven RETRACT can exit earlier. */
-export const EAT_BOUT_CAP_S = 10;
+/** Safety-net duration for EAT_SCOOP. Bite count / satiety RETRACT exit earlier. */
+export const EAT_BOUT_CAP_S = 6;
+/** Loop-level bite cap. MN9 still gates each PUMP cycle; we only cap how many. */
+export const EAT_SCOOP_MAX_BITES = 3;
+export const EAT_SCOOP_MIN_BITES = 1;
 
 export const FLY_INTO_TUB_S = 5.2;
 export const FLY_OUT_SCOOP_S = 5.2;
@@ -253,12 +257,12 @@ export class SceneLoop {
     switch (from) {
       case 'FLY_INTO_TUB': return 'PICK_SCOOP';
       case 'WALK_SCOOP': return 'FLY_INTO_TUB';
-      case 'PICK_SCOOP': return 'EAT_SCOOP';
+      case 'PICK_SCOOP': return 'FLY_OUT_WITH_SCOOP';
       case 'APPROACH_TUB': return 'PICK_SCOOP';
       case 'DIP_SCOOP': return 'EAT_SCOOP';
-      case 'EAT_SCOOP': return 'FLY_OUT_WITH_SCOOP';
-      case 'FLY_OUT_WITH_SCOOP': return 'LAND_MILL';
-      case 'DROP_SCOOP': return 'EAT_SCOOP';
+      case 'EAT_SCOOP': return 'DROP_SCOOP';
+      case 'FLY_OUT_WITH_SCOOP': return 'EAT_SCOOP';
+      case 'DROP_SCOOP': return 'GROOM_SHORT';
       case 'GROOM_SHORT': return 'TAKEOFF_MILL';
       case 'TAKEOFF_MILL': return 'LAND_MILL';
       case 'LAND_MILL': return 'WALK_BIPED_ON_MILL';

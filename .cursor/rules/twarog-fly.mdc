@@ -60,3 +60,13 @@ creatine powder from a scoop and walks a lab mill for eternity, in the visual st
 13. Flybody materials in group `body`: body, black, red (compound eyes), ocelli, bristle-brown,
     lower, brown, membrane (wings). Groups front_left / front_right are separate leg meshes with
     coxa pivots. There is no `wings` material and no mid/hind leg pivots. Use these names.
+
+    Zawsze używaj pełnej składni Three.js dla geometrii. Zakaz mockowania logiki 3D logami console.log. Zawsze podawaj pełne parametry wektorów (x, y, z). Przestrzegaj FSM (Finite State Machine) dla logiki muchy.
+    14. 3D geometry claims must be numeric. When changing a mesh position, size, rotation or
+    material, state the BEFORE and AFTER numeric value in the reply (e.g. "belt.position.y
+    12 → 15.1, roller top 16.2, belt top now 16.2"). A claim without numbers is not a
+    completed task. Never report a geometry change you did not compute.
+15. No external model files. Props are built from Three.js primitives (Box/Cylinder/Lathe/
+    Extrude). Never emit code that loads a .glb/.gltf/.fbx that is not already in the repo.
+16. One block at a time. When given a multi-block protocol, implement only the blocks named
+    in the current message, run lint/test/build, report the numbers, and stop.

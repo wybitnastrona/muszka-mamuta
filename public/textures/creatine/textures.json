@@ -4,13 +4,13 @@
   "lid_underside": "creatine/lid_underside.png",
   "well": "creatine/well.png",
   "bottom": "creatine/bottom.png",
-  "creatine_crumb": "creatine/creatine_crumb.png",
-  "creatine_crumb_normal": "creatine/creatine_crumb_normal.png",
-  "creatine_crumb_rough": "creatine/creatine_crumb_rough.png",
+  "creatine_crumb": "creatine/creatine_crumb.png?v=lift2",
+  "creatine_crumb_normal": "creatine/creatine_crumb_normal.png?v=lift2",
+  "creatine_crumb_rough": "creatine/creatine_crumb_rough.png?v=lift2",
   "creatine_median_rgb": [
-    106,
-    105,
-    90
+    225,
+    222,
+    190
   ],
-  "creatine_median_hex": "#6a695a"
+  "creatine_median_hex": "#e1debe"
 }

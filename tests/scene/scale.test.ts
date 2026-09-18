@@ -4,13 +4,17 @@ import {
   BOARD_MM,
   BOARD_YAW_DEG,
   CONTACT_RADIUS_BODY_LENGTHS,
+  CREATINE_ALBEDO_HEX,
   CURD_ALBEDO_HEX,
   CURD_MM,
   ETERNITY_MASS_FRAC,
   FLY_RENDER_SCALE,
   LOD_BODY_LENGTHS,
   LOD_FADE_MS,
+  MAT_MM,
   MILL_MM,
+  DUMBBELL_MM,
+  BENCH_MM,
   PILE_MM,
   TUB_MM,
   POUCH_INNER_MM,
@@ -32,11 +36,14 @@ import {
   lodFadeSec,
   mm,
   pitchedTipAt,
+  powderLandingYMm,
+  powderStackHeightMm,
+  POWDER_FILL_FRAC,
   standoffMm,
   proboscisReachMm,
 } from '../../src/scene/scale.ts';
 import { closeupOffset, reelFrame } from '../../src/body/cameras.ts';
-import { kitchenLayout, scoopEatStand } from '../../src/scene/layout.ts';
+import { kitchenLayout, scoopEatStand, scoopTableStand, scoopTableClearanceMm } from '../../src/scene/layout.ts';
 
 describe('scene scale', () => {
   it('uses one millimetre per scene unit at 6× render scale', () => {
@@ -54,7 +61,14 @@ describe('scene scale', () => {
     expect(boardTopY()).toBe(40);
     expect(PILE_MM.radius).toBe(48);
     expect(PILE_MM.height).toBeCloseTo(142 / 3);
-    expect(MILL_MM.length).toBe(180);
+    expect(POWDER_FILL_FRAC).toBeCloseTo(1 / 3);
+    expect(powderStackHeightMm()).toBeCloseTo(mm(TUB_MM.height) / 3);
+    expect(powderLandingYMm()).toBeCloseTo(mm(TUB_MM.wall) + powderStackHeightMm());
+    expect(CREATINE_ALBEDO_HEX).toBe('#f2f4f6');
+    expect(MILL_MM.length).toBe(104);
+    expect(MAT_MM).toEqual({ length: 90, width: 60, thickness: 2 });
+    expect(DUMBBELL_MM.length).toBe(32);
+    expect(BENCH_MM).toEqual({ length: 110, width: 34, height: 16, pad: 3.4 });
   });
 
   it('derives pouch inner size from curd plus seals', () => {
@@ -109,5 +123,16 @@ describe('scene scale', () => {
     expect(layout.tub.yaw).toBeCloseTo(-Math.PI / 2);
     expect(layout.tub.height).toBe(mm(TUB_MM.height));
     expect(layout.mill.x).toBeGreaterThan(layout.tub.x + layout.tub.diameter / 2);
+  });
+
+  it('parks the table eat stand on −Z, clear of the tub cylinder', () => {
+    const stand = scoopTableStand();
+    const layout = kitchenLayout();
+    const axis = Math.hypot(stand.x - layout.tub.x, stand.z - layout.tub.z);
+    expect(stand.z).toBeLessThan(layout.tub.z);
+    expect(stand.x).toBeCloseTo(layout.tub.x);
+    expect(axis).toBeCloseTo(layout.tub.diameter / 2 + bodyCollisionPadMm() + 8);
+    expect(axis - layout.tub.diameter / 2).toBeCloseTo(scoopTableClearanceMm());
+    expect(stand.heading).toBeCloseTo(0);
   });
 });

@@ -4,7 +4,7 @@
  * MaleCNS has no creatine / Ir76b annotations (verified 0 hits).
  */
 import { CREATINE_KFD, type FoodProfile } from './foodProfile.ts';
-import { makePowderChunks, pileHeightAt } from './powderPile.ts';
+import { makePowderChunks } from './powderPile.ts';
 import {
   contactToGustRates,
   TwarogSystem,
@@ -16,18 +16,16 @@ import {
   type XzAabb,
 } from './twarogSystem.ts';
 import {
-  PILE_MM,
   SCOOP_CAPACITY_G,
   SCOOP_EMPTY_S,
   TUB_MM,
   flyVisualLengthMm,
   mm,
-  powderMoundHeightMm,
-  powderStackHeightMm,
+  powderLandingYMm,
   tableTopY,
   tubInnerRadiusMm,
 } from '../scene/scale.ts';
-import { scoopEatStand } from '../scene/layout.ts';
+import { scoopEatStand, scoopTableStand, gymMatTopY, pointInGymMat } from '../scene/layout.ts';
 
 export type ScoopMode = 'well' | 'held' | 'dropped';
 
@@ -68,18 +66,14 @@ export class CreatineSystem extends TwarogSystem {
     return { cx: origin.x, cz: origin.z, hx: r, hz: r };
   }
 
-  /** In the well the fly stands on the powder stack + mound, not the table. */
+  /** In the well the fly stands on the powder stack, not the table or mound. */
   override supportHeightAt(x: number, z: number, foodOrigin: Vec3): number {
     const dx = x - foodOrigin.x;
     const dz = z - foodOrigin.z;
     if (Math.hypot(dx, dz) < tubInnerRadiusMm()) {
-      return tableTopY() + mm(TUB_MM.wall) + powderStackHeightMm() + pileHeightAt(
-        dx,
-        dz,
-        mm(PILE_MM.radius),
-        powderMoundHeightMm(),
-      );
+      return powderLandingYMm();
     }
+    if (pointInGymMat(x, z)) return gymMatTopY();
     return tableTopY();
   }
 
@@ -136,13 +130,16 @@ export class CreatineSystem extends TwarogSystem {
   override step(input: TwarogStepInput): TwarogStepResult {
     const holding = this.scoopMode === 'held';
     const stand = scoopEatStand();
+    const table = scoopTableStand();
     const nearBowl = Math.hypot(input.flyXZ.x - stand.x, input.flyXZ.z - stand.z)
+      < flyVisualLengthMm() * 1.8;
+    const nearTable = Math.hypot(input.flyXZ.x - table.x, input.flyXZ.z - table.z)
       < flyVisualLengthMm() * 1.8;
     const inWell = Math.hypot(input.flyXZ.x - input.foodXZ.x, input.flyXZ.z - input.foodXZ.z)
       < tubInnerRadiusMm();
     const labellumDown = input.tasting || input.pumping;
     const tastingBowl = this.scoopFill > 0 && labellumDown && (
-      (this.scoopMode === 'held' && inWell)
+      (this.scoopMode === 'held' && (inWell || nearTable))
       || (this.scoopMode === 'dropped' && nearBowl)
     );
     const siphonEvents: TwarogStepResult['events'] = [];

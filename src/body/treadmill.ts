@@ -1,22 +1,54 @@
 /**
  * Authored laboratory treadmill. Belt UV scrolls; the fly walks in place
- * toward a U-rail. Not a measured device.
+ * toward a front console lean-bar. Not a measured device.
  */
 import * as THREE from 'three';
-import { MILL_MM, MILL_WALK_MM_S, mm } from '../scene/scale.ts';
+import { MILL_MM, MILL_WALK_MM_S, flyVisualLengthMm, mm } from '../scene/scale.ts';
 import { kitchenLayout } from '../scene/layout.ts';
 
-/** Face +X (belt long axis / handrail). heading 0 is +Z. */
+/** Face +X (belt long axis / front console). heading 0 is +Z. */
 export const MILL_HEADING = Math.PI / 2;
 
-/** Authored walking-pad pitch: rail (+X) is uphill. */
-export const MILL_INCLINE_RAD = 0.08;
+/** Authored walking-pad pitch: front console (+X) is uphill. 0.0611 rad = 3.50°. */
+export const MILL_INCLINE_RAD = 0.0611;
 
 /** Belt shorter than axle span so the rollers read as drums. */
 export const MILL_BELT_SPAN = 0.65;
 
+/** Roller radius (mm). Axes sit at `MILL_MM.deck`. */
+export const MILL_ROLLER_R = 4.2;
+
+/** Belt slab thickness (mm). Top is tangent to the roller tops. */
+export const MILL_BELT_H = 2.2;
+
+/** Chamfered chassis height (mm). */
+export const MILL_PLINTH_H = 16;
+
+/** Top-edge chamfer on the moulded plinth (mm). */
+export const MILL_CHAMFER_MM = 2;
+
 export function millBeltLengthMm(lengthMm = mm(MILL_MM.length)): number {
   return lengthMm * MILL_BELT_SPAN;
+}
+
+/** Local Y of the belt top (= roller top). Walking surface / IK / LAND_MILL. */
+export function millBeltTopLocalY(): number {
+  return mm(MILL_MM.deck) + MILL_ROLLER_R;
+}
+
+/** Local Y of the belt mesh centre so the top is tangent to the drums. */
+export function millBeltCenterLocalY(): number {
+  return millBeltTopLocalY() - MILL_BELT_H / 2;
+}
+
+/** Lean-bar local Y: thorax height of the 15 mm fly standing on the belt. */
+export function millConsoleGripLocalY(): number {
+  return millBeltTopLocalY() + flyVisualLengthMm() * 0.55;
+}
+
+/** Local +X of the front console (just past the uphill belt end). */
+export function millConsoleLocalX(): number {
+  return millBeltLengthMm() / 2 + 3;
 }
 
 /** UV scroll along belt length. Authored; not a measured mill. */
@@ -32,28 +64,44 @@ export function millBeltScroll(
 
 export function millStandXz(): { x: number; z: number } {
   const mill = kitchenLayout().mill;
-  return { x: mill.x + mill.hx * 0.32, z: mill.z };
+  const fly = flyVisualLengthMm();
+  return { x: mill.x + millConsoleLocalX() - fly * 0.55, z: mill.z };
 }
 
 /** World Y of the belt after the authored uphill pitch. */
 export function millSurfaceY(worldX: number, localY?: number): number {
   const mill = kitchenLayout().mill;
   const L = mm(MILL_MM.length);
-  const y0 = localY ?? mill.deckY;
+  const y0 = localY ?? millBeltTopLocalY();
   const lx = worldX - mill.x;
   const pivot = (L / 2) * Math.sin(MILL_INCLINE_RAD);
   return pivot + lx * Math.sin(MILL_INCLINE_RAD) + y0 * Math.cos(MILL_INCLINE_RAD);
 }
 
-export function millRailGripWorld(): { left: { x: number; y: number; z: number }; right: { x: number; y: number; z: number } } {
+function millGripHalfZ(): number {
+  return flyVisualLengthMm() * 0.38;
+}
+
+export function millConsoleGripWorld(): {
+  left: { x: number; y: number; z: number };
+  right: { x: number; y: number; z: number };
+} {
   const mill = kitchenLayout().mill;
-  const railX = mill.x + mill.hx * 0.46;
-  const y = millSurfaceY(railX, mill.deckY + 16);
-  const dz = mill.hz * 0.22;
+  const railX = mill.x + millConsoleLocalX();
+  const y = millSurfaceY(railX, millConsoleGripLocalY());
+  const dz = millGripHalfZ();
   return {
     left: { x: railX, y, z: mill.z + dz },
     right: { x: railX, y, z: mill.z - dz },
   };
+}
+
+/** @deprecated Alias of millConsoleGripWorld (front lean-bar, not a side U-rail). */
+export function millRailGripWorld(): {
+  left: { x: number; y: number; z: number };
+  right: { x: number; y: number; z: number };
+} {
+  return millConsoleGripWorld();
 }
 
 /** Authored reel odometer: millimetres shown as km so the LED ticks on-camera. */
@@ -61,15 +109,14 @@ export function millConsoleLabel(distanceMm: number): string {
   return `${(Math.max(0, distanceMm) / 1000).toFixed(2)} km`;
 }
 
-const MILL_ROLLER_R = 4.2;
-
-/** Authored mill chassis height (pad top). Console sits on this face. */
+/** Moulded chassis height. Replaces the 7.2 mm sliver under the drums. */
 export function millBaseHeightMm(): number {
-  return Math.max(4, mm(MILL_MM.deck) - MILL_ROLLER_R - 0.6);
+  return MILL_PLINTH_H;
 }
 
 /**
- * Vertical LED on the motor (−X) fascia, facing the kitchen camera (−Z).
+ * Back-tilted LED at the uphill (+X) belt end, facing the kitchen camera (−Z).
+ * Size is derived from flyVisualLengthMm(); thorax height sets the lean-bar.
  */
 export function millConsoleLocalPose(): {
   x: number;
@@ -81,16 +128,16 @@ export function millConsoleLocalPose(): {
   depth: number;
   bezelH: number;
 } {
-  const L = mm(MILL_MM.length);
-  const W = mm(MILL_MM.width);
-  const width = 24;
-  const depth = 10;
-  const bezelH = 1.4;
+  const fly = flyVisualLengthMm();
+  const width = fly * 1.4;
+  const depth = fly * 0.72;
+  const bezelH = 1.6;
+  const stemD = fly * 0.48;
   return {
-    x: -L * 0.42,
-    y: millBaseHeightMm() + 8,
-    z: -W * 0.5 - 0.6,
-    rotX: 0,
+    x: millConsoleLocalX(),
+    y: millConsoleGripLocalY() + depth * 0.28,
+    z: -stemD / 2 - 0.25,
+    rotX: -0.32,
     rotY: Math.PI,
     width,
     depth,
@@ -103,6 +150,7 @@ export type TreadmillHandle = {
   belt: THREE.Mesh;
   deckY: number;
   railGrip: { left: THREE.Vector3; right: THREE.Vector3 };
+  consoleGrip: { left: THREE.Vector3; right: THREE.Vector3 };
   update(dt: number, running: boolean, distanceMm?: number): void;
   dispose(): void;
 };
@@ -142,7 +190,7 @@ function millConsoleTexture(): { tex: THREE.CanvasTexture; paint: (distanceMm: n
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
-  canvas.height = 192;
+  canvas.height = 256;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
   const tex = new THREE.CanvasTexture(canvas);
@@ -166,6 +214,30 @@ function millConsoleTexture(): { tex: THREE.CanvasTexture; paint: (distanceMm: n
   return { tex, paint };
 }
 
+function millPlinthGeometry(length: number, width: number, height: number, chamfer: number): THREE.BufferGeometry {
+  const hw = length / 2 - chamfer;
+  const hd = width / 2 - chamfer;
+  const shape = new THREE.Shape();
+  shape.moveTo(-hw, -hd);
+  shape.lineTo(hw, -hd);
+  shape.lineTo(hw, hd);
+  shape.lineTo(-hw, hd);
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(0.2, height - 2 * chamfer),
+    bevelEnabled: true,
+    bevelThickness: chamfer,
+    bevelSize: chamfer,
+    bevelSegments: 2,
+    steps: 1,
+  });
+  geo.rotateX(-Math.PI / 2);
+  geo.computeBoundingBox();
+  const minY = geo.boundingBox?.min.y ?? 0;
+  geo.translate(0, -minY, 0);
+  return geo;
+}
+
 export function createTreadmill(): TreadmillHandle {
   const layout = kitchenLayout().mill;
   const group = new THREE.Group();
@@ -182,24 +254,22 @@ export function createTreadmill(): TreadmillHandle {
   const consoleMat = new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.45, metalness: 0.2 });
 
   const baseH = millBaseHeightMm();
-  const base = new THREE.Mesh(new THREE.BoxGeometry(L, baseH, W), frameMat);
-  base.position.y = baseH / 2;
+  const base = new THREE.Mesh(millPlinthGeometry(L, W, baseH, MILL_CHAMFER_MM), frameMat);
+  base.name = 'millBase';
   base.castShadow = true;
   base.receiveShadow = true;
   group.add(base);
 
-  const motor = new THREE.Mesh(new THREE.BoxGeometry(18, 10, W * 0.7), frameMat);
-  motor.position.set(-L * 0.42, 5, 0);
-  motor.castShadow = true;
-  group.add(motor);
-
+  const beltLen = millBeltLengthMm(L);
   const rollerGeo = new THREE.CylinderGeometry(rollerR, rollerR, W * 0.92, 16);
   rollerGeo.rotateX(Math.PI / 2);
   const rollerMat = new THREE.MeshStandardMaterial({ color: 0x6b7380, roughness: 0.4, metalness: 0.45 });
   const r1 = new THREE.Mesh(rollerGeo, rollerMat);
   const r2 = new THREE.Mesh(rollerGeo, rollerMat);
-  r1.position.set(-L * 0.38, deck, 0);
-  r2.position.set(L * 0.38, deck, 0);
+  r1.name = 'millRollerBack';
+  r2.name = 'millRollerFront';
+  r1.position.set(-beltLen / 2, deck, 0);
+  r2.position.set(beltLen / 2, deck, 0);
   group.add(r1, r2);
 
   const tex = stripeTexture();
@@ -212,57 +282,49 @@ export function createTreadmill(): TreadmillHandle {
     metalness: 0.04,
     color: 0xffffff,
   });
-  const beltH = 2.2;
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(millBeltLengthMm(L), beltH, W * 0.72), beltMat);
-  belt.position.y = deck;
+  const beltH = MILL_BELT_H;
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(beltLen, beltH, W * 0.72), beltMat);
+  belt.position.y = millBeltCenterLocalY();
   belt.receiveShadow = true;
   belt.castShadow = true;
   belt.name = 'millBelt';
   group.add(belt);
 
-  const railGeo = new THREE.BoxGeometry(L * 0.8, 6, 2);
-  const railL = new THREE.Mesh(railGeo, railMat);
-  const railR = new THREE.Mesh(railGeo, railMat);
-  railL.position.set(0, deck + 4, W * 0.42);
-  railR.position.set(0, deck + 4, -W * 0.42);
-  group.add(railL, railR);
+  const fly = flyVisualLengthMm();
+  const pose = millConsoleLocalPose();
+  const stemW = fly * 0.36;
+  const stemD = fly * 0.48;
+  const gripY = millConsoleGripLocalY();
+  const stemH = Math.max(2, gripY - baseH);
+  const stem = new THREE.Mesh(new THREE.BoxGeometry(stemW, stemH, stemD), consoleMat);
+  stem.name = 'millConsoleStem';
+  stem.position.set(pose.x, baseH + stemH / 2, 0);
+  stem.castShadow = true;
+  group.add(stem);
 
-  const wallH = 12;
-  const wallGeo = new THREE.BoxGeometry(L * 0.72, wallH, 3.4);
-  const wallL = new THREE.Mesh(wallGeo, frameMat);
-  const wallR = new THREE.Mesh(wallGeo, frameMat);
-  wallL.name = 'millSideWallL';
-  wallR.name = 'millSideWallR';
-  wallL.position.set(0, deck + wallH * 0.35, W * 0.5);
-  wallR.position.set(0, deck + wallH * 0.35, -W * 0.5);
-  wallL.castShadow = true;
-  wallR.castShadow = true;
-  group.add(wallL, wallR);
-
-  const postH = 22;
-  const postGeo = new THREE.CylinderGeometry(1.4, 1.4, postH, 10);
-  const postZ = W * 0.28;
-  const postX = L * 0.46;
-  const postLy = new THREE.Mesh(postGeo, railMat);
-  const postRy = new THREE.Mesh(postGeo, railMat);
-  postLy.position.set(postX, deck + postH / 2, postZ);
-  postRy.position.set(postX, deck + postH / 2, -postZ);
-  group.add(postLy, postRy);
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, postZ * 2 + 2, 10), railMat);
+  const barLen = millGripHalfZ() * 2 + 2;
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, barLen, 12), railMat);
+  bar.name = 'millConsoleBar';
   bar.rotation.x = Math.PI / 2;
-  bar.position.set(postX, deck + postH, 0);
+  bar.position.set(pose.x, gripY, 0);
   bar.castShadow = true;
   group.add(bar);
 
-  const pose = millConsoleLocalPose();
+  const consoleRoot = new THREE.Group();
+  consoleRoot.name = 'millConsole';
+  consoleRoot.position.set(pose.x, pose.y, pose.z);
+  consoleRoot.rotation.x = pose.rotX;
+  consoleRoot.rotation.y = pose.rotY;
+  group.add(consoleRoot);
+
   const bezel = new THREE.Mesh(
     new THREE.BoxGeometry(pose.width + 2.6, pose.depth + 2.6, pose.bezelH),
     consoleMat,
   );
   bezel.name = 'millConsoleBezel';
-  bezel.position.set(pose.x, pose.y, pose.z + 0.8);
+  bezel.position.z = -pose.bezelH * 0.5 - 0.15;
   bezel.receiveShadow = true;
-  group.add(bezel);
+  consoleRoot.add(bezel);
 
   const screenKit = millConsoleTexture();
   const screenMat = new THREE.MeshBasicMaterial({
@@ -271,23 +333,22 @@ export function createTreadmill(): TreadmillHandle {
   });
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(pose.width, pose.depth), screenMat);
   screen.name = 'millConsoleScreen';
-  screen.position.set(pose.x, pose.y, pose.z);
-  screen.rotation.x = pose.rotX;
-  screen.rotation.y = pose.rotY;
+  screen.position.z = 0.06;
   screen.renderOrder = 2;
-  group.add(screen);
+  consoleRoot.add(screen);
 
-  const grip = millRailGripWorld();
-  const beltLen = millBeltLengthMm(L);
+  const grip = millConsoleGripWorld();
+  const gripVecs = {
+    left: new THREE.Vector3(grip.left.x, grip.left.y, grip.left.z),
+    right: new THREE.Vector3(grip.right.x, grip.right.y, grip.right.z),
+  };
 
   return {
     group,
     belt,
-    deckY: layout.deckY,
-    railGrip: {
-      left: new THREE.Vector3(grip.left.x, grip.left.y, grip.left.z),
-      right: new THREE.Vector3(grip.right.x, grip.right.y, grip.right.z),
-    },
+    deckY: millBeltTopLocalY(),
+    railGrip: gripVecs,
+    consoleGrip: gripVecs,
     update(dt, running, distanceMm = 0) {
       screenKit?.paint(distanceMm);
       if (!running) return;

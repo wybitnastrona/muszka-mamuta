@@ -32,6 +32,7 @@ import {
   flyVisualLengthMm,
   foodStandPadMm,
   mm,
+  powderLandingYMm,
   standoffMm,
   tableTopY,
 } from '../scene/scale.ts';
@@ -63,6 +64,8 @@ import {
   FLY_INTO_TUB_S,
   FLY_OUT_SCOOP_S,
   MILL_LAND_HEX_S,
+  EAT_SCOOP_MAX_BITES,
+  EAT_SCOOP_MIN_BITES,
   isEatState,
   isFlightState,
   isSplineFlight,
@@ -70,7 +73,7 @@ import {
   type LoopState,
   type LoopVariant,
 } from './sceneLoop.ts';
-import { kitchenLayout, scoopEatStand } from '../scene/layout.ts';
+import { kitchenLayout, scoopEatStand, scoopTableStand } from '../scene/layout.ts';
 import { headingError, clamp, clamp01, easeInOut, lerp } from './math.ts';
 import { gaitPoseAtDistance, millGaitAdvance } from './gait.ts';
 import { wingIdleFlick } from './wings.ts';
@@ -441,11 +444,12 @@ export class SceneDirector {
       this.creatine()?.dip();
     } else if (state === 'EAT_SCOOP') {
       this.mixer.play('odorTrack', { fade: 0, restart: true });
-      this.placeAtPile({ taste: true });
+      this.placeAtTableStand({ taste: true });
     } else if (state === 'DROP_SCOOP') {
       this.mode = 'ground';
       this.creatine()?.drop();
-      this.walkGoal = this.eatStandPoint();
+      const table = scoopTableStand();
+      this.walkGoal = { x: table.x, z: table.z };
     } else if (state === 'WALK_MILL' || state === 'WALK_BIPED' || state === 'WALK_BIPED_ON_MILL') {
       this.lockMillStand(state !== 'WALK_MILL');
     } else if (state === 'AUTONOMOUS') {
@@ -480,13 +484,14 @@ export class SceneDirector {
 
   private flyIntoTubPoints(): Vec3[] {
     const layout = kitchenLayout();
+    const stand = scoopEatStand();
     const rimY = tableTopY() + layout.tub.height + 10;
-    const wellY = this.surfaceYAt(layout.tub.x, layout.tub.z);
+    const wellY = powderLandingYMm() + this.standOffset;
     return [
       { x: this.position.x, y: Math.max(this.position.y, tableTopY() + 16), z: this.position.z },
       { x: layout.tub.x, y: rimY, z: layout.tub.z - layout.tub.diameter * 0.2 },
       { x: layout.tub.x, y: rimY + 2, z: layout.tub.z },
-      { x: layout.tub.x, y: wellY, z: layout.tub.z },
+      { x: stand.x, y: wellY, z: stand.z },
     ];
   }
 
@@ -500,34 +505,34 @@ export class SceneDirector {
     this.flight.startSpline({
       points: this.flyIntoTubPoints(),
       duration: FLY_INTO_TUB_S,
-      endHeading: 0,
+      endHeading: scoopEatStand().heading,
     });
   }
 
   private startFlyOutWithScoop(): void {
     this.mode = 'flight';
-    const stand = millStandXz();
-    const support = millSurfaceY(stand.x);
+    const stand = scoopTableStand();
     const layout = kitchenLayout();
-    const upY = tableTopY() + layout.tub.height + mm(SCOOP_MM.handleLength) + mm(SCOOP_MM.bowlRadius) + 10;
+    const rimY = tableTopY() + layout.tub.height;
+    const apexY = rimY + mm(SCOOP_MM.handleLength) + mm(SCOOP_MM.bowlRadius) + 10;
+    const landY = tableTopY() + this.standOffset;
     this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
     this.flight.startSpline({
       points: [
         { x: this.position.x, y: this.position.y, z: this.position.z },
-        { x: this.position.x, y: upY, z: this.position.z },
-        { x: (this.position.x + stand.x) * 0.5, y: upY, z: (this.position.z + stand.z) * 0.5 },
-        { x: stand.x, y: upY, z: stand.z },
-        { x: stand.x, y: support, z: stand.z },
+        { x: this.position.x, y: apexY, z: this.position.z },
+        { x: (this.position.x + stand.x) * 0.5, y: apexY, z: (this.position.z + stand.z) * 0.5 },
+        { x: stand.x, y: apexY, z: stand.z },
+        { x: stand.x, y: landY, z: stand.z },
       ],
       duration: FLY_OUT_SCOOP_S,
-      endHeading: MILL_HEADING,
+      endHeading: stand.heading,
     });
   }
 
   private inTubGhost(): boolean {
     return isSplineFlight(this.loop.state)
       || this.loop.state === 'PICK_SCOOP'
-      || this.loop.state === 'EAT_SCOOP'
       || this.autoKind === 'flyIn'
       || this.autoKind === 'pick'
       || this.autoKind === 'flyOut'
@@ -689,12 +694,36 @@ export class SceneDirector {
   }
 
   private eatStandHeading(): number {
-    if (this.creatine()) return scoopEatStand().heading;
+    if (this.creatine()) {
+      if (this.scriptedLoop && this.loop.state === 'EAT_SCOOP') return scoopTableStand().heading;
+      return scoopEatStand().heading;
+    }
     const xz = this.pileStandPoint();
     return this.food.approachTarget(
       { x: xz.x, y: this.surfaceYAt(xz.x, xz.z), z: xz.z },
       this.foodOrigin,
     ).yaw;
+  }
+
+  private eatScoopDone(): boolean {
+    const bites = this.fsm.pumpCycles;
+    const biteCap = bites >= EAT_SCOOP_MIN_BITES && bites >= EAT_SCOOP_MAX_BITES;
+    if (this.loopVariant === 'full') {
+      return biteCap || this.eatSatietyRetract || (this.eatSawRest && this.fsm.state === 'SEARCH');
+    }
+    return biteCap || this.eatSatietyRetract;
+  }
+
+  private placeAtTableStand(opts: { taste: boolean }): void {
+    const stand = scoopTableStand();
+    this.position.set(stand.x, tableTopY() + this.standOffset, stand.z);
+    this.heading = stand.heading;
+    this.mode = 'ground';
+    this.onWall = false;
+    this.syncFlightWorld();
+    this.flight.place({ x: this.position.x, y: this.position.y, z: this.position.z }, this.heading);
+    if (opts.taste) this.fsm.beginTaste(this.heading);
+    else this.fsm.reset(this.heading);
   }
 
   private placeAtPile(opts: { taste: boolean }): void {
@@ -728,9 +757,7 @@ export class SceneDirector {
     const flags = {
       flightDone: this.flight.kind !== 'idle' && this.flight.done,
       walkDone: false,
-      eatBoutDone: this.loopVariant === 'full'
-        ? this.eatSawRest && this.fsm.state === 'SEARCH'
-        : this.eatSatietyRetract,
+      eatBoutDone: this.eatScoopDone(),
       groomDone: false,
       gagDone: true,
       napDone: false,
@@ -1224,6 +1251,35 @@ export class SceneDirector {
     };
   }
 
+  /** Bench + four dumbbells. Mat is walkable support, not in this list. */
+  private gymObbs(): Obb3[] {
+    const { bench, dumbbells } = kitchenLayout();
+    return [
+      {
+        cx: bench.x,
+        cy: bench.y,
+        cz: bench.z,
+        hx: bench.hx,
+        hy: bench.hy,
+        hz: bench.hz,
+        yaw: bench.yaw,
+      },
+      ...dumbbells.map((d) => ({
+        cx: d.x,
+        cy: d.y,
+        cz: d.z,
+        hx: d.hx,
+        hy: d.hy,
+        hz: d.hz,
+        yaw: d.yaw,
+      })),
+    ];
+  }
+
+  private groundObbs(): Obb3[] {
+    return [this.millObb3(), ...this.gymObbs()];
+  }
+
   private pouchObb3(): Obb3 {
     return this.millObb3();
   }
@@ -1256,7 +1312,7 @@ export class SceneDirector {
     const from = { x: this.position.x, y: this.position.y, z: this.position.z };
     return {
       aabbs: [this.foodAabb3(), this.tableAabb3()],
-      obbs: [this.millObb3()],
+      obbs: this.groundObbs(),
       lookahead: {
         from,
         to: {
@@ -1273,7 +1329,7 @@ export class SceneDirector {
     const ghost = this.inTubGhost();
     this.flight.setWorld({
       obstacles: ghost ? [this.tableAabb3()] : [this.foodAabb3(), this.tableAabb3()],
-      obbs: [] as Obb3[],
+      obbs: ghost ? [] : this.gymObbs(),
       floorY: ghost ? 0 : this.food.supportHeightAt(this.position.x, this.position.z, this.foodOrigin),
       ceilingY: FLIGHT_CEILING_MM,
     });
@@ -1347,8 +1403,12 @@ export class SceneDirector {
           foodStandPadMm(),
         );
         const packPos = clampOutsideXzObb(padded, this.pouch, bodyCollisionPadMm());
-        this.position.x = packPos.x;
-        this.position.z = packPos.z;
+        let xz = { x: packPos.x, z: packPos.z };
+        for (const obb of this.gymObbs()) {
+          xz = clampOutsideXzObb(xz, obb, bodyCollisionPadMm());
+        }
+        this.position.x = xz.x;
+        this.position.z = xz.z;
       }
     } else if (this.mode === 'mill') {
       const stand = millStandXz();
@@ -1363,7 +1423,7 @@ export class SceneDirector {
     if (this.mode !== 'flight' && this.mode !== 'mill' && !this.inTubGhost()) {
       const skipBoard = this.stepping && this.stepToY > this.stepFromY;
       const aabbs = this.mode === 'onFood' ? [this.tableAabb3()] : [this.foodAabb3(), this.tableAabb3()];
-      const obbs = skipBoard ? [] : [this.millObb3()];
+      const obbs = skipBoard ? [] : this.groundObbs();
       const resolved = resolveSolids(
         { x: this.position.x, y: this.position.y, z: this.position.z },
         { x: this.velocity.x, y: this.velocity.y, z: this.velocity.z },

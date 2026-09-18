@@ -11,7 +11,7 @@ describe('CREATINE_KFD', () => {
     expect(CREATINE_KFD.aa).toBe(0.85);
     expect(CREATINE_KFD.bitter).toBeLessThan(0.15);
     expect(CREATINE_KFD.odor).toBeGreaterThan(0);
-    expect(CREATINE_KFD.albedoHex).toBe('#e6e2d8');
+    expect(CREATINE_KFD.albedoHex).toBe('#f2f4f6');
   });
 });
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CreatineSystem } from '../../src/food/creatineSystem.ts';
 import { makePowderChunks, pileHeightAt } from '../../src/food/powderPile.ts';
-import { PILE_MM, PILE_TOTAL_MASS_G, SCOOP_CAPACITY_G, TUB_MM, mm } from '../../src/scene/scale.ts';
-import { scoopEatStand } from '../../src/scene/layout.ts';
+import { PILE_MM, PILE_TOTAL_MASS_G, SCOOP_CAPACITY_G, TUB_MM, mm, powderLandingYMm } from '../../src/scene/scale.ts';
+import { kitchenLayout, scoopEatStand } from '../../src/scene/layout.ts';
 
 describe('powder mound', () => {
   it('is tallest at the centre and zero at the rim', () => {
@@ -25,8 +25,14 @@ describe('CreatineSystem scoop', () => {
     expect(sys.hx).toBe(TUB_MM.diameter / 2);
     expect(sys.foodBounds({ x: 0, z: 0 }).hx).toBe(TUB_MM.diameter / 2);
     const origin = { x: 0, y: 0, z: 0 };
-    expect(sys.supportHeightAt(0, 0, origin)).toBeCloseTo(mm(TUB_MM.wall) + mm(PILE_MM.height));
+    expect(sys.supportHeightAt(0, 0, origin)).toBeCloseTo(powderLandingYMm());
     expect(sys.supportHeightAt(400, 400, origin)).toBe(0);
+    const layout = kitchenLayout();
+    const stand = scoopEatStand();
+    expect(sys.supportHeightAt(stand.x, stand.z, {
+      x: layout.tub.x, y: 0, z: layout.tub.z,
+    })).toBeCloseTo(powderLandingYMm());
+    expect(powderLandingYMm()).toBeCloseTo(mm(TUB_MM.wall) + mm(TUB_MM.height) / 3);
   });
 
   it('pre-fills the scoop in the well on create', () => {

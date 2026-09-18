@@ -25,19 +25,35 @@ export const CURD_MM = { length: 100, width: 80, height: 30 };
  * Height is one third of the open tub (authored fill, not a weigh-out).
  */
 export const PILE_MM = { radius: 48, height: 142 / 3 };
-/** Opaque well fill under the mound so the cylinder is not a black hole. */
-export const POWDER_STACK_FRAC = 0.78;
+/**
+ * Stack top − well floor as a fraction of `TUB_MM.height`. Authored for the
+ * reel (one-third full), not a weigh-out.
+ */
+export const POWDER_FILL_FRAC = 1 / 3;
+/** Shallow visual crown on the stack. Landing Y ignores this height. */
+export const POWDER_MOUND_MM = 4;
 export const PILE_CELL_COUNT = 80;
 export const PILE_TOTAL_MASS_G = 250;
-export const CREATINE_ALBEDO_HEX = '#e6e2d8';
+export const CREATINE_ALBEDO_HEX = '#f2f4f6';
 /** Fly-scale scoop (authored). A real creatine scoop is 50–80 mm. */
 export const SCOOP_MM = { bowlRadius: 5.5, bowlDepth: 4, handleLength: 12, handleRadius: 0.9 };
 export const SCOOP_CAPACITY_G = 4;
 export const SCOOP_EMPTY_S = 8;
-/** Lab mill on the table. Belt top is `deck` above y = 0. Sized for the 15 mm fly. */
-export const MILL_MM = { length: 180, width: 56, height: 28, deck: 12 };
+/**
+ * Lab mill on the table. `deck` is the roller-axis height above y = 0;
+ * the walking surface is the belt top (axis + roller radius). Sized for
+ * the 15 mm fly.
+ */
+export const MILL_MM = { length: 104, width: 56, height: 28, deck: 12 };
 /** Slow mill walk (authored). Table roam stays at `FLY_WALK_MM_S`. */
 export const MILL_WALK_MM_S = 4.5;
+/**
+ * Gym corner beside the mill. Authored for the 15 mm fly on the reel — not
+ * real gym millimetres (a 20 kg plate is ~300 mm; these are fly-scale props).
+ */
+export const MAT_MM = { length: 90, width: 60, thickness: 2 };
+export const DUMBBELL_MM = { length: 32, plateRadius: 6.5, plateThick: 4.2, barRadius: 1.35 };
+export const BENCH_MM = { length: 110, width: 34, height: 16, pad: 3.4 };
 /**
  * Open KFD tub. Height is the measured 142 mm product body (lid off);
  * diameter ~110 mm follows packshot aspect ~1.29 with the lid.
@@ -287,11 +303,21 @@ export function tubInnerRadiusMm(): number {
 }
 
 export function powderStackHeightMm(): number {
-  return mm(PILE_MM.height) * POWDER_STACK_FRAC;
+  return mm(TUB_MM.height) * POWDER_FILL_FRAC;
 }
 
 export function powderMoundHeightMm(): number {
-  return mm(PILE_MM.height) * (1 - POWDER_STACK_FRAC);
+  return mm(POWDER_MOUND_MM);
+}
+
+/** Black-plastic well floor (table + tub wall thickness). */
+export function powderWellFloorMm(): number {
+  return tableTopY() + mm(TUB_MM.wall);
+}
+
+/** Fly stands on the stack top, not the mound crown. */
+export function powderLandingYMm(): number {
+  return powderWellFloorMm() + powderStackHeightMm();
 }
 
 /**

@@ -4,7 +4,7 @@ import { cycleDurationS, gaitPoseAtDistance } from '../../src/body/gait.ts';
 import { MILL_WALK_MM_S } from '../../src/scene/scale.ts';
 
 describe('biped mill gag', () => {
-  it('steps only the hind legs and holds the forelegs toward the rail', () => {
+  it('steps only the hind legs and holds the forelegs toward the console', () => {
     const pose = bipedPoseAtDistance(8, MILL_WALK_MM_S);
     expect(pose.hindleg_L).toBeDefined();
     expect(pose.hindleg_R).toBeDefined();

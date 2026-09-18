@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { CameraPreset } from './types.ts';
 import { CAMERA_PRESETS } from './types.ts';
 import { kitchenLayout } from '../scene/layout.ts';
-import { flyVisualLengthMm } from '../scene/scale.ts';
+import { flyVisualLengthMm, mm, powderLandingYMm, TUB_MM } from '../scene/scale.ts';
+import { millBeltTopLocalY, millSurfaceY } from './treadmill.ts';
 import { REEL_ELEV_DEG, REEL_FOV_DEG } from '../scene/proceduralMaps.ts';
 
 export { CAMERA_PRESETS, type CameraPreset };
@@ -19,22 +20,30 @@ export const REEL_ASPECT = 9 / 16;
  * Pull-back from the tub/mill look-at, not a 5× mesh scale (that breaks gait).
  * Previous mill-only crop (lookAt on the deck, camera on mill.x) hid the KFD.
  */
-export const KITCHEN_FRAMING = 0.95;
+export const KITCHEN_FRAMING = 1.28;
 
-/** 3/4 kitchen: tub wrap + mill LED as one pair. Scene mm stay 1:1. */
+/** 3/4 kitchen: tub wrap + mill + gym corner as one group. Scene mm stay 1:1. */
 export function kitchenFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
-  const { tub, mill } = kitchenLayout();
+  const { tub, mill, mat, bench } = kitchenLayout();
+  const benchAabb = {
+    hx: bench.hx * Math.abs(Math.cos(bench.yaw)) + bench.hz * Math.abs(Math.sin(bench.yaw)),
+    hz: bench.hx * Math.abs(Math.sin(bench.yaw)) + bench.hz * Math.abs(Math.cos(bench.yaw)),
+  };
+  const minX = tub.x - tub.diameter / 2;
+  const maxX = Math.max(mill.x + mill.hx, mat.x + mat.hx, bench.x + benchAabb.hx);
+  const minZ = Math.min(tub.z - tub.diameter / 2, mill.z - mill.hz);
+  const maxZ = Math.max(mill.z + mill.hz, mat.z + mat.hz, bench.z + benchAabb.hz);
   const lookAt: [number, number, number] = [
-    (tub.x + mill.x) * 0.5,
+    (minX + maxX) * 0.5,
     Math.max(52, tub.height * 0.38),
-    mill.z,
+    mill.z + (maxZ - mill.z) * 0.28,
   ];
-  const spanX = (mill.x + mill.hx) - (tub.x - tub.diameter / 2);
+  const spanX = maxX - minX;
   const dist = Math.max(280, spanX * KITCHEN_FRAMING);
   return {
     position: [
-      lookAt[0] + 36,
-      Math.max(168, tub.height * 1.18),
+      lookAt[0] + 28,
+      Math.max(275, tub.height * 1.9),
       lookAt[2] - dist,
     ],
     lookAt,
@@ -131,6 +140,39 @@ export function reelFrame(_radius = flyVisualLengthMm() / 2): CameraFrame {
     lookAt,
     fov: REEL_FOV_DEG,
   };
+}
+
+/**
+ * Side elevation of the mill (incline, belt vs drums, front console).
+ * Review stills: `?cam=mill`. Live 'Z boku' stays on the fly/tub.
+ */
+export function millSideFrame(): CameraFrame {
+  const { mill } = kitchenLayout();
+  const y = millSurfaceY(mill.x, millBeltTopLocalY());
+  return {
+    position: [mill.x, y + 22, mill.z + 150],
+    lookAt: [mill.x, y - 2, mill.z],
+    fov: 28,
+  };
+}
+
+/**
+ * Look down into the open well for powder-fill review stills.
+ */
+export function tubPowderFrame(): CameraFrame {
+  const { tub } = kitchenLayout();
+  const landing = powderLandingYMm();
+  return {
+    position: [tub.x + 0.35, mm(TUB_MM.height) + 92, tub.z + 0.35],
+    lookAt: [tub.x, landing, tub.z],
+    fov: 34,
+  };
+}
+
+export function parseReviewCam(search = typeof window === 'undefined' ? '' : window.location.search): 'powder' | 'mill' | null {
+  const raw = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('cam');
+  if (raw === 'powder' || raw === 'mill') return raw;
+  return null;
 }
 
 export function usesShallowDof(preset: CameraPreset): boolean {

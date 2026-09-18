@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SceneDirector } from '../../src/body/sceneDirector.ts';
 import { BIPED_BODY_PITCH_RAD, bipedStandLiftMm } from '../../src/body/bipedGait.ts';
-import { isEatState, isSplineFlight, LOOP_STATES, type LoopVariant } from '../../src/body/sceneLoop.ts';
-import { kitchenLayout, scoopEatStand } from '../../src/scene/layout.ts';
-import { FLY_WALK_MM_S, MILL_WALK_MM_S, flyVisualLengthMm, tableTopY } from '../../src/scene/scale.ts';
+import { EAT_SCOOP_MAX_BITES, EAT_SCOOP_MIN_BITES, isEatState, isSplineFlight, LOOP_STATES, type LoopVariant } from '../../src/body/sceneLoop.ts';
+import { kitchenLayout, scoopEatStand, scoopTableStand } from '../../src/scene/layout.ts';
+import { FLY_WALK_MM_S, MILL_WALK_MM_S, flyVisualLengthMm, powderLandingYMm, tableTopY } from '../../src/scene/scale.ts';
 import { CreatineSystem } from '../../src/food/creatineSystem.ts';
 import { millStandXz, millSurfaceY, MILL_HEADING } from '../../src/body/treadmill.ts';
 import { UP_ALIGN_MAX_RAD, bodyUpAxis, pointInAabb3, tiltFromNormal } from '../../src/body/collision.ts';
@@ -38,6 +38,11 @@ const drive = {
   cameraDist: 400,
   cropVolume: 0.3,
 };
+
+function onMillFootprint(x: number, z: number): boolean {
+  const mill = kitchenLayout().mill;
+  return Math.abs(x - mill.x) <= mill.hx && Math.abs(z - mill.z) <= mill.hz;
+}
 
 describe('SceneDirector scripted loop (reel)', () => {
   it('spawns flying into the tub with the scoop already in the well', () => {
@@ -77,7 +82,7 @@ describe('SceneDirector scripted loop (reel)', () => {
           expect(out.heldCrumb).toBeNull();
         }
       }
-      if (sawPump && out.macro === 'FLY_OUT_WITH_SCOOP') break;
+      if (sawPump && (out.macro === 'DROP_SCOOP' || out.macro === 'GROOM_SHORT')) break;
     }
     expect(sawPick).toBe(true);
     expect(sawTaste).toBe(true);
@@ -188,36 +193,95 @@ describe('SceneDirector scripted loop (reel)', () => {
     expect(flyVisualLengthMm()).toBe(15);
   });
 
-  it('eats inside the tub well, then flies out to the mill even if MN9 is quiet', () => {
+  it('eats on the table beside the tub, then takes off to the mill even if MN9 is quiet', () => {
     const d = makeLoopDirector();
     const layout = kitchenLayout();
-    const stand = scoopEatStand();
+    const table = scoopTableStand();
+    const well = scoopEatStand();
     const box = {
       cx: layout.tub.x, cy: layout.tub.y, cz: layout.tub.z,
       hx: d.food.hx, hy: d.food.hy, hz: d.food.hz,
     };
     const seen: string[] = [];
+    let pickInWell = false;
     let eatDist = 0;
     let eatHeading = 0;
+    let eatHeadingLocked = false;
     for (let i = 0; i < 8000; i++) {
       const out = d.update({ ...drive, mn9Rate: 0.8, satiety: 0.32 });
       if (!seen.includes(out.macro)) seen.push(out.macro);
+      if (out.macro === 'PICK_SCOOP') {
+        pickInWell = Math.hypot(d.position.x - layout.tub.x, d.position.z - layout.tub.z)
+          < layout.tub.innerRadius;
+        expect(Math.abs(d.position.x - well.x)).toBeLessThan(12);
+        expect(d.position.y).toBeCloseTo(powderLandingYMm() + 2, 5);
+      }
       if (out.macro === 'EAT_SCOOP') {
-        eatDist = Math.hypot(d.position.x - layout.tub.x, d.position.z - layout.tub.z);
-        eatHeading = d.heading;
-        expect(eatDist).toBeLessThan(layout.tub.innerRadius);
-        expect(pointInAabb3(d.position, box, -0.05)).toBe(true);
-        expect(Math.abs(d.position.x - stand.x)).toBeLessThan(12);
+        eatDist = Math.hypot(d.position.x - table.x, d.position.z - table.z);
+        if (!eatHeadingLocked) {
+          eatHeading = d.heading;
+          eatHeadingLocked = true;
+        }
+        expect(eatDist).toBeLessThan(flyVisualLengthMm());
+        expect(pointInAabb3(d.position, box, -0.05)).toBe(false);
+        expect(d.position.y).toBeCloseTo(tableTopY() + 2, 5);
       }
       if (out.macro === 'WALK_BIPED_ON_MILL') break;
     }
-    expect(eatDist).toBeLessThan(layout.tub.innerRadius);
-    expect(eatHeading).toBeCloseTo(Math.PI / 2, 1);
+    expect(pickInWell).toBe(true);
+    expect(eatDist).toBeLessThan(flyVisualLengthMm());
+    expect(eatHeading).toBeCloseTo(table.heading, 1);
     expect(seen).toContain('FLY_OUT_WITH_SCOOP');
+    expect(seen).toContain('TAKEOFF_MILL');
     expect(seen).toContain('LAND_MILL');
     expect(seen).toContain('WALK_BIPED_ON_MILL');
-    expect(seen.indexOf('EAT_SCOOP')).toBeGreaterThan(seen.indexOf('PICK_SCOOP'));
+    expect(seen.indexOf('FLY_OUT_WITH_SCOOP')).toBeGreaterThan(seen.indexOf('PICK_SCOOP'));
+    expect(seen.indexOf('EAT_SCOOP')).toBeGreaterThan(seen.indexOf('FLY_OUT_WITH_SCOOP'));
+    expect(seen.indexOf('TAKEOFF_MILL')).toBeGreaterThan(seen.indexOf('EAT_SCOOP'));
     expect(seen.indexOf('WALK_BIPED_ON_MILL')).toBeGreaterThan(seen.indexOf('EAT_SCOOP'));
+  });
+
+  it('lands FLY_OUT_WITH_SCOOP on the table, caps EAT_SCOOP at 1–3 bites, and stays off the mill until TAKEOFF_MILL', () => {
+    const d = makeLoopDirector();
+    const table = scoopTableStand();
+    const seen: string[] = [];
+    let flyOutXz = Infinity;
+    let flyOutY = 99;
+    let eatBites = 0;
+    let leftEat = false;
+    for (let i = 0; i < 8000; i++) {
+      const out = d.update({ ...drive, satiety: 0.3 });
+      if (!seen.includes(out.macro)) seen.push(out.macro);
+      const beforeTakeoff = !seen.includes('TAKEOFF_MILL') && out.macro !== 'TAKEOFF_MILL';
+      if (beforeTakeoff) {
+        expect(onMillFootprint(d.position.x, d.position.z), out.macro).toBe(false);
+      }
+      if (out.macro === 'FLY_OUT_WITH_SCOOP') {
+        flyOutXz = Math.hypot(d.position.x - table.x, d.position.z - table.z);
+        flyOutY = d.position.y;
+      }
+      if (out.macro === 'EAT_SCOOP') {
+        eatBites = Math.max(eatBites, out.bites);
+        for (const ev of out.events) {
+          if (ev.type === 'bite') eatBites = Math.max(eatBites, ev.cycle);
+        }
+        expect(Math.hypot(d.position.x - table.x, d.position.z - table.z)).toBeLessThan(flyVisualLengthMm());
+        expect(d.position.y).toBeCloseTo(tableTopY() + 2, 5);
+      }
+      if (seen.includes('EAT_SCOOP') && out.macro !== 'EAT_SCOOP' && !leftEat) {
+        leftEat = true;
+        expect(eatBites).toBeGreaterThanOrEqual(EAT_SCOOP_MIN_BITES);
+        expect(eatBites).toBeLessThanOrEqual(EAT_SCOOP_MAX_BITES);
+      }
+      if (out.macro === 'WALK_BIPED_ON_MILL') break;
+    }
+    expect(flyOutXz).toBeLessThan(flyVisualLengthMm());
+    expect(flyOutY).toBeGreaterThanOrEqual(tableTopY());
+    expect(flyOutY).toBeLessThan(tableTopY() + 8);
+    expect(leftEat).toBe(true);
+    expect(eatBites).toBeGreaterThanOrEqual(EAT_SCOOP_MIN_BITES);
+    expect(eatBites).toBeLessThanOrEqual(EAT_SCOOP_MAX_BITES);
+    expect(seen.indexOf('TAKEOFF_MILL')).toBeGreaterThan(seen.indexOf('EAT_SCOOP'));
   });
 
   it('lands hexapod on the belt then stands for the biped gag', () => {

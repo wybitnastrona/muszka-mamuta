@@ -29,16 +29,16 @@ type Dust = {
 
 export function createPowderView(
   origin: { x: number; y: number; z: number },
-  crumbMap?: THREE.Texture | null,
+  _crumbMap?: THREE.Texture | null,
 ): PowderView {
   const group = new THREE.Group();
   group.name = 'creatinePile';
   group.position.set(origin.x, origin.y, origin.z);
   const dummy = new THREE.Object3D();
   const grainMat = new THREE.MeshStandardMaterial({
-    color: crumbMap ? 0xffffff : CREATINE_ALBEDO_HEX,
-    map: crumbMap ?? null,
-    roughness: 0.92,
+    color: CREATINE_ALBEDO_HEX,
+    map: null,
+    roughness: 0.95,
     metalness: 0,
   });
   const grainSize = crumbSizeMm() * 1.15;

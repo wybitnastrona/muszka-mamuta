@@ -135,6 +135,7 @@ export function createCreatineTub(textures?: CreatineTextures | null): CreatineT
   const innerGeo = new THREE.CylinderGeometry(innerR, innerR, H - floor, 48, 1, true);
   innerGeo.scale(-1, 1, 1);
   const innerWall = new THREE.Mesh(innerGeo, inner);
+  innerWall.name = 'kfdInnerWall';
   innerWall.position.y = floor + (H - floor) / 2;
   group.add(innerWall);
 
@@ -161,38 +162,44 @@ export function createCreatineTub(textures?: CreatineTextures | null): CreatineT
 
   const powderMat = new THREE.MeshStandardMaterial({
     color: CREATINE_ALBEDO_HEX,
-    roughness: 0.92,
+    roughness: 0.95,
     metalness: 0,
+    map: null,
+    normalScale: new THREE.Vector2(0.35, 0.35),
   });
-  if (textures?.crumb) {
-    const crumb = textures.crumb.clone();
-    crumb.wrapS = THREE.RepeatWrapping;
-    crumb.wrapT = THREE.RepeatWrapping;
-    crumb.repeat.set(3, 2);
-    crumb.needsUpdate = true;
-    powderMat.map = crumb;
-    if (textures.crumbNormal) {
-      const n = textures.crumbNormal.clone();
-      n.wrapS = THREE.RepeatWrapping;
-      n.wrapT = THREE.RepeatWrapping;
-      n.repeat.set(3, 2);
-      n.needsUpdate = true;
-      powderMat.normalMap = n;
+  const detail = textures?.crumbNormal ?? textures?.crumb;
+  if (detail) {
+    const n = detail.clone();
+    n.wrapS = THREE.RepeatWrapping;
+    n.wrapT = THREE.RepeatWrapping;
+    n.repeat.set(3, 2);
+    n.needsUpdate = true;
+    if (textures?.crumbNormal) powderMat.normalMap = n;
+    else {
+      powderMat.bumpMap = n;
+      powderMat.bumpScale = 0.35;
     }
-    if (textures.crumbRough) {
-      const r = textures.crumbRough.clone();
-      r.wrapS = THREE.RepeatWrapping;
-      r.wrapT = THREE.RepeatWrapping;
-      r.repeat.set(3, 2);
-      r.needsUpdate = true;
-      powderMat.roughnessMap = r;
-    }
-    powderMat.color.setHex(0xffffff);
+  }
+  if (textures?.crumbRough) {
+    const r = textures.crumbRough.clone();
+    r.wrapS = THREE.RepeatWrapping;
+    r.wrapT = THREE.RepeatWrapping;
+    r.repeat.set(3, 2);
+    r.needsUpdate = true;
+    powderMat.roughnessMap = r;
+  } else if (textures?.crumb && !powderMat.bumpMap) {
+    const r = textures.crumb.clone();
+    r.wrapS = THREE.RepeatWrapping;
+    r.wrapT = THREE.RepeatWrapping;
+    r.repeat.set(3, 2);
+    r.needsUpdate = true;
+    powderMat.roughnessMap = r;
   }
   const stackH = powderStackHeightMm();
   const moundH = powderMoundHeightMm();
+  const stackR = innerR * 0.98;
   const stack = new THREE.Mesh(
-    new THREE.CylinderGeometry(innerR * 0.98, innerR * 0.98, stackH, 48),
+    new THREE.CylinderGeometry(stackR, stackR, stackH, 48),
     powderMat,
   );
   stack.name = 'kfdPowderStack';
@@ -202,7 +209,7 @@ export function createCreatineTub(textures?: CreatineTextures | null): CreatineT
   group.add(stack);
 
   const stackBase = new THREE.Mesh(
-    new THREE.CircleGeometry(innerR * 0.97, 48),
+    new THREE.CircleGeometry(stackR, 48),
     powderMat,
   );
   stackBase.name = 'kfdPowderStackBase';
@@ -220,6 +227,20 @@ export function createCreatineTub(textures?: CreatineTextures | null): CreatineT
   powderMound.castShadow = true;
   powderMound.receiveShadow = true;
   group.add(powderMound);
+
+  const linerH = Math.max(0.5, H - (floor + stackH));
+  const liner = new THREE.Group();
+  liner.name = 'kfdWellLiner';
+  const bandGeo = new THREE.CylinderGeometry(innerR, innerR, linerH, 48, 1, true);
+  bandGeo.scale(-1, 1, 1);
+  const band = new THREE.Mesh(bandGeo, inner);
+  band.position.y = floor + stackH + linerH / 2;
+  liner.add(band);
+  const collar = new THREE.Mesh(new THREE.RingGeometry(stackR, innerR, 64), inner);
+  collar.rotation.x = -Math.PI / 2;
+  collar.position.y = floor + stackH + 0.22;
+  liner.add(collar);
+  group.add(liner);
 
   const labelAnchor = new THREE.Object3D();
   labelAnchor.name = 'kfdLabelAnchor';

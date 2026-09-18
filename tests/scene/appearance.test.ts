@@ -6,7 +6,15 @@ import {
   EYE_CLEARCOAT,
   createFlyMaterials,
 } from '../../src/body/flyMaterials.ts';
-import { createKitchen, kitchenDrawCount, poseSpoon } from '../../src/body/kitchen.ts';
+import {
+  coplanarShadowPairs,
+  createKitchen,
+  kitchenDrawCount,
+  poseSpoon,
+  shadowReceiverSurfaces,
+} from '../../src/body/kitchen.ts';
+import { createTreadmill } from '../../src/body/treadmill.ts';
+import { createCreatineTub } from '../../src/food/creatineTub.ts';
 import { frameForPreset, kitchenFrame, letterboxSize, reelFrame, usesShallowDof } from '../../src/body/cameras.ts';
 import { CAMERA_PRESETS } from '../../src/body/types.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
@@ -47,18 +55,18 @@ describe('render quality', () => {
 });
 
 describe('kitchen slab', () => {
-  it('keeps a lab-blue PlaneGeometry deck at y=0 with bulk thickness, spoon, contact AO', () => {
+  it('uses one beveled slab at y=0 as the standing deck (no coplanar plane)', () => {
     const kit = createKitchen(420, 340, TINY);
-    expect(kit.table.name).toBe('tableTop');
-    expect(kit.table.geometry.type).toBe('PlaneGeometry');
+    expect(kit.group.getObjectByName('tableTop')).toBeUndefined();
+    expect(kit.table.name).toBe('tableBulk');
+    expect(kit.table).toBe(kit.group.getObjectByName('tableBulk'));
+    expect(kit.table.geometry.type).toBe('ExtrudeGeometry');
+    expect(kit.table.receiveShadow).toBe(true);
     expect(TABLE_BEVEL_MM).toBe(1);
     const deck = new THREE.Box3().setFromObject(kit.table);
     expect(deck.max.y).toBeLessThan(0.2);
-    expect(Math.abs(deck.min.y)).toBeLessThan(0.2);
-    const bulk = kit.group.getObjectByName('tableBulk');
-    expect(bulk).toBeTruthy();
-    const box = new THREE.Box3().setFromObject(bulk!);
-    expect(box.min.y).toBeLessThan(-20);
+    expect(deck.max.y).toBeGreaterThan(-0.05);
+    expect(deck.min.y).toBeLessThan(-20);
     const tableMat = kit.table.material as THREE.MeshStandardMaterial;
     expect(tableMat.color.getHex()).toBe(0x3a6a8c);
     expect(tableMat.roughness).toBeCloseTo(0.85);
@@ -75,6 +83,65 @@ describe('kitchen slab', () => {
     const restX = kit.spoon.position.x;
     poseSpoon(kit.spoon, 420, 340, 1);
     expect(kit.spoon.position.x).toBeLessThan(restX);
+    kit.maps.forEach((m) => m.dispose());
+    kit.group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        const mat = obj.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat.dispose();
+      }
+    });
+  });
+
+  it('reports no two kitchen shadow receivers within 0.05 mm on the deck', () => {
+    const kit = createKitchen(420, 340, TINY);
+    const footprint = new THREE.Box3().setFromObject(kit.table);
+    const surfaces = shadowReceiverSurfaces(kit.group, footprint);
+    const atPlane = surfaces.filter((s) => s.minY <= 0.05 && s.maxY >= -0.05);
+    const pairs = coplanarShadowPairs(surfaces, 0.05);
+    const floor = surfaces.find((s) => s.name === 'labFloor');
+    const bulk = surfaces.find((s) => s.name === 'tableBulk');
+    console.log('kitchen shadow receivers', surfaces);
+    console.log('at y=0 ±0.05', atPlane);
+    console.log('coplanar pairs |ΔmaxY|<0.05', pairs);
+    if (bulk && floor) console.log('tableBulk vs labFloor gap', Math.abs(bulk.maxY - floor.maxY));
+    expect(atPlane.map((s) => s.name)).toEqual(['tableBulk']);
+    expect(pairs).toEqual([]);
+    expect(bulk).toBeTruthy();
+    expect(Math.abs(bulk!.maxY)).toBeLessThan(0.05);
+    expect(floor).toBeTruthy();
+    expect(Math.abs(bulk!.maxY - floor!.maxY)).toBeGreaterThan(20);
+    kit.maps.forEach((m) => m.dispose());
+    kit.group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        const mat = obj.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat.dispose();
+      }
+    });
+  });
+
+  it('prints mill/tub receivers near the deck without a second table plane', () => {
+    const kit = createKitchen(420, 340, TINY);
+    const root = new THREE.Group();
+    root.add(kit.group);
+    const mill = createTreadmill();
+    root.add(mill.group);
+    const tub = createCreatineTub(null);
+    root.add(tub.group);
+    const footprint = new THREE.Box3().setFromObject(kit.table);
+    const surfaces = shadowReceiverSurfaces(root, footprint);
+    const atPlane = surfaces.filter((s) => s.minY <= 0.05 && s.maxY >= -0.05);
+    const pairs = coplanarShadowPairs(surfaces, 0.05);
+    console.log('full-scene shadow receivers', surfaces);
+    console.log('full-scene at y=0 ±0.05', atPlane);
+    console.log('full-scene coplanar maxY pairs', pairs);
+    expect(atPlane.some((s) => s.name === 'tableBulk')).toBe(true);
+    expect(atPlane.some((s) => s.name === 'tableTop')).toBe(false);
+    mill.dispose();
+    tub.dispose();
     kit.maps.forEach((m) => m.dispose());
     kit.group.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
@@ -109,7 +176,7 @@ describe('Reel camera', () => {
     expect(kitchen.position[1]).toBeGreaterThan(80);
     expect(kitchen.position[2]).toBeLessThan(-200);
     expect(kitchen.lookAt[0]).toBeGreaterThan(layout.tub.x);
-    expect(kitchen.lookAt[0]).toBeLessThan(layout.mill.x);
+    expect(kitchen.lookAt[0]).toBeLessThan(layout.mill.x + layout.mill.hx + layout.mat.hx * 2);
     const kitchenDist = Math.hypot(kdx, kdy, kdz);
     const kitchenSpan = 2 * kitchenDist * Math.tan((kitchen.fov * Math.PI) / 360);
     expect(kitchenSpan).toBeGreaterThan(layout.tub.height * 0.7);

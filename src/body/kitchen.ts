@@ -107,6 +107,57 @@ export function poseContactAo(
   decal.position.set(x, y + 0.22, z);
 }
 
+export type ShadowSurfaceY = {
+  name: string;
+  minY: number;
+  maxY: number;
+};
+
+export type CoplanarShadowPair = {
+  a: string;
+  b: string;
+  yA: number;
+  yB: number;
+  gap: number;
+};
+
+/** World AABB of shadow-receiving meshes that overlap `footprint` in XZ. */
+export function shadowReceiverSurfaces(
+  root: THREE.Object3D,
+  footprint: THREE.Box3,
+): ShadowSurfaceY[] {
+  root.updateMatrixWorld(true);
+  const out: ShadowSurfaceY[] = [];
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh) || !obj.receiveShadow || !obj.visible) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    if (box.max.x < footprint.min.x || box.min.x > footprint.max.x) return;
+    if (box.max.z < footprint.min.z || box.min.z > footprint.max.z) return;
+    out.push({
+      name: obj.name || obj.uuid.slice(0, 8),
+      minY: box.min.y,
+      maxY: box.max.y,
+    });
+  });
+  return out;
+}
+
+export function coplanarShadowPairs(
+  surfaces: ShadowSurfaceY[],
+  eps = 0.05,
+): CoplanarShadowPair[] {
+  const hits: CoplanarShadowPair[] = [];
+  for (let i = 0; i < surfaces.length; i++) {
+    for (let j = i + 1; j < surfaces.length; j++) {
+      const a = surfaces[i]!;
+      const b = surfaces[j]!;
+      const gap = Math.abs(a.maxY - b.maxY);
+      if (gap < eps) hits.push({ a: a.name, b: b.name, yA: a.maxY, yB: b.maxY, gap });
+    }
+  }
+  return hits;
+}
+
 export function createKitchen(
   width = 420,
   depth = 340,
@@ -115,32 +166,17 @@ export function createKitchen(
   const group = new THREE.Group();
   group.name = 'kitchenTable';
   const maps: THREE.Texture[] = [];
-  const labMat = new THREE.MeshStandardMaterial({
+  const deckMat = new THREE.MeshStandardMaterial({
     color: LAB_DECK_HEX,
     roughness: 0.85,
     metalness: 0.04,
   });
 
-  const table = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), labMat);
-  table.name = 'tableTop';
-  table.rotation.x = -Math.PI / 2;
-  table.position.y = 0;
+  const table = new THREE.Mesh(beveledSlab(width, depth), deckMat);
+  table.name = 'tableBulk';
   table.receiveShadow = quality.shadows;
   table.castShadow = false;
   group.add(table);
-
-  const bulk = new THREE.Mesh(
-    beveledSlab(width, depth),
-    new THREE.MeshStandardMaterial({
-      color: LAB_DECK_HEX,
-      roughness: 0.88,
-      metalness: 0.03,
-    }),
-  );
-  bulk.name = 'tableBulk';
-  bulk.receiveShadow = false;
-  bulk.castShadow = false;
-  group.add(bulk);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(2400, 2400),

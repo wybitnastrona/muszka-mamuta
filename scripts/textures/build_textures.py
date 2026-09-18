@@ -140,6 +140,11 @@ def normal_map(rgb, strength=2.2):
     return ((n * 0.5 + 0.5) * 255).astype(np.uint8)
 
 
+def exposure_lift(rgb, gain):
+    """Multiply RGB by gain and clip. Lifts a dark powder macro toward white."""
+    return np.clip(rgb.astype(np.float32) * float(gain), 0, 255).astype(np.uint8)
+
+
 def roughness_map(rgb, base=0.90, spread=0.10):
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
     mean = cv2.blur(gray, (9, 9))

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createCreatineTub } from '../../src/food/creatineTub.ts';
 import { kitchenLayout } from '../../src/scene/layout.ts';
-import { PILE_MM, TUB_MM, POWDER_STACK_FRAC, mm, tubInnerRadiusMm, tubRadiusMm } from '../../src/scene/scale.ts';
+import { PILE_MM, TUB_MM, CREATINE_ALBEDO_HEX, mm, powderLandingYMm, powderStackHeightMm, tubInnerRadiusMm, tubRadiusMm } from '../../src/scene/scale.ts';
 import { parseCreatineManifest, LABEL_WRAP_FLIP_Y } from '../../src/scene/creatineTextures.ts';
-import { tubLabelFrame } from '../../src/body/cameras.ts';
+import { tubLabelFrame, tubPowderFrame } from '../../src/body/cameras.ts';
 
 describe('KFD tub layout', () => {
   it('nests the powder fill inside the well without a table lid', () => {
@@ -41,7 +41,23 @@ describe('KFD tub layout', () => {
     expect(tub.group.getObjectByName('kfdPowderStackBase')).toBeTruthy();
     expect(tub.group.getObjectByName('kfdPowderDisc')).toBeFalsy();
     expect(tub.powderMound.geometry.type).toBe('LatheGeometry');
-    expect(tub.powderMound.position.y).toBeCloseTo(mm(TUB_MM.wall) + mm(PILE_MM.height) * POWDER_STACK_FRAC);
+    expect(tub.powderMound.position.y).toBeCloseTo(mm(TUB_MM.wall) + powderStackHeightMm());
+    const stack = tub.group.getObjectByName('kfdPowderStack') as THREE.Mesh;
+    const stackGeo = stack.geometry as THREE.CylinderGeometry;
+    expect(stackGeo.parameters.radiusTop).toBeCloseTo(tubInnerRadiusMm() * 0.98);
+    expect(stackGeo.parameters.radiusBottom).toBeCloseTo(tubInnerRadiusMm() * 0.98);
+    expect(stackGeo.parameters.height).toBeCloseTo(powderStackHeightMm());
+    const base = tub.group.getObjectByName('kfdPowderStackBase') as THREE.Mesh;
+    const baseGeo = base.geometry as THREE.CircleGeometry;
+    expect(baseGeo.parameters.radius).toBeCloseTo(tubInnerRadiusMm() * 0.98);
+    expect(base.position.y - (mm(TUB_MM.wall) + powderStackHeightMm())).toBeGreaterThanOrEqual(0.1);
+    expect(tub.group.getObjectByName('kfdWellLiner')).toBeTruthy();
+    const powderMat = stack.material as THREE.MeshStandardMaterial;
+    expect(powderMat.map).toBeNull();
+    expect(`#${powderMat.color.getHexString()}`).toBe(CREATINE_ALBEDO_HEX);
+    expect(powderMat.roughness).toBeCloseTo(0.95);
+    expect(powderMat.metalness).toBe(0);
+    expect(powderMat.normalScale.x).toBeCloseTo(0.35);
     expect(tub.labelAnchor.position.z).toBeLessThan(0);
     expect(Math.abs(tub.labelAnchor.position.z)).toBeCloseTo(tubRadiusMm());
     tub.group.updateMatrixWorld(true);
@@ -77,5 +93,9 @@ describe('KFD tub layout', () => {
     const vSpan = 2 * dist * Math.tan((frame.fov * Math.PI) / 360);
     expect(vSpan).toBeGreaterThan(layout.tub.height * 0.85);
     expect(frame.fov).toBeLessThan(40);
+    const well = tubPowderFrame();
+    expect(well.position[1]).toBeGreaterThan(well.lookAt[1]);
+    expect(well.lookAt[1]).toBeCloseTo(powderLandingYMm());
+    expect(Math.hypot(well.lookAt[0] - layout.tub.x, well.lookAt[2] - layout.tub.z)).toBeLessThan(1);
   });
 });

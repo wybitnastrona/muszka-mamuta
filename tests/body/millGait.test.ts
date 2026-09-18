@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { millGaitAdvance } from '../../src/body/gait.ts';
-import { millBeltScroll, millBeltChevron, millBeltLengthMm, millConsoleLabel, millConsoleLocalPose, millRailGripWorld, millStandXz, MILL_BELT_SPAN, MILL_HEADING, MILL_INCLINE_RAD } from '../../src/body/treadmill.ts';
+import { millBeltScroll, millBeltChevron, millBeltLengthMm, millConsoleLabel, millConsoleLocalPose, millConsoleGripWorld, millStandXz, MILL_BELT_SPAN, MILL_HEADING, MILL_INCLINE_RAD } from '../../src/body/treadmill.ts';
 import { scoopBowlLocal } from '../../src/body/scoop.ts';
 import { MILL_WALK_MM_S } from '../../src/scene/scale.ts';
 
@@ -36,25 +36,27 @@ describe('mill belt + gait', () => {
     expect(flips).toBeLessThanOrEqual(8);
   });
 
-  it('pitches the pad uphill toward the +X rail', () => {
+  it('pitches the pad uphill toward the +X console at 3.50°', () => {
+    expect(MILL_INCLINE_RAD).toBeCloseTo(0.0611, 4);
+    expect((MILL_INCLINE_RAD * 180) / Math.PI).toBeCloseTo(3.5, 1);
     expect(MILL_INCLINE_RAD).toBeGreaterThan(0.05);
     expect(MILL_INCLINE_RAD).toBeLessThan(0.2);
   });
 
-  it('puts the U-rail on +X with left/right grips', () => {
+  it('puts the front lean-bar on +X with left/right grips', () => {
     const stand = millStandXz();
-    const grip = millRailGripWorld();
+    const grip = millConsoleGripWorld();
     expect(MILL_HEADING).toBeCloseTo(Math.PI / 2);
     expect(grip.left.x).toBeGreaterThan(stand.x);
     expect(grip.right.x).toBe(grip.left.x);
     expect(grip.left.z).toBeGreaterThan(grip.right.z);
   });
 
-  it('puts a vertical red LED on the motor fascia, camera-facing', () => {
+  it('puts a back-tilted LED on the front console, camera-facing', () => {
     const pose = millConsoleLocalPose();
     expect(pose.rotY).toBeCloseTo(Math.PI);
-    expect(pose.rotX).toBeCloseTo(0);
-    expect(pose.x).toBeLessThan(0);
+    expect(pose.rotX).toBeLessThan(0);
+    expect(pose.x).toBeGreaterThan(0);
     expect(pose.z).toBeLessThan(0);
     expect(pose.width).toBeGreaterThan(pose.depth);
   });

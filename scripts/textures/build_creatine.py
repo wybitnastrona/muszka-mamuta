@@ -27,6 +27,7 @@ from PIL import Image
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.dirname(__file__))
 from build_textures import (  # noqa: E402
+    exposure_lift,
     imread_rgb,
     make_tileable,
     median_color,
@@ -34,6 +35,10 @@ from build_textures import (  # noqa: E402
     roughness_map,
     save,
 )
+
+# IMG_8525 / powder_macro is a dark frame; this gain is authored so the
+# crumb luminance can still drive a normal map after the albedo map is dropped.
+POWDER_EXPOSURE_GAIN = 2.85
 
 PHOTOS = os.path.join(ROOT, "assets", "photos", "creatine")
 OUT = os.path.join(ROOT, "public", "textures", "creatine")
@@ -265,14 +270,16 @@ def stitch_wrap(panels: list[np.ndarray], width=4096, height=1024) -> np.ndarray
     return wrap
 
 
-def powder_tile(path: str, size=1024) -> np.ndarray:
+def powder_tile(path: str, size=1024) -> tuple[np.ndarray, np.ndarray]:
+    """Return (detail_tile, lifted_albedo). Normals come from the unclipped crop."""
     rgb = imread_rgb(path)
     h, w = rgb.shape[:2]
     side = int(min(h, w) * 0.42)
     y0, x0 = (h - side) // 2, (w - side) // 2
     square = rgb[y0:y0 + side, x0:x0 + side]
-    lifted = np.clip(square.astype(np.float32) * 1.35, 0, 255).astype(np.uint8)
-    return make_tileable(lifted, size)
+    detail = make_tileable(square, size)
+    lifted = make_tileable(exposure_lift(square, POWDER_EXPOSURE_GAIN), size)
+    return detail, lifted
 
 
 def crop_packshot_label(path: str) -> np.ndarray:
@@ -372,29 +379,52 @@ def main() -> None:
         arr = to_circle_rgba(top_crop(paths[key]), 1024)
         save(arr, os.path.join(OUT, fname))
 
-    albedo = powder_tile(paths["powder_macro"])
-    save(albedo, os.path.join(OUT, "creatine_crumb.png"))
-    save(normal_map(albedo), os.path.join(OUT, "creatine_crumb_normal.png"))
-    save(roughness_map(albedo), os.path.join(OUT, "creatine_crumb_rough.png"))
-    rgb_med = median_color(albedo, crop=0.35)
-    meta = {
-        "label_wrap": "creatine/label_wrap.jpg?v=kfd-whiteprint1",
-        "lid_top": "creatine/lid_top.png",
-        "lid_underside": "creatine/lid_underside.png",
-        "well": "creatine/well.png",
-        "bottom": "creatine/bottom.png",
-        "creatine_crumb": "creatine/creatine_crumb.png",
-        "creatine_crumb_normal": "creatine/creatine_crumb_normal.png",
-        "creatine_crumb_rough": "creatine/creatine_crumb_rough.png",
-        "creatine_median_rgb": rgb_med,
-        "creatine_median_hex": "#%02x%02x%02x" % tuple(rgb_med),
-    }
-    with open(os.path.join(OUT, "textures.json"), "w") as f:
-        json.dump(meta, f, indent=2)
+    write_powder_maps(paths["powder_macro"])
     with open(os.path.join(PHOTOS, "measure.json"), "w") as f:
         json.dump(measures, f, indent=2)
-    print("median", meta["creatine_median_hex"])
+
+
+def _median_rgb(rgb: np.ndarray) -> list[int]:
+    flat = rgb.reshape(-1, rgb.shape[-1])[:, :3]
+    return [int(v) for v in np.median(flat, axis=0)]
+
+
+def write_powder_maps(macro_path: str) -> None:
+    crumb_path = os.path.join(OUT, "creatine_crumb.png")
+    before = imread_rgb(crumb_path) if os.path.isfile(crumb_path) else None
+    before_med = _median_rgb(before) if before is not None else None
+    detail, lifted = powder_tile(macro_path)
+    save(lifted, crumb_path)
+    save(normal_map(detail, strength=2.8), os.path.join(OUT, "creatine_crumb_normal.png"))
+    save(roughness_map(detail), os.path.join(OUT, "creatine_crumb_rough.png"))
+    rgb_med = median_color(lifted, crop=0.35)
+    after_med = _median_rgb(lifted)
+    manifest_path = os.path.join(OUT, "textures.json")
+    meta = {}
+    if os.path.isfile(manifest_path):
+        with open(manifest_path) as f:
+            meta = json.load(f)
+    meta.update({
+        "label_wrap": meta.get("label_wrap", "creatine/label_wrap.jpg?v=kfd-whiteprint1"),
+        "lid_top": meta.get("lid_top", "creatine/lid_top.png"),
+        "lid_underside": meta.get("lid_underside", "creatine/lid_underside.png"),
+        "well": meta.get("well", "creatine/well.png"),
+        "bottom": meta.get("bottom", "creatine/bottom.png"),
+        "creatine_crumb": "creatine/creatine_crumb.png?v=lift2",
+        "creatine_crumb_normal": "creatine/creatine_crumb_normal.png?v=lift2",
+        "creatine_crumb_rough": "creatine/creatine_crumb_rough.png?v=lift2",
+        "creatine_median_rgb": rgb_med,
+        "creatine_median_hex": "#%02x%02x%02x" % tuple(rgb_med),
+    })
+    with open(manifest_path, "w") as f:
+        json.dump(meta, f, indent=2)
+    print("crumb median before", before_med)
+    print("crumb median after", after_med, meta["creatine_median_hex"])
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--powder-only":
+        os.makedirs(OUT, exist_ok=True)
+        write_powder_maps(os.path.join(PHOTOS, "powder_macro.jpg"))
+    else:
+        main()

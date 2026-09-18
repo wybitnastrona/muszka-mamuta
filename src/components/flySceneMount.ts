@@ -6,7 +6,7 @@ import { formatGateOverlay, parseLoopVariant } from '../body/debugQuery.ts';
 import type { PopulationSummary } from '../brain/lif.ts';
 import type { Hemolymph } from '../metabolism/hemolymph.ts';
 import type { SceneHudSnapshot } from './Hud.tsx';
-import { closeupOffset, frameForPreset, labelCloseupFrame, usesShallowDof, CLOSEUP_APERTURE, CLOSEUP_MAXBLUR, REEL_APERTURE, REEL_MAXBLUR } from '../body/cameras.ts';
+import { closeupOffset, frameForPreset, labelCloseupFrame, millSideFrame, parseReviewCam, tubPowderFrame, usesShallowDof, CLOSEUP_APERTURE, CLOSEUP_MAXBLUR, REEL_APERTURE, REEL_MAXBLUR } from '../body/cameras.ts';
 import { CLIPS, MOTION_LOOP_ORDER, MotionMixer, reviewTime, sampleClip } from '../body/feedingMotion.ts';
 import { createKitchen, poseContactAo, poseSpoon } from '../body/kitchen.ts';
 import { applyPoseToBones, buildFlybodyRig } from '../body/rig.ts';
@@ -24,13 +24,14 @@ import { SceneDirector } from '../body/sceneDirector.ts';
 import { createHeadstage, type Headstage } from '../body/headstage.ts';
 import { createScoop } from '../body/scoop.ts';
 import { createTreadmill } from '../body/treadmill.ts';
+import { createGymProps } from '../scene/gymProps.ts';
 import { createCreatineTub } from '../food/creatineTub.ts';
 import { odorGradientYaw } from '../body/odorField.ts';
 import { CreatineSystem } from '../food/creatineSystem.ts';
 import type { ChemoSample } from '../food/twarogSystem.ts';
 import { createPowderView, type PowderView } from './Powder.tsx';
 import { createFlyViewport } from './flyViewport.ts';
-import { kitchenLayout, scoopEatStand } from '../scene/layout.ts';
+import { kitchenLayout, scoopTableStand } from '../scene/layout.ts';
 import { crumbSizeMm, flyRootScale, tableTopY } from '../scene/scale.ts';
 import { disposeKitchenTextures, loadKitchenTextures, type KitchenTextures } from '../scene/textures.ts';
 import { disposeCreatineTextures, loadCreatineTextures, type CreatineTextures } from '../scene/creatineTextures.ts';
@@ -88,6 +89,7 @@ export type FlySceneMountOpts = {
 
 export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   const { element, debug } = opts;
+  const reviewCam = parseReviewCam();
   const controller = new AbortController();
   let disposed = false;
   const view = createFlyViewport(element);
@@ -101,6 +103,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
   let headstage: Headstage | null = null;
   let scoopHandle: ReturnType<typeof createScoop> | null = null;
   let millHandle: ReturnType<typeof createTreadmill> | null = null;
+  let gymHandle: ReturnType<typeof createGymProps> | null = null;
   let tubHandle: ReturnType<typeof createCreatineTub> | null = null;
   let kitchenTex: KitchenTextures | null = null;
   let creatineTex: CreatineTextures | null = null;
@@ -240,7 +243,37 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     controls.enabled = false;
   };
 
+  const applyPowderCam = () => {
+    const frame = tubPowderFrame();
+    camera.fov = frame.fov;
+    camera.position.fromArray(frame.position);
+    camera.lookAt(...frame.lookAt);
+    camera.updateProjectionMatrix();
+    controls.target.fromArray(frame.lookAt);
+    controls.enabled = false;
+  };
+
+  const applyMillSideCam = () => {
+    const frame = millSideFrame();
+    camera.fov = frame.fov;
+    camera.position.fromArray(frame.position);
+    camera.lookAt(...frame.lookAt);
+    camera.updateProjectionMatrix();
+    controls.target.fromArray(frame.lookAt);
+    controls.enabled = false;
+  };
+
   const applyPreset = (name: CameraPreset) => {
+    if (reviewCam === 'powder') {
+      applyPowderCam();
+      appliedPreset = name;
+      return;
+    }
+    if (reviewCam === 'mill') {
+      applyMillSideCam();
+      appliedPreset = name;
+      return;
+    }
     view.setLetterbox(name === 'Reel');
     if (name === 'Zbliżenie') {
       controls.enabled = false;
@@ -507,7 +540,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
           const grip = new THREE.Matrix4();
           tR.updateWorldMatrix(true, false);
           grip.copy(tR.matrixWorld);
-          const eat = scoopEatStand();
+          const eat = scoopTableStand();
           scoopHandle.update({
             mode: out.scoop?.mode ?? 'well',
             fill: out.scoop?.fill ?? 0,
@@ -587,7 +620,11 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
       // After the rig's world matrices: the cable socket is a bone child.
       headstage?.update(dt);
       const want: CameraPreset = rec ? 'Reel' : opts.presetRef.current;
-      if (debug === 'weights') {
+      if (reviewCam === 'powder') {
+        applyPowderCam();
+      } else if (reviewCam === 'mill') {
+        applyMillSideCam();
+      } else if (debug === 'weights') {
         frameWeights();
       } else if (want === 'Reel' && cameraLive) {
         if (appliedPreset !== want) applyPreset(want);
@@ -641,6 +678,8 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     world.add(scoopHandle.group);
     millHandle = createTreadmill();
     world.add(millHandle.group);
+    gymHandle = createGymProps();
+    world.add(gymHandle.group);
     applyPreset(opts.presetRef.current);
     view.resize();
     const meta = await (await get('model.json')).json() as FlybodyMeta;
@@ -718,6 +757,14 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
       world.updateMatrixWorld(true);
       applyPreset('Etykieta');
     }
+    if (reviewCam === 'powder') {
+      world.updateMatrixWorld(true);
+      applyPowderCam();
+    }
+    if (reviewCam === 'mill') {
+      world.updateMatrixWorld(true);
+      applyMillSideCam();
+    }
     const autoSec = parseRecordSeconds();
     if (autoSec !== null && !rec) {
       void beginRecord({
@@ -751,6 +798,7 @@ export function mountFlyScene(opts: FlySceneMountOpts): () => void {
     tubHandle?.dispose();
     scoopHandle?.dispose();
     millHandle?.dispose();
+    gymHandle?.dispose();
     headstage?.dispose();
     view.dispose();
   };
